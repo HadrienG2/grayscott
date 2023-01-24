@@ -15,6 +15,9 @@ pub struct Species {
 //
 impl Species {
     /// Set up species concentration storage as the C++ version does
+    ///
+    /// `shape` specifies the concentration matrix dimensions, e.g. [1080, 1920]
+    ///
     pub fn new(shape: impl Clone + ShapeBuilder<Dim = Ix2>) -> Self {
         // Start with U = 1.0 and V = 0.0 everywhere
         let mut u = Evolving::ones_out(shape.clone());
