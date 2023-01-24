@@ -51,7 +51,7 @@ impl Species {
     }
 }
 
-/// Pair of Concentration where one acts an input and the other an output
+/// Pair of Concentration where one acts as an input and the other as an output
 pub struct Evolving([Concentration; 2]);
 //
 impl Evolving {
