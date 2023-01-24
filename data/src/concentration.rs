@@ -38,10 +38,10 @@ impl Species {
             .slice_mut(s![start_row..end_row, start_col..end_col])
             .fill(1.0);
 
-        // Make the newly generated concentrations the input ones
-        u.flip();
-        v.flip();
-        Self { u, v }
+        // Make the newly generated concentrations become the input ones
+        let mut result = Self { u, v };
+        result.flip();
+        result
     }
 
     /// Make the output concentrations become the input ones
