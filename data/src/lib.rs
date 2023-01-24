@@ -1,14 +1,7 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+pub mod concentration;
+// FIXME: Add HDF5 I/O
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Working precision
+pub type Precision = f32;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+// FIXME: Add tests
