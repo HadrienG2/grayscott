@@ -1,0 +1,2 @@
+[workspace]
+members = ["compute-autovec", "compute-gpu", "compute-manualvec", "compute-naive", "data", "data-to-pics", "reaction"]
