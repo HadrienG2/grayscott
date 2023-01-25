@@ -1,10 +1,7 @@
 //! Naive implementation of a time step of the Gray-Scott reaction simulation
 //!
 //! This version follows the logic of the naive_propagation.cpp example from the
-//! C++ tutorial, and is slow for the same reason. Actually, it is even slower
-//! because it has to do a bit of bounds checking to honor Rust's memory safety
-//! guarantees, as the compiler does not manage to prove that indices are in
-//! bounds in this particular case. We'll fix this in the `autovec` version.
+//! C++ tutorial, and is slow for the same reason.
 
 use data::{
     concentration::Species,
@@ -26,7 +23,7 @@ pub fn step(species: &mut Species, params: &Parameters) {
         // Determine stencil input region
         let out_pos = [out_row, out_col];
         let stencil_start = array2(|i| out_pos[i].saturating_sub(stencil_offset[i]));
-        let stencil_end = array2(|i| (out_pos[i] + stencil_offset[i] + 1).max(shape[i]));
+        let stencil_end = array2(|i| (out_pos[i] + stencil_offset[i] + 1).min(shape[i]));
         let stencil_range = array2(|i| stencil_start[i]..stencil_end[i]);
         let stencil_slice = ndarray::s![stencil_range[0].clone(), stencil_range[1].clone()];
 

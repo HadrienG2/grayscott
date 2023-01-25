@@ -1,2 +1,17 @@
 [workspace]
-members = ["compute-autovec", "compute-gpu", "compute-manualvec", "compute-naive", "data", "data-to-pics", "reaction"]
+members = [
+    "compute-autovec",
+    "compute-bench",
+    "compute-gpu",
+    "compute-manualvec",
+    "compute-naive",
+    "data",
+    "data-to-pics",
+    "reaction"
+]
+
+[profile.bench]
+# Build reproducibility at the cost of compile time
+codegen-units = 1
+# Good for perf runs
+debug = 1
