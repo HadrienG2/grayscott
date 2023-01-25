@@ -100,6 +100,22 @@ impl Reader {
         })
     }
 
+    /// Shape of images that will be read out
+    pub fn image_shape(&self) -> [usize; 2] {
+        let dataset_shape = self.state.dataset.shape();
+        assert_eq!(
+            dataset_shape.len(),
+            3,
+            "Dataset should be a stack of 2D images"
+        );
+        [dataset_shape[1], dataset_shape[2]]
+    }
+
+    /// Number of images to be read out
+    pub fn num_images(&self) -> usize {
+        self.num_images
+    }
+
     /// Read the next V species concentration array, if any
     ///
     /// You can equivalently treat this reader as an iterator of arrays
@@ -135,5 +151,3 @@ struct State {
     /// Number of images that were read or written so far
     position: usize,
 }
-
-// FIXME: Add tests

@@ -5,5 +5,3 @@ pub mod hdf5;
 
 /// Computation precision
 pub type Precision = f32;
-
-// FIXME: Add tests

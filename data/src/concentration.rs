@@ -112,5 +112,3 @@ impl Evolving {
 
 /// Concentration of a chemical species
 pub type Concentration = Array2<Precision>;
-
-// FIXME: Add tests
