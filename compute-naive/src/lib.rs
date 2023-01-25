@@ -36,9 +36,7 @@ pub fn step(species: &mut Species, params: &Parameters) {
             .fold(
                 [0.; 2],
                 |[acc_u, acc_v], (((in_row, in_col), &stencil_u), &stencil_v)| {
-                    let stencil_row = in_row - stencil_start[0];
-                    let stencil_col = in_col - stencil_start[1];
-                    let weight = params.weights[stencil_row][stencil_col];
+                    let weight = params.weights[in_row][in_col];
                     [acc_u + weight * stencil_u, acc_v + weight * stencil_v]
                 },
             );
