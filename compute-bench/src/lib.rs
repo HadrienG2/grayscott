@@ -1,3 +1,5 @@
+//! Common microbenchmarking code for all compute crates
+
 use criterion::{BenchmarkId, Criterion, Throughput};
 use data::{concentration::Species, parameters::Parameters};
 use std::hint::black_box;
