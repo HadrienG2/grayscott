@@ -5,8 +5,8 @@ use crate::Precision;
 /// Computation parameters
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Parameters {
-    /// Matrix of weights
-    pub stencil: Stencil,
+    /// Matrix of weights to be applied in the stencil computation
+    pub weights: StencilWeights,
 
     /// Diffusion rate of species U
     pub diffusion_rate_u: Precision,
@@ -28,7 +28,7 @@ impl Default for Parameters {
     fn default() -> Self {
         Self {
             // Stencil used by the C++ version
-            stencil: [[1.0; 3]; 3],
+            weights: [[1.0; 3]; 3],
             // More mathematically accurate but less fun-looking results
             /* stencil:
             [[0.05, 0.2, 0.05],
@@ -44,4 +44,6 @@ impl Default for Parameters {
 }
 
 /// Computation stencil
-pub type Stencil = [[Precision; 3]; 3];
+pub type StencilWeights = [[Precision; STENCIL_SHAPE[1]]; STENCIL_SHAPE[0]];
+//
+pub const STENCIL_SHAPE: [usize; 2] = [3, 3];

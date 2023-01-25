@@ -71,7 +71,7 @@ impl Evolving {
     }
 
     /// Access the input and output concentration
-    pub fn inout(&mut self) -> (&Concentration, &mut Concentration) {
+    pub fn in_out(&mut self) -> (&Concentration, &mut Concentration) {
         let [input, output] = &mut self.0;
         (input, output)
     }
