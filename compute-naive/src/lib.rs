@@ -1,4 +1,10 @@
 //! Naive implementation of a time step of the Gray-Scott reaction simulation
+//!
+//! This version follows the logic of the naive_propagation.cpp example from the
+//! C++ tutorial, and is slow for the same reason. Actually, it is even slower
+//! because it has to do a bit of bounds checking to honor Rust's memory safety
+//! guarantees, as the compiler does not manage to prove that indices are in
+//! bounds in this particular case. We'll fix this in the `autovec` version.
 
 use data::{
     concentration::Species,
