@@ -1,5 +1,7 @@
+//! Data format used by the Gray-Scott reaction simulation
+
 pub mod concentration;
-// FIXME: Add HDF5 I/O
+pub mod hdf5;
 
 /// Computation precision
 pub type Precision = f32;

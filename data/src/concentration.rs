@@ -5,6 +5,7 @@ use ndarray::{s, Array2, Ix2, ShapeBuilder};
 
 /// Concentration of all species involved
 #[non_exhaustive]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Species {
     /// Concentration of species U
     pub u: Evolving,
@@ -47,6 +48,11 @@ impl Species {
         result
     }
 
+    /// Check out the shape of the concentration matrices
+    pub fn shape(&self) -> [usize; 2] {
+        self.u.shape()
+    }
+
     /// Make the output concentrations become the input ones
     pub fn flip(&mut self) {
         self.u.flip();
@@ -55,9 +61,15 @@ impl Species {
 }
 
 /// Pair of Concentration where one acts as an input and the other as an output
+#[derive(Clone, Debug, PartialEq)]
 pub struct Evolving([Concentration; 2]);
 //
 impl Evolving {
+    /// Access the input concentration
+    pub fn input(&self) -> &Concentration {
+        &self.0[0]
+    }
+
     /// Access the input and output concentration
     pub fn inout(&mut self) -> (&Concentration, &mut Concentration) {
         let [input, output] = &mut self.0;
@@ -78,6 +90,12 @@ impl Evolving {
             Concentration::default(shape.clone()),
             Concentration::ones(shape),
         ])
+    }
+
+    /// Check the shape of concentration matrices
+    fn shape(&self) -> [usize; 2] {
+        let [rows, cols] = self.0[0].shape() else { panic!("Expected 2D shape") };
+        [*rows, *cols]
     }
 
     /// Access the output concentration
