@@ -2,6 +2,7 @@
 
 pub mod concentration;
 pub mod hdf5;
+pub mod parameters;
 
 /// Computation precision
 pub type Precision = f32;
