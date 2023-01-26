@@ -47,3 +47,7 @@ impl Default for Parameters {
 pub type StencilWeights = [[Precision; STENCIL_SHAPE[1]]; STENCIL_SHAPE[0]];
 //
 pub const STENCIL_SHAPE: [usize; 2] = [3, 3];
+//
+pub fn stencil_offset() -> [usize; 2] {
+    STENCIL_SHAPE.map(|dim| (dim - 1) / 2)
+}

@@ -1,11 +1,11 @@
-//! Naive implementation of a time step of the Gray-Scott reaction simulation
+//! Naive implementation of Gray-Scott simulation
 //!
 //! This version follows the logic of the naive_propagation.cpp example from the
 //! C++ tutorial, and is slow for the same reason.
 
 use data::{
     concentration::Species,
-    parameters::{Parameters, STENCIL_SHAPE},
+    parameters::{stencil_offset, Parameters},
 };
 
 /// Perform one simulation time step
@@ -16,7 +16,7 @@ pub fn step(species: &mut Species, params: &Parameters) {
     let (in_v, out_v) = species.v.in_out();
 
     // Determine stencil offsets
-    let stencil_offset = STENCIL_SHAPE.map(|dim| (dim - 1) / 2);
+    let stencil_offset = stencil_offset();
 
     // Jointly iterate over cells of the species concentration matrices
     ndarray::azip!((index (out_row, out_col), out_u in out_u, out_v in out_v, &u in in_u, &v in in_v) {
