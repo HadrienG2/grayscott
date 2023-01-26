@@ -3,11 +3,6 @@ name = "reaction"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-# TODO: Use feature flags to plug into the various backends + pick backend
-#       according to a preference order using cfg-if inside.
-
 [features]
 naive = ["compute-naive"]
 
