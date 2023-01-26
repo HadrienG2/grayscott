@@ -1,9 +1,6 @@
 [workspace]
 members = [
-    "compute-autovec",
     "compute-bench",
-    "compute-gpu",
-    "compute-manualvec",
     "compute-naive",
     "data",
     "data-to-pics",
@@ -15,3 +12,7 @@ members = [
 codegen-units = 1
 # Good for perf runs
 debug = 1
+
+[profile.release]
+# Max performance at the cost of compile time
+codegen-units = 1
