@@ -92,6 +92,7 @@ fn main() {
         // Move the simulation forward
         for _ in 0..steps_per_image {
             step(&mut species, &params);
+            species.flip();
         }
 
         // Write a new image

@@ -46,9 +46,6 @@ pub fn step(species: &mut Species, params: &Parameters) {
         *out_u = u + du * params.time_step;
         *out_v = v + dv * params.time_step;
     });
-
-    // Make the output become the input
-    species.flip();
 }
 
 /// Shorthand to create an array of 2 elements, knowing a function from index to value
