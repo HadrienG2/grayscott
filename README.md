@@ -38,7 +38,7 @@ In the same spirit as the C++ version, the code is sliced into several crates:
 
 ## Usage
 
-To run the simulation, run this command...
+To run the simulation, use this command...
 
 ```
 $ cargo run --release --bin reaction --features <backend> -- <CLI args>
@@ -49,7 +49,7 @@ the same arguments as the C++ version. You can put a `--help` in there for
 self-documentation.
 
 Then, to convert the HDF5 output into PNG images for visualization purposes, you
-can run something like...
+can do something like...
 
 ```
 $ mkdir pics
@@ -60,7 +60,7 @@ $ cargo run --release --bin data-to-pics -- -i <input> -o pics
 
 ---
 
-To run all the microbenchmarks, you can do...
+To run all the microbenchmarks, you can use this command:
 
 ```
 $ cargo criterion --workspace
