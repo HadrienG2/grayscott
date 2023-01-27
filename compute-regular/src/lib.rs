@@ -146,7 +146,9 @@ fn compute_pixel(
         .zip(win_v.iter())
         .zip(
             // NOTE: Right now, this matches the computation performed by the
-            //       C++ version. Which is arguably wrong, since
+            //       C++ version. Which is dubious, since the stencil should
+            //       arguably stay centered on the target pixel. Then again,
+            //       it's just going to result in a few bad edge pixels...
             params.weights[..stencil_shape[0]]
                 .iter()
                 .flat_map(|row| row[..stencil_shape[1]].iter()),
