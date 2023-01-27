@@ -35,12 +35,9 @@ impl Species {
         let end_row = out_u.nrows() * num_end / frac - row_shift;
         let start_col = out_u.ncols() * num_begin / frac;
         let end_col = out_u.ncols() * num_end / frac;
-        out_u
-            .slice_mut(s![start_row..end_row, start_col..end_col])
-            .fill(0.0);
-        out_v
-            .slice_mut(s![start_row..end_row, start_col..end_col])
-            .fill(1.0);
+        let center_slice = s![start_row..end_row, start_col..end_col];
+        out_u.slice_mut(center_slice).fill(0.0);
+        out_v.slice_mut(center_slice).fill(1.0);
 
         // Make the newly generated concentrations become the input ones
         let mut result = Self { u, v };
