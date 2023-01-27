@@ -5,7 +5,7 @@ use data::{
     parameters::Parameters,
     Precision,
 };
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressFinish, ProgressIterator, ProgressStyle};
 use std::{num::NonZeroUsize, path::PathBuf};
 
 /// Convert Gray-Scott simulation output to images
@@ -88,9 +88,17 @@ fn main() {
     )
     .expect("Failed to open output file");
 
-    // Start main loop on produced images
-    let progress = ProgressBar::new(args.nbimage as u64);
-    for _ in 0..args.nbimage {
+    // Set up progress reporting
+    let progress = ProgressBar::new(args.nbimage as u64)
+        .with_message("Generating image")
+        .with_style(
+            ProgressStyle::with_template("{msg} {pos}/{len} {wide_bar} ~{eta} left")
+                .expect("Failed to parse style"),
+        )
+        .with_finish(ProgressFinish::AndClear);
+
+    // Run the simulation
+    for _ in (0..args.nbimage).progress_with(progress) {
         // Move the simulation forward
         for _ in 0..steps_per_image {
             step(&mut species, &params);
@@ -101,11 +109,7 @@ fn main() {
         writer
             .write(&species)
             .expect("Failed to write down results");
-
-        // Report progress
-        progress.inc(1);
     }
-    progress.finish();
 
     // Make sure output data is written correctly
     writer.close().expect("Failed to close output file");

@@ -4,7 +4,7 @@ use data::{
     Precision,
 };
 use image::{Rgb, RgbImage};
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressFinish, ProgressIterator, ProgressStyle};
 use std::path::PathBuf;
 
 /// Convert Gray-Scott simulation output to images
@@ -38,9 +38,17 @@ fn main() {
     let [rows, cols] = reader.image_shape();
     let mut image = RgbImage::new(cols as u32, rows as u32);
 
-    // Start the main loop
-    let progress = ProgressBar::new(reader.num_images() as u64);
-    for (idx, input) in reader.enumerate() {
+    // Set up progress reporting
+    let progress = ProgressBar::new(reader.num_images() as u64)
+        .with_message("Exporting image")
+        .with_style(
+            ProgressStyle::with_template("{msg} {pos}/{len} {wide_bar} ~{eta} left")
+                .expect("Failed to parse style"),
+        )
+        .with_finish(ProgressFinish::AndClear);
+
+    // Convert HDF5 data to images
+    for (idx, input) in reader.enumerate().progress_with(progress) {
         // Load V species concentration matrix
         let input = input.expect("Failed to load image");
 
@@ -54,9 +62,5 @@ fn main() {
         image
             .save(output_dir.join(format!("{idx}.png")))
             .expect("Failed to save image");
-
-        // Report progress
-        progress.inc(1);
     }
-    progress.finish();
 }
