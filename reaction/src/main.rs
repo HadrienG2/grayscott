@@ -6,7 +6,7 @@ use data::{
     Precision,
 };
 use indicatif::{ProgressBar, ProgressFinish, ProgressIterator, ProgressStyle};
-use std::{num::NonZeroUsize, path::PathBuf};
+use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 
 /// Convert Gray-Scott simulation output to images
 #[derive(Parser, Debug)]
@@ -96,6 +96,7 @@ fn main() {
                 .expect("Failed to parse style"),
         )
         .with_finish(ProgressFinish::AndClear);
+    progress.enable_steady_tick(Duration::from_millis(33));
 
     // Run the simulation
     for _ in (0..args.nbimage).progress_with(progress) {

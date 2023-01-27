@@ -5,7 +5,7 @@ use data::{
 };
 use image::{Rgb, RgbImage};
 use indicatif::{ProgressBar, ProgressFinish, ProgressIterator, ProgressStyle};
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 /// Convert Gray-Scott simulation output to images
 #[derive(Parser, Debug)]
@@ -46,6 +46,7 @@ fn main() {
                 .expect("Failed to parse style"),
         )
         .with_finish(ProgressFinish::AndClear);
+    progress.enable_steady_tick(Duration::from_millis(33));
 
     // Convert HDF5 data to images
     for (idx, input) in reader.enumerate().progress_with(progress) {
