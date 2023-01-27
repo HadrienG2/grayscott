@@ -18,14 +18,14 @@ use std::ops::Range;
 
 /// Perform one simulation time step
 pub fn step(species: &mut Species, params: &Parameters) {
-    step_center(species, params);
-    step_edge(species, params);
+    let center_range = center_range(species);
+    step_center(species, params, center_range.clone());
+    step_edge(species, params, center_range);
 }
 
 /// Compute pixels in the center of the image, where the full stencil is always used
-fn step_center(species: &mut Species, params: &Parameters) {
+fn step_center(species: &mut Species, params: &Parameters, center_range: [Range<usize>; 2]) {
     // Access species concentration matrices
-    let center_range = center_range(species);
     let (in_u, out_u) = species.u.in_out();
     let (in_v, out_v) = species.v.in_out();
 
@@ -48,10 +48,9 @@ fn step_center(species: &mut Species, params: &Parameters) {
 
 /// Compute pixels on the edges of the image, where the complicated stencil
 /// formula is truly needed
-pub fn step_edge(species: &mut Species, params: &Parameters) {
+fn step_edge(species: &mut Species, params: &Parameters, center_range: [Range<usize>; 2]) {
     // Access species concentration matrices
     let shape = species.shape();
-    let center_range = center_range(species);
     let (in_u, out_u) = species.u.in_out();
     let (in_v, out_v) = species.v.in_out();
 
@@ -108,7 +107,7 @@ pub fn step_edge(species: &mut Species, params: &Parameters) {
 
 /// Range of pixels with full stencil coverage, adjusted to avoid negative
 /// overlap (empty range is always X..X, not X..Y where Y <= X)
-pub fn center_range(species: &Species) -> [Range<usize>; 2] {
+fn center_range(species: &Species) -> [Range<usize>; 2] {
     let shape = species.shape();
     let stencil_offset = stencil_offset();
     let near_edge_end = array2(|i| stencil_offset[i].min(shape[i]));
@@ -122,7 +121,7 @@ pub fn center_range(species: &Species) -> [Range<usize>; 2] {
 /// This function must be inlined for the center pixel special-casing to work
 ///
 #[inline(always)]
-pub fn compute_pixel(
+fn compute_pixel(
     win_u: ArrayView2<'_, Precision>,
     win_v: ArrayView2<'_, Precision>,
     stencil_shape: [usize; 2],
