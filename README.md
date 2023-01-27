@@ -25,8 +25,11 @@ In the same spirit as the C++ version, the code is sliced into several crates:
 - `data` defines the general data model, parameters and HDF5 file I/O.
 - `compute-xyz` crates implement the various compute backends, except for
   `compute-bench` which provides shared benchmarking utilities.
-    * `compute-naive` replicates the original naive algorithm while making
-      idiomatic use of the `ndarray` multidimensional library.
+    * `compute-naive` follows the original naive algorithm but makes idiomatic
+      use of the `ndarray` multidimensional library.
+    * `compute-regular` leverages the fact that the computation is simpler at
+      the center of the stencil than it is at the edges in order to get more
+      performance on the center pixels, which are the majority.
     * TODO: Add more backends here as they are implemented.
 - `reaction` is a binary that runs the simulation. It uses the same CLI argument
   syntax as the `xyz_gray_scott` binaries from the C++ version, but the

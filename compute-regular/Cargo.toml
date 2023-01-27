@@ -1,0 +1,16 @@
+[package]
+name = "compute-regular"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+data = { path = "../data" }
+ndarray = "0.15"
+
+[dev-dependencies]
+compute-bench = { path = "../compute-bench" }
+criterion = { version = "0.3", default-features = false }
+
+[[bench]]
+name = "benchmark"
+harness = false

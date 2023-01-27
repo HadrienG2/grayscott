@@ -2,6 +2,7 @@
 members = [
     "compute-bench",
     "compute-naive",
+    "compute-regular",
     "data",
     "data-to-pics",
     "reaction"

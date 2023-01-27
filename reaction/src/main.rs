@@ -48,7 +48,9 @@ struct Args {
 // Select compute backend depending on enabled crate features
 cfg_if::cfg_if! {
     // TODO: Add more advanced and preferrable implementations above
-    if #[cfg(any(feature = "naive", test))] {
+    if #[cfg(feature = "regular")] {
+        use compute_regular::step;
+    } else if #[cfg(any(feature = "naive", test))] {
         use compute_naive::step;
     } else {
         #[allow(non_upper_case_globals)]

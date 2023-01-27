@@ -19,7 +19,7 @@ pub fn step(species: &mut Species, params: &Parameters) {
     // Determine stencil offsets
     let stencil_offset = stencil_offset();
 
-    // Jointly iterate over cells of the species concentration matrices
+    // Iterate over pixels of the species concentration matrices
     ndarray::azip!((index (out_row, out_col), out_u in out_u, out_v in out_v, &u in in_u, &v in in_v) {
         // Determine stencil input region
         let out_pos = [out_row, out_col];

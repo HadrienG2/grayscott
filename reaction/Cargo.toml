@@ -5,6 +5,7 @@ edition = "2021"
 
 [features]
 naive = ["compute-naive"]
+regular = ["compute-regular"]
 
 [dependencies]
 cfg-if = "1.0"
@@ -12,6 +13,7 @@ clap = { version = "4.1", features = ["derive"] }
 data = { path = "../data" }
 indicatif = "0.17"
 compute-naive = { path = "../compute-naive", optional = true }
+compute-regular = { path = "../compute-regular", optional = true }
 
 [dev-dependencies]
 compute-naive = { path = "../compute-naive" }
