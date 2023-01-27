@@ -122,7 +122,7 @@ pub fn center_range(species: &Species) -> [Range<usize>; 2] {
 /// This function must be inlined for the center pixel special-casing to work
 ///
 #[inline(always)]
-fn compute_pixel(
+pub fn compute_pixel(
     win_u: ArrayView2<'_, Precision>,
     win_v: ArrayView2<'_, Precision>,
     stencil_shape: [usize; 2],
