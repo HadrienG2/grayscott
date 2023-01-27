@@ -1,6 +1,5 @@
 use clap::Parser;
 use data::{
-    concentration::Species,
     hdf5::{self, Writer},
     parameters::Parameters,
     Precision,
@@ -49,10 +48,12 @@ struct Args {
 cfg_if::cfg_if! {
     // TODO: Add more advanced and preferrable implementations above
     if #[cfg(feature = "regular")] {
-        use compute_regular::step;
+        use compute_regular::{Species, step};
     } else if #[cfg(any(feature = "naive", test))] {
-        use compute_naive::step;
+        use compute_naive::{Species, step};
     } else {
+        use data::concentration::{ScalarConcentration};
+        type Species = data::concentration::Species<ScalarConcentration>;
         #[allow(non_upper_case_globals)]
         const step: fn(&mut Species, &Parameters) =
             panic!("Please enable at least one compute backend via crate features");
@@ -108,7 +109,7 @@ fn main() {
 
         // Write a new image
         writer
-            .write(&species)
+            .write(&mut species)
             .expect("Failed to write down results");
     }
 

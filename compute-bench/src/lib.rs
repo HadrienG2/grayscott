@@ -1,13 +1,16 @@
 //! Common microbenchmarking code for all compute crates
 
 use criterion::{BenchmarkId, Criterion, Throughput};
-use data::{concentration::Species, parameters::Parameters};
+use data::{
+    concentration::{Concentration, Species},
+    parameters::Parameters,
+};
 use std::hint::black_box;
 
 /// Common criterion benchmark for all Gray-Scott reaction computations
-pub fn criterion_benchmark(
+pub fn criterion_benchmark<C: Concentration>(
     c: &mut Criterion,
-    step: impl Fn(&mut Species, &Parameters),
+    step: impl Fn(&mut Species<C>, &Parameters),
     crate_name: &str,
 ) {
     let params = black_box(Parameters::default());
@@ -17,7 +20,7 @@ pub fn criterion_benchmark(
         let shape = [size, 2 * size];
         let num_elems = (shape[0] * shape[1]) as u64;
 
-        let mut species = Species::new(black_box(shape));
+        let mut species = Species::<C>::new(black_box(shape));
 
         group.throughput(Throughput::Elements(num_elems));
         group.bench_function(BenchmarkId::from_parameter(num_elems), |b| {

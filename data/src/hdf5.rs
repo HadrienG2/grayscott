@@ -1,7 +1,7 @@
 //! Moving concentration data to and from HDF5 files
 
 use crate::{
-    concentration::{Concentration, Species},
+    concentration::{Concentration, ScalarConcentration, Species},
     Precision,
 };
 use hdf5::{Dataset, File};
@@ -36,7 +36,7 @@ impl Writer {
     ///
     pub fn create(
         config: Config<'_, impl AsRef<Path>>,
-        species: &Species,
+        species: &Species<impl Concentration>,
         num_images: usize,
     ) -> Result<Self> {
         let dataset_name = config.dataset_name();
@@ -56,10 +56,11 @@ impl Writer {
     }
 
     /// Write a new V species concentration to the file
-    pub fn write(&mut self, species: &Species) -> Result<()> {
-        self.0
-            .dataset
-            .write_slice(species.v.input(), (self.0.position, .., ..))?;
+    pub fn write(&mut self, species: &mut Species<impl Concentration>) -> Result<()> {
+        self.0.dataset.write_slice(
+            species.v.make_scalar_input_view(),
+            (self.0.position, .., ..),
+        )?;
         self.0.position += 1;
         Ok(())
     }
@@ -120,7 +121,7 @@ impl Reader {
     ///
     /// You can equivalently treat this reader as an iterator of arrays
     ///
-    pub fn read(&mut self) -> Option<Result<Concentration>> {
+    pub fn read(&mut self) -> Option<Result<ScalarConcentration>> {
         (self.state.position < self.num_images).then(|| {
             let result = self
                 .state
@@ -133,7 +134,7 @@ impl Reader {
 }
 //
 impl Iterator for Reader {
-    type Item = Result<Concentration>;
+    type Item = Result<ScalarConcentration>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.read()

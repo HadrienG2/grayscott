@@ -9,12 +9,15 @@
 
 use data::{
     array2,
-    concentration::Species,
+    concentration::ScalarConcentration,
     parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
     Precision,
 };
 use ndarray::{s, ArrayView2};
 use std::ops::Range;
+
+/// Chosen concentration type
+pub type Species = data::concentration::Species<ScalarConcentration>;
 
 /// Perform one simulation time step
 pub fn step(species: &mut Species, params: &Parameters) {
