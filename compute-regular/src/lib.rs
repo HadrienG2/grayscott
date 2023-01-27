@@ -23,6 +23,17 @@ pub fn step(species: &mut Species, params: &Parameters) {
     step_edge(species, params, center_range);
 }
 
+/// Range of pixels with full stencil coverage, adjusted to avoid negative
+/// overlap (empty range is always X..X, not X..Y where Y <= X)
+fn center_range(species: &Species) -> [Range<usize>; 2] {
+    let shape = species.shape();
+    let stencil_offset = stencil_offset();
+    let near_edge_end = array2(|i| stencil_offset[i].min(shape[i]));
+    let far_edge_start =
+        array2(|i| (shape[i].saturating_sub(stencil_offset[i])).max(near_edge_end[i]));
+    array2(|i| near_edge_end[i]..far_edge_start[i])
+}
+
 /// Compute pixels in the center of the image, where the full stencil is always used
 fn step_center(species: &mut Species, params: &Parameters, center_range: [Range<usize>; 2]) {
     // Access species concentration matrices
@@ -103,17 +114,6 @@ fn step_edge(species: &mut Species, params: &Parameters, center_range: [Range<us
             *out_v = new_v;
         });
     }
-}
-
-/// Range of pixels with full stencil coverage, adjusted to avoid negative
-/// overlap (empty range is always X..X, not X..Y where Y <= X)
-fn center_range(species: &Species) -> [Range<usize>; 2] {
-    let shape = species.shape();
-    let stencil_offset = stencil_offset();
-    let near_edge_end = array2(|i| stencil_offset[i].min(shape[i]));
-    let far_edge_start =
-        array2(|i| (shape[i].saturating_sub(stencil_offset[i])).max(near_edge_end[i]));
-    array2(|i| near_edge_end[i]..far_edge_start[i])
 }
 
 /// Compute a pixel of the species concentration matrices
