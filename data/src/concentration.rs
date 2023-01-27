@@ -57,7 +57,7 @@ impl Species {
     }
 }
 
-/// Pair of Concentration where one acts as an input and the other as an output
+/// Pair of Concentrations where one acts as an input and the other as an output
 #[derive(Clone, Debug, PartialEq)]
 pub struct Evolving([Concentration; 2]);
 //
@@ -107,5 +107,5 @@ impl Evolving {
     }
 }
 
-/// Concentration of a chemical species
+/// Tabulated concentration of a chemical species
 pub type Concentration = Array2<Precision>;
