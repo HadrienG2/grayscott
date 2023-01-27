@@ -66,7 +66,7 @@ fn main() {
     let kill_rate = args.killrate.unwrap_or(Parameters::default().kill_rate);
     let feed_rate = args.feedrate.unwrap_or(Parameters::default().feed_rate);
     let time_step = args.deltat.unwrap_or(Parameters::default().time_step);
-    let file_name = args.output.unwrap_or("output.h5".into());
+    let file_name = args.output.unwrap_or_else(|| "output.h5".into());
     let steps_per_image = usize::from(args.nbextrastep);
 
     // Determine computation parameters

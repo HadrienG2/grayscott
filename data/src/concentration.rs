@@ -23,8 +23,8 @@ impl<C: Concentration> Species<C> {
     ///
     pub fn new(shape: [usize; 2]) -> Self {
         // Start with U = 1.0 and V = 0.0 everywhere
-        let mut u = Evolving::<C>::ones_out(shape.clone());
-        let mut v = Evolving::<C>::zeros_out(shape.clone());
+        let mut u = Evolving::<C>::ones_out(shape);
+        let mut v = Evolving::<C>::zeros_out(shape);
         let out_u = u.out();
         let out_v = v.out();
 
@@ -81,12 +81,12 @@ impl<C: Concentration> Evolving<C> {
 
     /// Set up concentration storage with all-zeros output concentration
     fn zeros_out(shape: [usize; 2]) -> Self {
-        Self([C::default(shape.clone()), C::zeros(shape)])
+        Self([C::default(shape), C::zeros(shape)])
     }
 
     /// Set up concentration storage with all-ones output concentration
     fn ones_out(shape: [usize; 2]) -> Self {
-        Self([C::default(shape.clone()), C::ones(shape)])
+        Self([C::default(shape), C::ones(shape)])
     }
 
     /// Check the shape of concentration matrices
