@@ -1,5 +1,8 @@
 use clap::Parser;
-use data::hdf5::{Config, Reader};
+use data::{
+    hdf5::{Config, Reader},
+    Precision,
+};
 use image::{Rgb, RgbImage};
 use indicatif::ProgressBar;
 use std::path::PathBuf;
@@ -31,6 +34,7 @@ fn main() {
 
     // Setup image rendering
     let gradient = colorous::INFERNO;
+    let norm = 1.0 / 0.6 as Precision;
     let [rows, cols] = reader.image_shape();
     let mut image = RgbImage::new(cols as u32, rows as u32);
 
@@ -42,7 +46,7 @@ fn main() {
 
         // Generate image
         for (value, pixel) in input.iter().zip(image.pixels_mut()) {
-            let color = gradient.eval_continuous((*value).into());
+            let color = gradient.eval_continuous((norm * value).into());
             *pixel = Rgb([color.r, color.g, color.b]);
         }
 
