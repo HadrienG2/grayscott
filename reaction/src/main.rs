@@ -92,11 +92,11 @@ fn main() {
     let progress = ProgressBar::new(args.nbimage as u64)
         .with_message("Generating image")
         .with_style(
-            ProgressStyle::with_template("{msg} {pos}/{len} {wide_bar} ~{eta} left")
+            ProgressStyle::with_template("{msg} {pos}/{len} {wide_bar} {elapsed}/~{duration}")
                 .expect("Failed to parse style"),
         )
         .with_finish(ProgressFinish::AndClear);
-    progress.enable_steady_tick(Duration::from_millis(33));
+    progress.enable_steady_tick(Duration::from_millis(100));
 
     // Run the simulation
     for _ in (0..args.nbimage).progress_with(progress) {

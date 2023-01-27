@@ -42,11 +42,11 @@ fn main() {
     let progress = ProgressBar::new(reader.num_images() as u64)
         .with_message("Exporting image")
         .with_style(
-            ProgressStyle::with_template("{msg} {pos}/{len} {wide_bar} ~{eta} left")
+            ProgressStyle::with_template("{msg} {pos}/{len} {wide_bar} {elapsed}/~{duration}")
                 .expect("Failed to parse style"),
         )
         .with_finish(ProgressFinish::AndClear);
-    progress.enable_steady_tick(Duration::from_millis(33));
+    progress.enable_steady_tick(Duration::from_millis(100));
 
     // Convert HDF5 data to images
     for (idx, input) in reader.enumerate().progress_with(progress) {
