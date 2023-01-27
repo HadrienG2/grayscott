@@ -29,14 +29,12 @@ impl<C: Concentration> Species<C> {
         let out_v = v.out();
 
         // Add V and remove U at the center of images
-        let num_start = 7;
-        let num_end = 8;
+        let num_range = [7, 8];
         let frac = 16;
         let row_shift = 4;
         let center_slice = array2(|i| {
             let shift = (i == 0) as usize * row_shift;
-            let start = shape[i] * num_start / frac - shift;
-            let end = shape[i] * num_end / frac - shift;
+            let [start, end] = array2(|j| shape[i] * num_range[j] / frac - shift);
             start..end
         });
         out_u.fill_slice(center_slice.clone(), 0.0);
@@ -51,6 +49,11 @@ impl<C: Concentration> Species<C> {
     /// Check out the shape of the concentration matrices
     pub fn shape(&self) -> [usize; 2] {
         self.u.shape()
+    }
+
+    /// Check out the raw shape of the concentration matrices
+    pub fn raw_shape(&self) -> [usize; 2] {
+        self.u.raw_shape()
     }
 
     /// Make the output concentrations become the input ones
@@ -91,6 +94,11 @@ impl<C: Concentration> Evolving<C> {
         self.0[0].shape()
     }
 
+    /// Check the raw shape of concentration matrices
+    fn raw_shape(&self) -> [usize; 2] {
+        self.0[0].raw_shape()
+    }
+
     /// Access the output concentration
     fn out(&mut self) -> &mut C {
         &mut self.0[1]
@@ -123,10 +131,23 @@ pub trait Concentration {
     /// Create an array of a certain shape, filled with ones
     fn ones(shape: [usize; 2]) -> Self;
 
-    /// Retrieve the scalar shape
+    /// Retrieve the shape that was passed in to the constructor
     fn shape(&self) -> [usize; 2];
 
+    /// Retrieve the shape of the internal data store
+    ///
+    /// The interpretation of this value is implementation-dependent.
+    ///
+    fn raw_shape(&self) -> [usize; 2] {
+        self.shape()
+    }
+
     /// Fill a certain slice of the matrix with a certain value
+    ///
+    /// Like the constructor's shape, this slice is expressed in units of scalar
+    /// numbers, as if the storage were a 2D ndarray of scalars of the size
+    /// specified at construction time.
+    ///
     fn fill_slice(&mut self, slice: [Range<usize>; 2], value: Precision);
 
     /// View the matrix as a 2D ndarray
@@ -156,7 +177,7 @@ impl Concentration for ScalarConcentration {
     }
 
     fn shape(&self) -> [usize; 2] {
-        let [rows, cols] = self.shape() else { panic!("Expected 2D shape") };
+        let [rows, cols] = ScalarConcentration::shape(self) else { panic!("Expected 2D shape") };
         [*rows, *cols]
     }
 
