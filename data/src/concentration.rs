@@ -65,15 +65,15 @@ impl<C: Concentration> Species<C> {
 pub struct Evolving<C: Concentration>([C; 2]);
 //
 impl<C: Concentration> Evolving<C> {
-    /// Access the input concentration
-    pub fn make_scalar_input_view(&mut self) -> ScalarConcentrationView {
-        self.0[0].make_scalar_view()
-    }
-
     /// Access the input and output concentration
     pub fn in_out(&mut self) -> (&C, &mut C) {
         let [input, output] = &mut self.0;
         (input, output)
+    }
+
+    /// View the input concentration as a 2D array of scalars
+    pub fn make_scalar_input_view(&mut self) -> ScalarConcentrationView {
+        self.0[0].make_scalar_view()
     }
 
     /// Set up concentration storage with all-zeros output concentration
