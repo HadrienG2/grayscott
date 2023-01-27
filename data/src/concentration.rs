@@ -1,7 +1,7 @@
 //! Concentration of chemical species
 
 use crate::Precision;
-use ndarray::{s, Array2, Ix2, ShapeBuilder};
+use ndarray::{s, Array2};
 
 /// Concentration of all species involved
 #[non_exhaustive]
@@ -19,7 +19,7 @@ impl Species {
     ///
     /// `shape` specifies the concentration matrix dimensions, e.g. [1080, 1920]
     ///
-    pub fn new(shape: impl Clone + ShapeBuilder<Dim = Ix2>) -> Self {
+    pub fn new(shape: [usize; 2]) -> Self {
         // Start with U = 1.0 and V = 0.0 everywhere
         let mut u = Evolving::ones_out(shape.clone());
         let mut v = Evolving::zeros_out(shape.clone());
@@ -74,7 +74,7 @@ impl Evolving {
     }
 
     /// Set up concentration storage with all-zeros output concentration
-    fn zeros_out(shape: impl Clone + ShapeBuilder<Dim = Ix2>) -> Self {
+    fn zeros_out(shape: [usize; 2]) -> Self {
         Self([
             Concentration::default(shape.clone()),
             Concentration::zeros(shape),
@@ -82,7 +82,7 @@ impl Evolving {
     }
 
     /// Set up concentration storage with all-ones output concentration
-    fn ones_out(shape: impl Clone + ShapeBuilder<Dim = Ix2>) -> Self {
+    fn ones_out(shape: [usize; 2]) -> Self {
         Self([
             Concentration::default(shape.clone()),
             Concentration::ones(shape),
