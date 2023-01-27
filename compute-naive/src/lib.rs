@@ -4,6 +4,7 @@
 //! C++ tutorial, and is slow for the same reason.
 
 use data::{
+    array2,
     concentration::Species,
     parameters::{stencil_offset, Parameters},
 };
@@ -46,9 +47,4 @@ pub fn step(species: &mut Species, params: &Parameters) {
         *out_u = u + du * params.time_step;
         *out_v = v + dv * params.time_step;
     });
-}
-
-/// Shorthand to create an array of 2 elements, knowing a function from index to value
-fn array2<T>(f: impl FnMut(usize) -> T) -> [T; 2] {
-    std::array::from_fn::<T, 2, _>(f)
 }
