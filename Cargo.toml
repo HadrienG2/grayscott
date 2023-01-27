@@ -7,10 +7,6 @@ members = [
     "reaction"
 ]
 
-[profile.bench]
-# Build reproducibility at the cost of compile time
-codegen-units = 1
-
 [profile.release]
 # Max performance at the cost of compile time
 codegen-units = 1
