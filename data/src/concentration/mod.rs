@@ -107,6 +107,7 @@ impl<C: Concentration> Evolving<C> {
     /// Make the output concentration become the input one
     fn flip(&mut self) {
         let [input, output] = &mut self.0;
+        output.finalize();
         std::mem::swap(input, output);
     }
 }
@@ -149,6 +150,14 @@ pub trait Concentration {
     /// specified at construction time.
     ///
     fn fill_slice(&mut self, slice: [Range<usize>; 2], value: Precision);
+
+    /// Finalize the table before making it the output
+    ///
+    /// This is useful when the data layout calls for some duplication or
+    /// zeroing of elements, which we don't want to perform on every operation
+    /// but only when the final output is going to be read.
+    ///
+    fn finalize(&mut self) {}
 
     /// View the matrix as a 2D ndarray
     ///
