@@ -1,5 +1,7 @@
 //! SIMD-friendly concentration storage
 
+#[cfg(feature = "safe_arch")]
+mod safe_arch;
 #[cfg(feature = "slipstream")]
 mod slipstream;
 
@@ -144,7 +146,7 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
 
         // Prepare to track which scalar row index we're looking at inside of
         // each SIMD vector lane
-        let row = |i: usize| u32::try_from(i).expect("Too many rows for this impl");
+        let row = |i: usize| i32::try_from(i).expect("Too many rows for this impl");
         let start_row = Vector::Indices::splat(row(scalar_rows.start));
         let end_row = Vector::Indices::splat(row(scalar_rows.end));
         let num_simd_rows = simd_center.nrows();
@@ -292,7 +294,7 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
 }
 
 /// SIMD vector of floating-point values, as needed by SIMDConcentration
-pub trait SIMDValues<const WIDTH: usize>: Copy + PartialEq {
+pub trait SIMDValues<const WIDTH: usize, Element = Precision>: Copy + PartialEq {
     /// Matching vector type for vector of indices
     type Indices: SIMDIndices<WIDTH, Mask = Self::Mask>;
 
@@ -300,7 +302,7 @@ pub trait SIMDValues<const WIDTH: usize>: Copy + PartialEq {
     type Mask: SIMDMask<WIDTH>;
 
     /// Broadcast a scalar value into all lanes of a vector
-    fn splat(x: Precision) -> Self;
+    fn splat(x: Element) -> Self;
 
     /// Imports enabled lanes from other, keeps disabled lanes from self
     fn blend(self, other: Self, mask: Self::Mask) -> Self;
@@ -331,22 +333,27 @@ pub trait SIMDValues<const WIDTH: usize>: Copy + PartialEq {
     fn transpose(matrix: [Self; WIDTH]) -> [Self; WIDTH];
 
     /// Store vector into scalar storage, which must be suitably sized
-    fn store(self, target: &mut [Precision]);
+    fn store(self, target: &mut [Element]);
 
     /// FIXME: Workaround for slipstream not implementing Into<[T; WIDTH]> yet
-    fn into_array(self) -> [Precision; WIDTH];
+    fn into_array(self) -> [Element; WIDTH];
 }
 
-/// Vector of indices (we use u32 so they don't need more room than Precision)
+/// Vector of indices
+///
+/// We use i32 for indices because x86 SIMD instruction sets have poor support
+/// for unsigned integers and we don't want indices to be larger than data and
+/// become the vectorization bottleneck.
+///
 pub trait SIMDIndices<const WIDTH: usize>: Copy {
     /// Matching mask type for blending
     type Mask: SIMDMask<WIDTH>;
 
     /// FIXME: Workaround for slipstream not implementing From<[T; WIDTH]> yet
-    fn from_array(arr: [u32; WIDTH]) -> Self;
+    fn from_array(arr: [i32; WIDTH]) -> Self;
 
     /// Broadcast a scalar value into all lanes of a vector
-    fn splat(x: u32) -> Self;
+    fn splat(x: i32) -> Self;
 
     /// Increment all lanes of the vector
     fn increment(&mut self);
