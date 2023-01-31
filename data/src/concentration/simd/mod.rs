@@ -1,5 +1,8 @@
 //! SIMD-friendly concentration storage
 
+#[cfg(feature = "slipstream")]
+mod slipstream;
+
 use super::{Concentration, ScalarConcentration, ScalarConcentrationView};
 use crate::{
     array2, array_each_mut,
@@ -334,7 +337,7 @@ pub trait SIMDValues<const WIDTH: usize>: Copy + PartialEq {
     fn into_array(self) -> [Precision; WIDTH];
 }
 
-/// Vector of indices
+/// Vector of indices (we use u32 so they don't need more room than Precision)
 pub trait SIMDIndices<const WIDTH: usize>: Copy {
     /// Matching mask type for blending
     type Mask: SIMDMask<WIDTH>;
@@ -360,5 +363,3 @@ pub trait SIMDMask<const WIDTH: usize>: BitAnd<Output = Self> + Copy + PartialEq
     /// Broadcast a scalar value into all lanes of a vector
     fn splat(b: bool) -> Self;
 }
-
-// TODO: Add impl for slipstream and safe_arch types, each in a cfg'd module
