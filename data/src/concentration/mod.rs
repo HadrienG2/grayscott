@@ -1,5 +1,7 @@
 //! Concentration of chemical species
 
+pub mod simd;
+
 use crate::array2;
 use crate::Precision;
 use ndarray::{s, Array2, ArrayView2};
