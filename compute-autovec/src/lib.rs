@@ -36,7 +36,7 @@ cfg_if! {
 
 // Use FMA if supported in hardware (unlike GCC, LLVM does not do it automatically)
 // NOTE: This is the other part that would need to change when porting to more HW
-// FIXME: Currently disabled due to lack of slipstream support
+// FIXME: Currently disabled due to lack of slipstream mul_add support
 /* cfg_if! {
 if #[cfg(any(target_feature = "fma", target_feature = "vfp4"))] {
     #[inline(always)]
