@@ -50,5 +50,8 @@ pub const STENCIL_SHAPE: [usize; 2] = [3, 3];
 //
 #[inline(always)]
 pub fn stencil_offset() -> [usize; 2] {
-    STENCIL_SHAPE.map(|dim| (dim - 1) / 2)
+    STENCIL_SHAPE.map(|dim| {
+        debug_assert_eq!(dim % 2, 1);
+        (dim - 1) / 2
+    })
 }
