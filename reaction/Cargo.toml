@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
+autovec = ["compute-autovec"]
 naive = ["compute-naive"]
 regular = ["compute-regular"]
 
@@ -12,6 +13,8 @@ cfg-if = "1.0"
 clap = { version = "4.1", features = ["derive"] }
 data = { path = "../data" }
 indicatif = "0.17"
+#
+compute-autovec = { path = "../compute-autovec", optional = true }
 compute-naive = { path = "../compute-naive", optional = true }
 compute-regular = { path = "../compute-regular", optional = true }
 

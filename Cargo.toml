@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "compute-autovec",
     "compute-bench",
     "compute-naive",
     "compute-regular",

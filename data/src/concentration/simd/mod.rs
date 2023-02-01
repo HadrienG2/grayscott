@@ -11,7 +11,7 @@ use crate::{
     parameters::{stencil_offset, STENCIL_SHAPE},
     Precision,
 };
-use ndarray::{s, Array2, Axis};
+use ndarray::{iter::Windows, s, Array2, ArrayViewMut2, Axis, Ix2};
 use std::{
     array,
     ops::{BitAnd, Range},
@@ -65,6 +65,17 @@ pub struct SIMDConcentration<const WIDTH: usize, Vector: SIMDValues<WIDTH>> {
 }
 //
 impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vector> {
+    /// Mutable view of the central region, without stencil edges
+    pub fn simd_stencil_windows(&self) -> Windows<Vector, Ix2> {
+        self.simd.windows(STENCIL_SHAPE)
+    }
+
+    /// Mutable view of the central region, without stencil edges
+    pub fn simd_center_mut(&mut self) -> ArrayViewMut2<Vector> {
+        let [center_rows, center_cols] = self.simd_center_range();
+        self.simd.slice_mut(s![center_rows, center_cols])
+    }
+
     /// Shape of the simd data store, given a scalar shape
     fn simd_shape([rows, cols]: [usize; 2]) -> [usize; 2] {
         // TODO: Remove this restriction if I later publish this as a general crate
@@ -74,10 +85,10 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vec
             "For now, the number of rows must be a multiple of the SIMD width"
         );
         let simd_shape = [rows / WIDTH, cols];
-        array2(|i| simd_shape[i] + STENCIL_SHAPE[i])
+        array2(|i| simd_shape[i] + STENCIL_SHAPE[i] - 1)
     }
 
-    /// Fix up the output of an ndarray broadcasting constructor
+    /// Fix up the output of the ndarray broadcasting constructor
     fn from_scalar_elem(shape: [usize; 2], elem: Precision) -> Self {
         // Build the SIMD array, initially full of broadcasted elements
         let elem = Vector::splat(elem);
@@ -92,14 +103,16 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vec
         simd.slice_mut(s![.., right_offset..]).fill(zero);
 
         // Finish constructing the SIMDConcentration
+        // (the outer stencil remains incorrect, it will be fixed by finalize())
         Self {
             simd,
             scalar: <Array2<Precision> as Default>::default(),
         }
     }
 
-    /// Determine the range of indices that corresponds to the center of the array
-    fn simd_center(&self) -> [Range<usize>; 2] {
+    /// Determine the range of indices that corresponds to the center of the
+    /// array, without stencil edges.
+    fn simd_center_range(&self) -> [Range<usize>; 2] {
         let [top_offset, left_offset] = stencil_offset();
         let right_offset = self.simd.ncols() - left_offset;
         let bottom_offset = self.simd.nrows() - top_offset;
@@ -129,7 +142,7 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
 
     fn shape(&self) -> [usize; 2] {
         let full_shape = self.raw_shape();
-        let center_shape = array2(|i| full_shape[i] - STENCIL_SHAPE[i]);
+        let center_shape = array2(|i| full_shape[i] - STENCIL_SHAPE[i] + 1);
         [center_shape[0] * WIDTH, center_shape[1]]
     }
 
@@ -141,8 +154,7 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
 
     fn fill_slice(&mut self, [scalar_rows, cols]: [Range<usize>; 2], value: Precision) {
         // Ignore stencil edges which are not affected by this operation
-        let [center_rows, center_cols] = self.simd_center();
-        let mut simd_center = self.simd.slice_mut(s![center_rows, center_cols]);
+        let mut simd_center = self.simd_center_mut();
 
         // Prepare to track which scalar row index we're looking at inside of
         // each SIMD vector lane
@@ -168,7 +180,7 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
 
     fn finalize(&mut self) {
         // Ignore the left and right edge, these should stay at 0 forever
-        let [center_rows, center_cols] = self.simd_center();
+        let [center_rows, center_cols] = self.simd_center_range();
         debug_assert!((self.simd.slice(s![.., ..center_cols.start]).iter())
             .chain(self.simd.slice(s![.., center_cols.end..]).iter())
             .all(|&v| v == Vector::splat(0.0)));
@@ -218,7 +230,7 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
         }
 
         // Access the center of the SIMD matrix, we don't need edges here
-        let [center_rows, center_cols] = self.simd_center();
+        let [center_rows, center_cols] = self.simd_center_range();
         let simd = self.simd.slice(s![center_rows, center_cols]);
         let num_simd_rows = simd.nrows();
         let num_simd_cols = simd.ncols();
@@ -226,14 +238,18 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
         // Split the scalar matrix into a number of submatrices, each
         // corresponding to one lane of a SIMD vector (check layout description
         // in the SIMDConcentration documentation above if you are confused)
-        let mut scalar_remainder = Some(self.scalar.view_mut());
-        let mut scalar_views = Self::array(move |_| {
-            let (chunk, new_remainder) = scalar_remainder
+        let mut scalar_remainder_opt = Some(self.scalar.view_mut());
+        let mut scalar_views = Self::array(move |i| {
+            let scalar_remainder = scalar_remainder_opt
                 .take()
-                .expect("Shouldn't happen because the Option is reset below")
-                .split_at(Axis(0), num_simd_rows);
-            scalar_remainder = Some(new_remainder);
-            chunk
+                .expect("Shouldn't happen because the Option is reset below");
+            if i < WIDTH - 1 {
+                let (chunk, new_remainder) = scalar_remainder.split_at(Axis(0), num_simd_rows);
+                scalar_remainder_opt = Some(new_remainder);
+                chunk
+            } else {
+                scalar_remainder
+            }
         });
         debug_assert!(scalar_views.iter().all(|view| view.shape() == simd.shape()));
 

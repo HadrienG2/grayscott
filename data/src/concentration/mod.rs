@@ -36,7 +36,7 @@ impl<C: Concentration> Species<C> {
         let row_shift = 4;
         let center_slice = array2(|i| {
             let shift = (i == 0) as usize * row_shift;
-            let [start, end] = array2(|j| shape[i] * num_range[j] / frac - shift);
+            let [start, end] = array2(|j| (shape[i] * num_range[j] / frac).saturating_sub(shift));
             start..end
         });
         out_u.fill_slice(center_slice.clone(), 0.0);

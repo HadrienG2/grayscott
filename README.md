@@ -30,6 +30,11 @@ In the same spirit as the C++ version, the code is sliced into several crates:
     * `compute-regular` leverages the fact that the computation is simpler at
       the center of the domain than it is at the edges in order to get more
       performance on the center pixels.
+    * `compute-autovec` shapes the computation in such a way that the compiler
+      should be able to automatically vectorize most of it. The code is simpler
+      and more portable than if it were written directly against harware
+      intrinsics, but this implementation strategy also puts us at the mercy of
+      compiler autovectorizer whims.
     * TODO: Add more backends here as they are implemented.
 - `reaction` is a binary that runs the simulation. It uses the same CLI argument
   syntax as the `xyz_gray_scott` binaries from the C++ version, but the
@@ -77,3 +82,19 @@ $ cargo criterion --package compute-xyz
 
 The microbenchmark runner exports a more detailed HTML report in
 `target/criterion/reports/index.html` that you may want to have a look at.
+
+---
+
+By default, the Rust compiler produces binaries that are compatible with all
+CPUs implementing the target architecture. For `x86_64`, which you are most
+likely using, that means using no vector instruction set newer than SSE2, making
+you miss out on vector processing opportunities.
+
+To unleash your CPU's full number-crunching power, you may want to tell the
+compiler to instead produce nonportable binaries that are only guaranteed to
+work on your CPU. You can do this by setting the following environment variable
+before running the above cargo commands.
+
+```
+$ export RUSTFLAGS='-C target-cpu=native'
+```
