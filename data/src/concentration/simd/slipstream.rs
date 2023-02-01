@@ -88,9 +88,8 @@ impl<A: Align, const WIDTH: usize> SIMDValues<WIDTH> for Vector<A, Precision, WI
 
     #[inline]
     fn into_array(self) -> [Precision; WIDTH] {
-        let mut result = [0.0; WIDTH];
-        self.store(&mut result[..]);
-        result
+        let arr: &[Precision; WIDTH] = self.as_ref();
+        arr.clone()
     }
 }
 
