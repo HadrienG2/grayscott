@@ -189,7 +189,8 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
         // Separate the top and bottom rows that we need to fill from the
         // center of the stencil that was filled by previous operations.
         let (mut top, center_and_bottom) = center_cols.split_at(Axis(0), center_rows.start);
-        let (center, mut bottom) = center_and_bottom.split_at(Axis(0), center_rows.end);
+        let (center, mut bottom) =
+            center_and_bottom.split_at(Axis(0), center_rows.end - center_rows.start);
 
         // Iterate over bottom rows to be filled, in blocks of constant SIMD
         // lane shift that keep getting further away from the vertical center
