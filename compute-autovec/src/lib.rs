@@ -35,16 +35,16 @@ cfg_if! {
 }
 
 // Use FMA if supported in hardware (unlike GCC, LLVM does not do it automatically)
-// NOTE: This is the other part that would need to change when porting to more HW
 cfg_if! {
+    // NOTE: Extend this when porting to more CPU architectures
     if #[cfg(any(target_feature = "fma", target_feature = "vfp4"))] {
         #[inline(always)]
-        fn mul_add(mut x: Values, y: Values, z: Values) -> Values {
-            // FIXME: Use slipstream mul_add once available
+        fn mul_add(x: Values, y: Values, mut z: Values) -> Values {
+            // FIXME: Use slipstream's mul_add once available
             for i in 0..WIDTH {
-                x[i] = x[i].mul_add(y[i], z[i])
+                z[i] = x[i].mul_add(y[i], z[i])
             }
-            x
+            z
         }
     } else {
         #[inline(always)]
