@@ -24,7 +24,10 @@ pub fn criterion_benchmark<C: Concentration>(
 
         group.throughput(Throughput::Elements(num_elems));
         group.bench_function(BenchmarkId::from_parameter(num_elems), |b| {
-            b.iter(|| step(&mut species, &params));
+            b.iter(|| {
+                step(&mut species, &params);
+                species.flip();
+            });
         });
     }
     group.finish();
