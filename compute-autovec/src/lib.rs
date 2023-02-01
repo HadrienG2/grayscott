@@ -36,20 +36,23 @@ cfg_if! {
 
 // Use FMA if supported in hardware (unlike GCC, LLVM does not do it automatically)
 // NOTE: This is the other part that would need to change when porting to more HW
-// FIXME: Currently disabled due to lack of slipstream mul_add support
-/* cfg_if! {
-if #[cfg(any(target_feature = "fma", target_feature = "vfp4"))] {
-    #[inline(always)]
-    fn mul_add(x: Values, y: Values, z: Values) -> Values {
-        x.mul_add(y, z)
-    }
-} else { */
-#[inline(always)]
-fn mul_add(x: Values, y: Values, z: Values) -> Values {
-    x * y + z
+cfg_if! {
+    if #[cfg(any(target_feature = "fma", target_feature = "vfp4"))] {
+        #[inline(always)]
+        fn mul_add(mut x: Values, y: Values, z: Values) -> Values {
+            // FIXME: Use slipstream mul_add once available
+            for i in 0..WIDTH {
+                x[i] = x[i].mul_add(y[i], z[i])
+            }
+            x
+        }
+    } else {
+        #[inline(always)]
+        fn mul_add(x: Values, y: Values, z: Values) -> Values {
+            x * y + z
+        }
+   }
 }
-/*    }
-} */
 
 /// Chosen concentration type
 pub type Species = data::concentration::Species<SIMDConcentration<WIDTH, Values>>;
@@ -98,15 +101,11 @@ pub fn step(species: &mut Species, params: &Parameters) {
 
         // Deduce variation of U and V
         let uv_square = u * v * v;
-        let du = mul_add(
-            diffusion_rate_u,
-            full_u,
-            mul_add(feed_rate, ones - u, -uv_square),
-        );
+        let du = mul_add(diffusion_rate_u, full_u, feed_rate * (ones - u) - uv_square);
         let dv = mul_add(
             diffusion_rate_v,
             full_v,
-            mul_add(-(feed_rate + kill_rate), v, uv_square),
+            uv_square - (feed_rate + kill_rate) * v,
         );
         *out_u = mul_add(du, time_step, u);
         *out_v = mul_add(dv, time_step, v);
