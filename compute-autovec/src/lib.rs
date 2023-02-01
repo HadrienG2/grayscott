@@ -7,6 +7,7 @@
 //! than the hardware it was written for (x86_64), with minimal porting effort
 //! revolving around picking the right vector width.
 
+use cfg_if::cfg_if;
 use data::{
     concentration::simd::SIMDConcentration,
     parameters::{stencil_offset, Parameters},
@@ -14,9 +15,10 @@ use data::{
 };
 use slipstream::{vector::align, Vector};
 
-/// Chosen SIMD vector type
+// Pick vector size based on hardware support for vectorization of
+// floating-point operations (which are the bulk of our SIMD workload)
 const PRECISION_SIZE: usize = std::mem::size_of::<Precision>();
-cfg_if::cfg_if! {
+cfg_if! {
     if #[cfg(target_feature = "avx512f")] {
         const WIDTH: usize = 64 / PRECISION_SIZE;
         type Values = Vector<align::Align64, Precision, WIDTH>;
@@ -31,6 +33,23 @@ cfg_if::cfg_if! {
         type Values = Vector<align::Align16, Precision, WIDTH>;
     }
 }
+
+// Use FMA if supported in hardware (unlike GCC, LLVM does not do it automatically)
+// NOTE: This is the other part that would need to change when porting to more HW
+// FIXME: Currently disabled due to lack of slipstream support
+/* cfg_if! {
+if #[cfg(any(target_feature = "fma", target_feature = "vfp4"))] {
+    #[inline(always)]
+    fn mul_add(x: Values, y: Values, z: Values) -> Values {
+        x.mul_add(y, z)
+    }
+} else { */
+#[inline(always)]
+fn mul_add(x: Values, y: Values, z: Values) -> Values {
+    x * y + z
+}
+/*    }
+} */
 
 /// Chosen concentration type
 pub type Species = data::concentration::Species<SIMDConcentration<WIDTH, Values>>;
@@ -71,17 +90,25 @@ pub fn step(species: &mut Species, params: &Parameters) {
                 |[acc_u, acc_v], ((&stencil_u, &stencil_v), weight)| {
                     let weight = Values::splat(weight);
                     [
-                        acc_u + weight * (stencil_u - u),
-                        acc_v + weight * (stencil_v - v),
+                        mul_add(weight, stencil_u - u, acc_u),
+                        mul_add(weight, stencil_v - v, acc_v),
                     ]
                 },
             );
 
         // Deduce variation of U and V
         let uv_square = u * v * v;
-        let du = diffusion_rate_u * full_u - uv_square + feed_rate * (ones - u);
-        let dv = diffusion_rate_v * full_v + uv_square - (feed_rate + kill_rate) * v;
-        *out_u = u + du * time_step;
-        *out_v = v + dv * time_step;
+        let du = mul_add(
+            diffusion_rate_u,
+            full_u,
+            mul_add(feed_rate, ones - u, -uv_square),
+        );
+        let dv = mul_add(
+            diffusion_rate_v,
+            full_v,
+            mul_add(-(feed_rate + kill_rate), v, uv_square),
+        );
+        *out_u = mul_add(du, time_step, u);
+        *out_v = mul_add(dv, time_step, v);
     }
 }
