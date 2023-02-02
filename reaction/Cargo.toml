@@ -5,6 +5,7 @@ edition = "2021"
 
 [features]
 autovec = ["compute-autovec"]
+manualvec = ["compute-manualvec"]
 naive = ["compute-naive"]
 regular = ["compute-regular"]
 
@@ -15,6 +16,7 @@ data = { path = "../data" }
 indicatif = "0.17"
 #
 compute-autovec = { path = "../compute-autovec", optional = true }
+compute-manualvec = { path = "../compute-manualvec", optional = true }
 compute-naive = { path = "../compute-naive", optional = true }
 compute-regular = { path = "../compute-regular", optional = true }
 

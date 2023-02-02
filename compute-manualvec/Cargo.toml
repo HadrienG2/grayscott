@@ -1,0 +1,18 @@
+[package]
+name = "compute-manualvec"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cfg-if = "1.0"
+data = { path = "../data", features = ["safe_arch"] }
+ndarray = "0.15"
+safe_arch = "0.6"
+
+[dev-dependencies]
+compute-bench = { path = "../compute-bench" }
+criterion = { version = "0.3", default-features = false }
+
+[[bench]]
+name = "benchmark"
+harness = false

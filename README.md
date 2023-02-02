@@ -35,6 +35,9 @@ In the same spirit as the C++ version, the code is sliced into several crates:
       and more portable than if it were written directly against harware
       intrinsics, but this implementation strategy also puts us at the mercy of
       compiler autovectorizer whims.
+    * `compute-manualvec` does the manual implementation instead, demonstrating
+      that for this particular problem autovectorization works very well and a
+      manual implementation is a lot more trouble than it's worth.
     * TODO: Add more backends here as they are implemented.
 - `reaction` is a binary that runs the simulation. It uses the same CLI argument
   syntax as the `xyz_gray_scott` binaries from the C++ version, but the
