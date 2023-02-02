@@ -209,13 +209,13 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
             if shift < WIDTH {
                 // If so, fill that data at the bottom...
                 for (dst, src) in bottom_block.iter_mut().zip(center.iter()) {
-                    *dst = src.shift_left(shift);
+                    *dst = src.shift_right(shift);
                 }
 
                 // ...and at the top
                 let top_src = center.slice(s![center.nrows() - top_block.nrows().., ..]);
                 for (dst, src) in (top_block.iter_mut()).zip(top_src.iter()) {
-                    *dst = src.shift_right(shift);
+                    *dst = src.shift_left(shift);
                 }
             } else {
                 // Otherwise, just fill everything with zeroes

@@ -66,13 +66,13 @@ impl<A: Align, const WIDTH: usize> SIMDValues<WIDTH> for Vector<A, Precision, WI
     #[inline]
     fn shift_left(self, offset: usize) -> Self {
         let arr = self.into_array();
-        values_from_fn(|i| *arr.get(i + offset).unwrap_or(&0.0))
+        values_from_fn(|i| *arr.get(i.wrapping_sub(offset)).unwrap_or(&0.0))
     }
 
     #[inline]
     fn shift_right(self, offset: usize) -> Self {
         let arr = self.into_array();
-        values_from_fn(|i| *arr.get(i.wrapping_sub(offset)).unwrap_or(&0.0))
+        values_from_fn(|i| *arr.get(i + offset).unwrap_or(&0.0))
     }
 
     #[inline]
