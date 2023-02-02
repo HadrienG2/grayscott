@@ -76,7 +76,7 @@ mod sse2 {
 
             #[inline]
             pub fn mask128_from_i32_m128i(mask: m128i) -> Mask128 {
-                Mask(<[i32; 4]>::from(mask).map(|i| i < 0))
+                Mask(<[i32; 4]>::from(mask).map(|i| i != 0))
             }
 
             #[inline]
@@ -384,7 +384,7 @@ mod avx {
                     } else {
                         let s2s1_s4s3 = safe_arch::permute_m256d::<0b0101>(self);
                         let zero_s2s1 =
-                            safe_arch::permute2z_m256d::<0b0001_1000>(s2s1_s4s3, s2s1_s4s3);
+                            safe_arch::permute2z_m256d::<0b0000_1000>(s2s1_s4s3, s2s1_s4s3);
                         safe_arch::blend_m256d::<0b1010>(zero_s2s1, s2s1_s4s3)
                     }
                 }
@@ -600,7 +600,7 @@ mod avx {
                     _ => zero,
                 }
             } else {
-                let carry = |v| safe_arch::permute2z_m256::<0b0001_1000>(v, v);
+                let carry = |v| safe_arch::permute2z_m256::<0b0000_1000>(v, v);
                 match offset {
                     0 => unreachable!(),
                     1 => {
