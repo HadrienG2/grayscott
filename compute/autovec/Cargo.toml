@@ -1,14 +1,16 @@
 [package]
-name = "compute-regular"
+name = "autovec"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-data = { path = "../data" }
+cfg-if = "1.0"
+data = { path = "../../data", features = ["slipstream"] }
 ndarray = "0.15"
+slipstream = "0.2"
 
 [dev-dependencies]
-compute-bench = { path = "../compute-bench" }
+bench = { path = "../bench" }
 criterion = { version = "0.3", default-features = false }
 
 [[bench]]

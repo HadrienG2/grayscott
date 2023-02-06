@@ -23,26 +23,30 @@ $ cargo install cargo-criterion
 In the same spirit as the C++ version, the code is sliced into several crates:
 
 - `data` defines the general data model, parameters and HDF5 file I/O.
-- `compute-xyz` crates implement the various compute backends, except for
-  `compute-bench` which provides shared benchmarking utilities.
-    * `compute-naive` follows the original naive algorithm but makes idiomatic
-      use of the `ndarray` multidimensional library.
-    * `compute-regular` leverages the fact that the computation is simpler at
-      the center of the domain than it is at the edges in order to get more
-      performance on the center pixels.
-    * `compute-autovec` shapes the computation in such a way that the compiler
-      should be able to automatically vectorize most of it. The code is simpler
-      and more portable than if it were written directly against harware
+- `compute/xyz` crates implement the various compute backends, except for
+  `compute/bench` which provides shared benchmarking utilities.
+    * The `naive` backend follows the original naive algorithm but makes
+      idiomatic use of the `ndarray` multidimensional array library.
+    * The `regular` backend leverages the fact that the computation is simpler
+      at the center of the domain than it is at the edges in order to get about
+      2x more performance on the center pixels.
+    * The `autovec` backend shapes the computation and data in such a way that
+      the compiler can automatically vectorize most of the code. The code is
+      simpler and more portable than if it were written directly against harware
       intrinsics, but this implementation strategy also puts us at the mercy of
       compiler autovectorizer whims.
-    * `compute-manualvec` does the manual implementation instead, demonstrating
-      that for this particular problem autovectorization works very well and a
-      manual implementation is a lot more trouble than it's worth.
+    * The `manualvec` backend does the vectorization manually instead,
+      demonstrating that for this particular problem autovectorization works
+      very well and a manual implementation is not worthwhile.
+        * Due to Rust's [orphan rules](https://github.com/Ixrec/rust-orphan-rules),
+          a significant share of the SIMD abstraction layer that is needed by
+          the shared `Species` concentration storage code is implemented in the
+          `data` crate instead, see `data/src/concentration/simd/safe_arch.rs`.
     * TODO: Add more backends here as they are implemented.
 - `reaction` is a binary that runs the simulation. It uses the same CLI argument
   syntax as the `xyz_gray_scott` binaries from the C++ version, but the
   choice of compute backend is made through Cargo features. For each
-  `compute-xyz` backend, there is a matching `xyz` feature.
+  `compute/xyz` backend, there is a matching `xyz` feature.
 - `data-to-pics` is a binary that converts HDF5 output datafiles from `reaction`
   into PNG images, much like the `gray_scott2pic` binary from the C++ version
   except it uses a different color palette.
@@ -80,7 +84,7 @@ $ cargo criterion --workspace
 Alternatively, you can run microbenchmarks for a specific compute backend `xyz`:
 
 ```
-$ cargo criterion --package compute-xyz
+$ cargo criterion --package xyz
 ```
 
 The microbenchmark runner exports a more detailed HTML report in

@@ -48,13 +48,13 @@ struct Args {
 cfg_if::cfg_if! {
     // TODO: Add more advanced and preferrable implementations above
     if #[cfg(feature = "autovec")] {
-        use compute_autovec::{Species, step};
+        use autovec::{Species, step};
     } else if #[cfg(feature = "manualvec")] {
-        use compute_manualvec::{Species, step};
+        use manualvec::{Species, step};
     } else if #[cfg(feature = "regular")] {
-        use compute_regular::{Species, step};
+        use regular::{Species, step};
     } else if #[cfg(any(feature = "naive", test))] {
-        use compute_naive::{Species, step};
+        use naive::{Species, step};
     } else {
         use data::concentration::{ScalarConcentration};
         type Species = data::concentration::Species<ScalarConcentration>;

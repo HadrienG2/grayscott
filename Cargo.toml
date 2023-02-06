@@ -1,10 +1,10 @@
 [workspace]
 members = [
-    "compute-autovec",
-    "compute-bench",
-    "compute-manualvec",
-    "compute-naive",
-    "compute-regular",
+    "compute/autovec",
+    "compute/bench",
+    "compute/manualvec",
+    "compute/naive",
+    "compute/regular",
     "data",
     "data-to-pics",
     "reaction"
