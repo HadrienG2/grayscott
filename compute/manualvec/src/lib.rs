@@ -8,65 +8,79 @@
 //! vectorize those anymore.
 
 use cfg_if::cfg_if;
+use compute::Simulate;
 use data::{
-    concentration::simd::SIMDConcentration,
+    concentration::{simd::SIMDConcentration, Species},
     parameters::{stencil_offset, Parameters},
     Precision,
 };
 
 /// Chosen concentration type
 pub type Values = <Precision as Scalar>::Vectorized;
-pub type Species = data::concentration::Species<SIMDConcentration<{ Values::WIDTH }, Values>>;
 
-/// Perform one simulation time step
-pub fn step(species: &mut Species, params: &Parameters) {
-    // Access species concentration matrices
-    let (in_u, out_u) = species.u.in_out();
-    let (in_v, out_v) = species.v.in_out();
+/// Gray-Scott reaction simulation
+pub struct Simulation {
+    /// Simulation parameters
+    params: Parameters,
+}
+//
+impl Simulate for Simulation {
+    type Concentration = SIMDConcentration<{ Values::WIDTH }, Values>;
 
-    // Determine offset from the top-left corner of the stencil to its center
-    let stencil_offset = stencil_offset();
+    fn new(params: Parameters) -> Self {
+        Self { params }
+    }
 
-    // Prepare vector versions of the scalar computation parameters
-    let diffusion_rate_u = Values::splat(params.diffusion_rate_u);
-    let diffusion_rate_v = Values::splat(params.diffusion_rate_v);
-    let feed_rate = Values::splat(params.feed_rate);
-    let kill_rate = Values::splat(params.kill_rate);
-    let time_step = Values::splat(params.time_step);
-    let ones = Values::splat(1.0);
+    fn step(&self, species: &mut Species<Self::Concentration>) {
+        // Access species concentration matrices
+        let (in_u, out_u) = species.u.in_out();
+        let (in_v, out_v) = species.v.in_out();
 
-    // Iterate over center pixels of the species concentration matrices
-    for (((out_u, out_v), win_u), win_v) in (out_u.simd_center_mut().iter_mut())
-        .zip(out_v.simd_center_mut().iter_mut())
-        .zip(in_u.simd_stencil_windows())
-        .zip(in_v.simd_stencil_windows())
-    {
-        // Access center value of u
-        let u = win_u[stencil_offset];
-        let v = win_v[stencil_offset];
+        // Determine offset from the top-left corner of the stencil to its center
+        let stencil_offset = stencil_offset();
 
-        // Compute diffusion gradient
-        let [full_u, full_v] = (win_u.iter())
-            .zip(win_v.iter())
-            .zip(params.weights.into_iter().flat_map(|row| row.into_iter()))
-            .fold(
-                [Values::splat(0.); 2],
-                |[acc_u, acc_v], ((&stencil_u, &stencil_v), weight)| {
-                    let weight = Values::splat(weight);
-                    [
-                        weight.mul_add(stencil_u.sub(u), acc_u),
-                        weight.mul_add(stencil_v.sub(v), acc_v),
-                    ]
-                },
-            );
+        // Prepare vector versions of the scalar computation parameters
+        let params = &self.params;
+        let diffusion_rate_u = Values::splat(params.diffusion_rate_u);
+        let diffusion_rate_v = Values::splat(params.diffusion_rate_v);
+        let feed_rate = Values::splat(params.feed_rate);
+        let kill_rate = Values::splat(params.kill_rate);
+        let time_step = Values::splat(params.time_step);
+        let ones = Values::splat(1.0);
 
-        // Deduce variation of U and V
-        let uv_square = u.mul(v).mul(v);
-        let du = diffusion_rate_u.mul_add(full_u, feed_rate.mul_sub(ones.sub(u), uv_square));
-        let dv =
-            diffusion_rate_v.mul_add(full_v, (feed_rate.add(kill_rate)).mul_neg_add(v, uv_square));
-        *out_u = du.mul_add(time_step, u);
-        *out_v = dv.mul_add(time_step, v);
+        // Iterate over center pixels of the species concentration matrices
+        for (((out_u, out_v), win_u), win_v) in (out_u.simd_center_mut().iter_mut())
+            .zip(out_v.simd_center_mut().iter_mut())
+            .zip(in_u.simd_stencil_windows())
+            .zip(in_v.simd_stencil_windows())
+        {
+            // Access center value of u
+            let u = win_u[stencil_offset];
+            let v = win_v[stencil_offset];
+
+            // Compute diffusion gradient
+            let [full_u, full_v] = (win_u.iter())
+                .zip(win_v.iter())
+                .zip(params.weights.into_iter().flat_map(|row| row.into_iter()))
+                .fold(
+                    [Values::splat(0.); 2],
+                    |[acc_u, acc_v], ((&stencil_u, &stencil_v), weight)| {
+                        let weight = Values::splat(weight);
+                        [
+                            weight.mul_add(stencil_u.sub(u), acc_u),
+                            weight.mul_add(stencil_v.sub(v), acc_v),
+                        ]
+                    },
+                );
+
+            // Deduce variation of U and V
+            let uv_square = u.mul(v).mul(v);
+            let du = diffusion_rate_u.mul_add(full_u, feed_rate.mul_sub(ones.sub(u), uv_square));
+            let dv = diffusion_rate_v
+                .mul_add(full_v, (feed_rate.add(kill_rate)).mul_neg_add(v, uv_square));
+            *out_u = du.mul_add(time_step, u);
+            *out_v = dv.mul_add(time_step, v);
+        }
     }
 }
 

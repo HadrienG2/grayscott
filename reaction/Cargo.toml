@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 cfg-if = "1.0"
 clap = { version = "4.1", features = ["derive"] }
+compute = { path = "../compute/shared" }
 data = { path = "../data" }
 indicatif = "0.17"
 

@@ -1,1 +1,1 @@
-bench::criterion_benchmark!(naive);
+compute::criterion_benchmark!(naive);

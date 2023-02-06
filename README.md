@@ -25,9 +25,9 @@ $ cargo install cargo-criterion
 In the same spirit as the C++ version, the code is sliced into several crates:
 
 - `data` defines the general data model, parameters and HDF5 file I/O.
-- `compute/xyz` crates implement the various compute backends, except for
-  `compute/bench` which provides shared benchmarking utilities. Here are the
-  backends in suggested learning order:
+- `compute/xyz` crates implement the various compute backends, based on a small
+  layer of shared infrastructure defined in `compute/shared`. Here are the
+  compute backends in suggested learning order:
     * The `naive` backend follows the original naive algorithm but makes
       idiomatic use of the `ndarray` multidimensional array library.
     * The `regular` backend leverages the fact that the computation is simpler

@@ -4,11 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+compute = { path = "../shared" }
 data = { path = "../../data" }
 ndarray = "0.15"
 
 [dev-dependencies]
-bench = { path = "../bench" }
+compute = { path = "../shared", features = ["criterion"] }
 criterion = { version = "0.3", default-features = false }
 
 [[bench]]

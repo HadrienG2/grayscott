@@ -1,5 +1,7 @@
 use clap::Parser;
+use compute::Simulate;
 use data::{
+    concentration::Species,
     hdf5::{self, Writer},
     parameters::Parameters,
     Precision,
@@ -44,25 +46,35 @@ struct Args {
     output: Option<PathBuf>,
 }
 
-// Select compute backend depending on enabled crate features
+// Use the best compute backend allowed by enabled crate features
 cfg_if::cfg_if! {
     // TODO: Add more advanced and preferrable implementations above
     if #[cfg(feature = "block")] {
-        use block::{Species, step};
+        use block::Simulation;
     } else if #[cfg(feature = "autovec")] {
-        use autovec::{Species, step};
+        use autovec::Simulation;
     } else if #[cfg(feature = "manualvec")] {
-        use manualvec::{Species, step};
+        use manualvec::Simulation;
     } else if #[cfg(feature = "regular")] {
-        use regular::{Species, step};
+        use regular::Simulation;
     } else if #[cfg(any(feature = "naive", test))] {
-        use naive::{Species, step};
+        use naive::Simulation;
     } else {
-        use data::concentration::{ScalarConcentration};
-        type Species = data::concentration::Species<ScalarConcentration>;
-        #[allow(non_upper_case_globals)]
-        const step: fn(&mut Species, &Parameters) =
-            panic!("Please enable at least one compute backend via crate features");
+        // If no backend was specified, use a backend skeleton that shows what
+        // the expected interface looks like and throws a compiler error.
+        use data::concentration::ScalarConcentration;
+        //
+        struct Simulation;
+        //
+        impl Simulate for Simulation {
+            type Concentration = ScalarConcentration;
+
+            fn new(_params: Parameters) -> Self {
+                std::compile_error!("Please enable at least one compute backend via crate features")
+            }
+
+            fn step(&self, _species: &mut Species<ScalarConcentration>) {}
+        }
     }
 }
 
@@ -75,16 +87,17 @@ fn main() {
     let file_name = args.output.unwrap_or_else(|| "output.h5".into());
     let steps_per_image = usize::from(args.nbextrastep);
 
-    // Determine computation parameters
-    let params = Parameters {
+    // Set up the simulation
+    let simulation = Simulation::new(Parameters {
         kill_rate,
         feed_rate,
         time_step,
         ..Default::default()
-    };
+    });
 
     // Set up chemical species concentration storage
-    let mut species = Species::new([args.nbrow, args.nbcol]);
+    type Concentration = <Simulation as Simulate>::Concentration;
+    let mut species = Species::<Concentration>::new([args.nbrow, args.nbcol]);
     let mut writer = Writer::create(
         hdf5::Config {
             file_name,
@@ -109,7 +122,7 @@ fn main() {
     for _ in (0..args.nbimage).progress_with(progress) {
         // Move the simulation forward
         for _ in 0..steps_per_image {
-            step(&mut species, &params);
+            simulation.step(&mut species);
             species.flip();
         }
 
