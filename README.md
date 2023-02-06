@@ -26,10 +26,11 @@ In the same spirit as the C++ version, the code is sliced into several crates:
 
 - `data` defines the general data model, parameters and HDF5 file I/O.
 - `compute/xyz` crates implement the various compute backends, based on a small
-  layer of shared infrastructure defined in `compute/shared`. Here are the
-  compute backends in suggested learning order:
-    * The `naive` backend follows the original naive algorithm but makes
-      idiomatic use of the `ndarray` multidimensional array library.
+  abstraction layer defined in `compute/shared`. Here are the compute backends
+  in suggested learning order:
+    * The `naive` backend follows the original naive algorithm, but makes
+      idiomatic use of the NumPy-like `ndarray` multidimensional array library
+      for the sake of readability.
     * The `regular` backend leverages the fact that the computation is simpler
       at the center of the domain than it is at the edges in order to get about
       2x more performance on the center pixels.
@@ -37,18 +38,20 @@ In the same spirit as the C++ version, the code is sliced into several crates:
       the compiler can automatically vectorize most of the code. The code is
       simpler and more portable than if it were written directly against harware
       intrinsics, but this implementation strategy also puts us at the mercy of
-      compiler autovectorizer whims. Data layout is also improved as in the
-      `_intrinsics` C++ version.
+      compiler autovectorizer whims. Data layout is also improved, pretty much
+      like what was done in the `_intrinsics` C++ version.
     * The `manualvec` backend does the vectorization manually instead, like the
       `_intrinsics` C++ version. It is significantly more complex and less
-      portable while having comparable runtime performance, which shows that for
-      this particular problem autovectorization provides a better tradeoff.
+      portable than `autovec` while having comparable runtime performance, which
+      shows that for this particular problem autovectorization can actually be
+      a better tradeoff.
         * Due to Rust's [orphan rules](https://github.com/Ixrec/rust-orphan-rules),
           a significant share of the SIMD abstraction layer that is needed by
           the shared `Species` concentration storage code is implemented in the
           `data` crate instead, see `data/src/concentration/simd/safe_arch.rs`.
         * Since this backend shows that manual vectorization is not worthwhile
-          for this problem, the following backends go back to autovectorization.
+          for this problem, the following backends in this list go back to
+          autovectorization for simplicity.
     * The `block` backend uses a blocked iteration technique to improve the CPU
       cache hit rate, as the `_link_block` C++ version does.
     * TODO: Add more backends here as they are implemented.
