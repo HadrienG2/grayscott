@@ -10,7 +10,7 @@ In addition to [a recent Rust toolchain](https://www.rust-lang.org/learn/get-sta
 you will need to install development packages for the following C/++ libraries:
 
 - [hdf5](https://github.com/aldanor/hdf5-rust#compatibility)
-- hwloc
+- [hwloc](https://github.com/Ichbinjoe/hwloc2-rs#prerequisites)
 
 The microbenchmarks are implemented using `criterion`, and we use the newer
 `cargo-criterion` runner mechanism, which requires a separate binary that you

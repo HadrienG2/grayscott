@@ -11,7 +11,7 @@ use crate::{
     parameters::{stencil_offset, STENCIL_SHAPE},
     Precision,
 };
-use ndarray::{iter::Windows, s, Array2, ArrayViewMut2, Axis, Ix2};
+use ndarray::{s, Array2, ArrayView2, ArrayViewMut2, Axis};
 use std::{
     array,
     ops::{BitAnd, Range},
@@ -66,9 +66,9 @@ pub struct SIMDConcentration<const WIDTH: usize, Vector: SIMDValues<WIDTH>> {
 }
 //
 impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vector> {
-    /// Mutable view of the central region, without stencil edges
-    pub fn simd_stencil_windows(&self) -> Windows<Vector, Ix2> {
-        self.simd.windows(STENCIL_SHAPE)
+    /// Read-only view of the SIMD data storage
+    pub fn view(&self) -> ArrayView2<Vector> {
+        self.simd.view()
     }
 
     /// Mutable view of the central region, without stencil edges
