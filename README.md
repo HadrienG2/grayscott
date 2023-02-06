@@ -53,7 +53,7 @@ In the same spirit as the C++ version, the code is sliced into several crates:
 
 ## Usage
 
-To run the simulation, use this command...
+To run the simulation, build and run the `reaction` program as follows...
 
 ```
 $ cargo run --release --bin reaction --features <backend> -- <CLI args>
@@ -64,14 +64,15 @@ the same arguments as the C++ version. You can put a `--help` in there for
 self-documentation.
 
 Then, to convert the HDF5 output into PNG images for visualization purposes, you
-can do something like...
+can use the `data-to-pics` program, using something like the following...
 
 ```
 $ mkdir pics
 $ cargo run --release --bin data-to-pics -- -i <input> -o pics
 ```
 
-...where `<input>` is the name of the input HDF5 file (`output.h5` by default).
+...where `<input>` is the name of the input HDF5 file produced by `<reaction>`
+(`output.h5` by default).
 
 ---
 
