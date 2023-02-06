@@ -2,6 +2,7 @@
 members = [
     "compute/autovec",
     "compute/bench",
+    "compute/block",
     "compute/manualvec",
     "compute/naive",
     "compute/regular",

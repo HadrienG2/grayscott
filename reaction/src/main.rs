@@ -47,7 +47,9 @@ struct Args {
 // Select compute backend depending on enabled crate features
 cfg_if::cfg_if! {
     // TODO: Add more advanced and preferrable implementations above
-    if #[cfg(feature = "autovec")] {
+    if #[cfg(feature = "block")] {
+        use block::{Species, step};
+    } else if #[cfg(feature = "autovec")] {
         use autovec::{Species, step};
     } else if #[cfg(feature = "manualvec")] {
         use manualvec::{Species, step};

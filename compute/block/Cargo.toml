@@ -1,0 +1,18 @@
+[package]
+name = "block"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+autovec = { path = "../autovec" }
+data = { path = "../../data", features = ["slipstream"] }
+hwloc = "0.5"
+once_cell = "1.17"
+
+[dev-dependencies]
+bench = { path = "../bench" }
+criterion = { version = "0.3", default-features = false }
+
+[[bench]]
+name = "benchmark"
+harness = false

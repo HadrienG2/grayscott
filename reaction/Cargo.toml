@@ -11,6 +11,7 @@ indicatif = "0.17"
 
 # Compute backends
 autovec = { path = "../compute/autovec", optional = true }
+block = { path = "../compute/block", optional = true }
 manualvec = { path = "../compute/manualvec", optional = true }
 naive = { path = "../compute/naive", optional = true }
 regular = { path = "../compute/regular", optional = true }
