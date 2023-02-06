@@ -19,7 +19,7 @@ use std::{
 
 /// SIMD-oriented Concentration implementation
 ///
-/// As always in SIMD, this storage a fairly non-obvious data layout. Let us
+/// As always in SIMD, this storage has a fairly non-obvious data layout. Let us
 /// consider a computation which would be implemented in a scalar way using a 2D
 /// array of floating-point numbers that has N rows and M columns.
 ///

@@ -2,9 +2,10 @@
 //!
 //! This implementation is vectorized through direct use of hardware intrinsics.
 //! Overall, it does not compare favorably with the autovectorized version from
-//! the perspective of code complexity, portability and runtime performance,
-//! which shows that compilers have good enough at autovectorizing stencil
-//! computations and one can't really justify manually vectorizing those anymore.
+//! the perspective of code complexity and portability, but its runtime
+//! performance is comparable. This shows that compilers have become good enough
+//! at autovectorizing stencil computations and there is no need to manually
+//! vectorize those anymore.
 
 use cfg_if::cfg_if;
 use data::{
@@ -117,9 +118,9 @@ pub trait Scalar {
 // Notice that the code will not vectorize at all on non-x86 hardware.
 //
 // Also, if you think this is long, do check out data::concentration::safe_arch,
-// which is the support code used by Species, though that comparison is a bit on
+// which is the support code used by Species. Though that comparison is a bit on
 // the unfair side as I wrote that code a little more general than it needs to
-// be so I can reuse it in other contexts later on.
+// be, so that I can reuse it in other contexts later on.
 //
 cfg_if! {
     if #[cfg(target_feature = "avx")] {
