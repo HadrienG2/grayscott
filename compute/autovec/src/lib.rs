@@ -20,17 +20,17 @@ use slipstream::{vector::align, Vector};
 const PRECISION_SIZE: usize = std::mem::size_of::<Precision>();
 cfg_if! {
     if #[cfg(target_feature = "avx512f")] {
-        const WIDTH: usize = 64 / PRECISION_SIZE;
-        type Values = Vector<align::Align64, Precision, WIDTH>;
+        pub const WIDTH: usize = 64 / PRECISION_SIZE;
+        pub type Values = Vector<align::Align64, Precision, WIDTH>;
     } else if #[cfg(target_feature = "avx")] {
-        const WIDTH: usize = 32 / PRECISION_SIZE;
-        type Values = Vector<align::Align32, Precision, WIDTH>;
+        pub const WIDTH: usize = 32 / PRECISION_SIZE;
+        pub type Values = Vector<align::Align32, Precision, WIDTH>;
     } else {
         // NOTE: While most non-Intel CPUs use 128-bit vectorization, not all do.
         //       A benefit of autovectorization, however, is that supporting new
         //       hardware can just be a matter of adding cases in this cfg_if.
-        const WIDTH: usize = 16 / PRECISION_SIZE;
-        type Values = Vector<align::Align16, Precision, WIDTH>;
+        pub const WIDTH: usize = 16 / PRECISION_SIZE;
+        pub type Values = Vector<align::Align16, Precision, WIDTH>;
     }
 }
 
@@ -39,7 +39,7 @@ cfg_if! {
     // NOTE: Extend this when porting to more CPU architectures
     if #[cfg(any(target_feature = "fma", target_feature = "vfp4"))] {
         #[inline(always)]
-        fn mul_add(x: Values, y: Values, mut z: Values) -> Values {
+        pub fn mul_add(x: Values, y: Values, mut z: Values) -> Values {
             // FIXME: Use slipstream's mul_add once available
             for i in 0..WIDTH {
                 z[i] = x[i].mul_add(y[i], z[i])
@@ -48,7 +48,7 @@ cfg_if! {
         }
     } else {
         #[inline(always)]
-        fn mul_add(x: Values, y: Values, z: Values) -> Values {
+        pub fn mul_add(x: Values, y: Values, z: Values) -> Values {
             x * y + z
         }
    }
