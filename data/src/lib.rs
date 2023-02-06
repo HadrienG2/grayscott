@@ -15,7 +15,7 @@ pub fn array2<T>(f: impl FnMut(usize) -> T) -> [T; 2] {
     array::from_fn::<T, 2, _>(f)
 }
 
-/// Equivalent of unstable array.each_mut()
+/// Equivalent of the unstable `<[T; N]>::each_mut()` function
 #[inline(always)]
 fn array_each_mut<T, const N: usize>(a: &mut [T; N]) -> [&mut T; N] {
     let ptr = a.as_mut_ptr();
