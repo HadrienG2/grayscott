@@ -7,5 +7,5 @@ edition = "2021"
 cfg-if = "1.0"
 hdf5 = "0.8"
 safe_arch = { version = "0.6", optional = true }
-slipstream = { version = "0.2", optional = true }
+slipstream = { version = "0.2.1", optional = true }
 ndarray = "0.15"

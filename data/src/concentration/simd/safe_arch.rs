@@ -113,8 +113,8 @@ mod sse2 {
         type Mask = Mask128;
 
         #[inline]
-        fn from_array(arr: [i32; 4]) -> Self {
-            Self::from(arr)
+        fn from_idx_array(arr: [i32; 4]) -> Self {
+            arr.into()
         }
 
         #[inline]
@@ -147,8 +147,8 @@ mod sse2 {
         type Mask = Mask128d;
 
         #[inline]
-        fn from_array(arr: [i32; 2]) -> Self {
-            Self::from(arr.map(|i| i as f64))
+        fn from_idx_array(arr: [i32; 2]) -> Self {
+            arr.map(f64::from).into()
         }
 
         #[inline]
@@ -220,11 +220,6 @@ mod sse2 {
                 safe_arch::store_unaligned_m128(&mut *target, self);
             }
         }
-
-        #[inline]
-        fn into_array(self) -> [f32; 4] {
-            self.into()
-        }
     }
 
     // ...and m128d as f64x2...
@@ -274,11 +269,6 @@ mod sse2 {
             unsafe {
                 safe_arch::store_unaligned_m128d(&mut *target, self);
             }
-        }
-
-        #[inline]
-        fn into_array(self) -> [f64; 2] {
-            self.into()
         }
     }
 
@@ -331,8 +321,8 @@ mod avx {
         type Mask = m256d;
 
         #[inline]
-        fn from_array(arr: [i32; 4]) -> Self {
-            Self::from(arr.map(|i| i as f64))
+        fn from_idx_array(arr: [i32; 4]) -> Self {
+            arr.map(f64::from).into()
         }
 
         #[inline]
@@ -457,11 +447,6 @@ mod avx {
                 safe_arch::store_unaligned_m256d(&mut *target, self);
             }
         }
-
-        #[inline]
-        fn into_array(self) -> [f64; 4] {
-            self.into()
-        }
     }
 
     // ...but when it comes to floats, we hit the fact that integer operations
@@ -473,8 +458,8 @@ mod avx {
                 type Mask = m256;
 
                 #[inline]
-                fn from_array(arr: [i32; 8]) -> Self {
-                    Self::from(arr)
+                fn from_idx_array(arr: [i32; 8]) -> Self {
+                    arr.into()
                 }
 
                 #[inline]
@@ -509,10 +494,10 @@ mod avx {
                 type Mask = m256;
 
                 #[inline]
-                fn from_array(arr: [i32; 8]) -> Self {
+                fn from_idx_array(arr: [i32; 8]) -> Self {
                     [
-                        m256d::from_array([arr[0], arr[1], arr[2], arr[3]]),
-                        m256d::from_array([arr[4], arr[5], arr[6], arr[7]]),
+                        m256d::from_idx_array([arr[0], arr[1], arr[2], arr[3]]),
+                        m256d::from_idx_array([arr[4], arr[5], arr[6], arr[7]]),
                     ]
                 }
 
@@ -738,11 +723,6 @@ mod avx {
             unsafe {
                 safe_arch::store_unaligned_m256(&mut *target, self);
             }
-        }
-
-        #[inline]
-        fn into_array(self) -> [f32; 8] {
-            self.into()
         }
     }
 

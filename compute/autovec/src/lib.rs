@@ -41,12 +41,8 @@ cfg_if! {
     // NOTE: Extend this when porting to more CPU architectures
     if #[cfg(any(target_feature = "fma", target_feature = "vfp4"))] {
         #[inline(always)]
-        pub fn mul_add(x: Values, y: Values, mut z: Values) -> Values {
-            // FIXME: Use slipstream's mul_add once available
-            for i in 0..WIDTH {
-                z[i] = x[i].mul_add(y[i], z[i])
-            }
-            z
+        pub fn mul_add(x: Values, y: Values, z: Values) -> Values {
+            x.mul_add(y, z)
         }
     } else {
         #[inline(always)]

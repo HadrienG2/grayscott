@@ -22,8 +22,8 @@ impl<A: Align, const WIDTH: usize> SIMDIndices<WIDTH> for Vector<A, i32, WIDTH> 
     type Mask = <Self as Masked>::Mask;
 
     #[inline]
-    fn from_array(arr: [i32; WIDTH]) -> Self {
-        Vector::new(&arr[..])
+    fn from_idx_array(arr: [i32; WIDTH]) -> Self {
+        arr.into()
     }
 
     #[inline]
@@ -65,19 +65,18 @@ impl<A: Align, const WIDTH: usize> SIMDValues<WIDTH> for Vector<A, Precision, WI
 
     #[inline]
     fn shift_left(self, offset: usize) -> Self {
-        let arr = self.into_array();
+        let arr: [Precision; WIDTH] = self.into();
         values_from_fn(|i| *arr.get(i.wrapping_sub(offset)).unwrap_or(&0.0))
     }
 
     #[inline]
     fn shift_right(self, offset: usize) -> Self {
-        let arr = self.into_array();
+        let arr: [Precision; WIDTH] = self.into();
         values_from_fn(|i| *arr.get(i + offset).unwrap_or(&0.0))
     }
 
     #[inline]
     fn transpose(matrix: [Self; WIDTH]) -> [Self; WIDTH] {
-        let matrix = matrix.map(Self::into_array);
         array::from_fn(|target_vec| values_from_fn(|target_lane| matrix[target_lane][target_vec]))
     }
 
@@ -85,18 +84,6 @@ impl<A: Align, const WIDTH: usize> SIMDValues<WIDTH> for Vector<A, Precision, WI
     fn store(self, target: &mut [Precision]) {
         Vector::store(self, target)
     }
-
-    #[inline]
-    fn into_array(self) -> [Precision; WIDTH] {
-        let arr: &[Precision; WIDTH] = self.as_ref();
-        arr.clone()
-    }
-}
-
-/// Build a slipstream vector from a SIMD array of elements
-#[inline]
-fn values_from_array<A: Align, const N: usize>(array: [Precision; N]) -> Vector<A, Precision, N> {
-    Vector::new(&array[..])
 }
 
 /// Build a slipstream vector from a lane index -> element mapping
@@ -104,5 +91,5 @@ fn values_from_array<A: Align, const N: usize>(array: [Precision; N]) -> Vector<
 fn values_from_fn<A: Align, const N: usize>(
     f: impl FnMut(usize) -> Precision,
 ) -> Vector<A, Precision, N> {
-    values_from_array(array::from_fn(f))
+    Vector::from(array::from_fn(f))
 }

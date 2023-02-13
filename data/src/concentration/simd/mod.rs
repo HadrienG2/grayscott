@@ -163,7 +163,8 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
         let start_row = Vector::Indices::splat(row(scalar_rows.start));
         let end_row = Vector::Indices::splat(row(scalar_rows.end));
         let num_simd_rows = simd_center.nrows();
-        let mut current_row = Vector::Indices::from_array(Self::array(|i| row(num_simd_rows * i)));
+        let mut current_row =
+            Vector::Indices::from_idx_array(Self::array(|i| row(num_simd_rows * i)));
 
         // Update relevant rows and columns of the SIMD arraythe simd array
         let all_false = Vector::Mask::splat(false);
@@ -298,7 +299,7 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
                     .map(|iter| iter.next().expect("Unexpected scalar columns iterator end"));
 
                 // Turn SIMD vector into scalar elements and write them down
-                let simd_array = simd_col.into_array();
+                let simd_array: [Precision; WIDTH] = (*simd_col).into();
                 for (simd_lane, target_col) in (simd_array.into_iter()).zip(scalar_cols.into_iter())
                 {
                     *target_col = simd_lane;
@@ -312,7 +313,9 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
 }
 
 /// SIMD vector of floating-point values, as needed by SIMDConcentration
-pub trait SIMDValues<const WIDTH: usize, Element = Precision>: Copy + PartialEq {
+pub trait SIMDValues<const WIDTH: usize, Element = Precision>:
+    Copy + PartialEq + Into<[Element; WIDTH]>
+{
     /// Matching vector type for vector of indices
     type Indices: SIMDIndices<WIDTH, Mask = Self::Mask>;
 
@@ -352,9 +355,6 @@ pub trait SIMDValues<const WIDTH: usize, Element = Precision>: Copy + PartialEq 
 
     /// Store vector into scalar storage, which must be suitably sized
     fn store(self, target: &mut [Element]);
-
-    /// FIXME: Workaround for slipstream not implementing Into<[T; WIDTH]> yet
-    fn into_array(self) -> [Element; WIDTH];
 }
 
 /// Vector of indices
@@ -367,8 +367,8 @@ pub trait SIMDIndices<const WIDTH: usize>: Copy {
     /// Matching mask type for blending
     type Mask: SIMDMask<WIDTH>;
 
-    /// FIXME: Workaround for slipstream not implementing From<[T; WIDTH]> yet
-    fn from_array(arr: [i32; WIDTH]) -> Self;
+    /// Turn an array of indices into this type
+    fn from_idx_array(arr: [i32; WIDTH]) -> Self;
 
     /// Broadcast a scalar value into all lanes of a vector
     fn splat(x: i32) -> Self;
