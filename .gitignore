@@ -1,5 +1,4 @@
 /target
-/Cargo.lock
 /pics
 /output.h5
 perf.data*
