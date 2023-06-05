@@ -1,18 +1,18 @@
 [package]
-name = "autovec"
-version = "0.1.0"
-edition = "2021"
+name = "compute_autovec"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-cfg-if = "1.0"
-compute = { path = "../shared" }
-data = { path = "../../data", features = ["slipstream"] }
-ndarray = "0.15"
-slipstream = "0.2.1"
+cfg-if.workspace = true
+compute.workspace = true
+data = { workspace = true, features = ["slipstream"] }
+ndarray.workspace = true
+slipstream.workspace = true
 
 [dev-dependencies]
-compute = { path = "../shared", features = ["criterion"] }
-criterion = { version = "0.3", default-features = false }
+compute = { workspace = true, features = ["criterion"] }
+criterion.workspace = true
 
 [[bench]]
 name = "benchmark"

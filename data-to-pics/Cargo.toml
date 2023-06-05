@@ -1,11 +1,11 @@
 [package]
 name = "data-to-pics"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-clap = { version = "4.1", features = ["derive"] }
-colorous = "1.0"
-data = { path = "../data" }
-image = { version = "0.24", default-features = false, features = ["png"] }
-indicatif = "0.17"
+clap.workspace = true
+colorous.workspace = true
+data.workspace = true
+image.workspace = true
+indicatif.workspace = true

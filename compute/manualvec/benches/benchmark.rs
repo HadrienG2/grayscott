@@ -1,1 +1,1 @@
-compute::criterion_benchmark!(manualvec);
+compute::criterion_benchmark!(compute_manualvec);

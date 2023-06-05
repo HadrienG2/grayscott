@@ -1,1 +1,1 @@
-compute::criterion_benchmark!(block);
+compute::criterion_benchmark!(compute_block);

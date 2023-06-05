@@ -1,11 +1,11 @@
 [package]
 name = "data"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-cfg-if = "1.0"
-hdf5 = "0.8"
-safe_arch = { version = "0.6", optional = true }
-slipstream = { version = "0.2.1", optional = true }
-ndarray = "0.15"
+cfg-if.workspace = true
+hdf5.workspace = true
+safe_arch = { workspace = true, optional = true }
+slipstream = { workspace = true, optional = true }
+ndarray.workspace = true

@@ -1,1 +1,1 @@
-compute::criterion_benchmark!(autovec);
+compute::criterion_benchmark!(compute_autovec);

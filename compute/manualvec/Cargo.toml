@@ -1,18 +1,18 @@
 [package]
-name = "manualvec"
-version = "0.1.0"
-edition = "2021"
+name = "compute_manualvec"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-cfg-if = "1.0"
-compute = { path = "../shared" }
-data = { path = "../../data", features = ["safe_arch"] }
-ndarray = "0.15"
-safe_arch = "0.6"
+cfg-if.workspace = true
+compute.workspace = true
+data = { workspace = true, features = ["safe_arch"] }
+ndarray.workspace = true
+safe_arch.workspace = true
 
 [dev-dependencies]
-compute = { path = "../shared", features = ["criterion"] }
-criterion = { version = "0.3", default-features = false }
+compute = { workspace = true, features = ["criterion"] }
+criterion.workspace = true
 
 [[bench]]
 name = "benchmark"

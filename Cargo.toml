@@ -11,6 +11,54 @@ members = [
     "reaction"
 ]
 
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+# Used for various feature flag wrangling purposes
+cfg-if = "1.0"
+
+# Used when processing user CLI arguments in binaries
+clap = { version = "4.3", features = ["derive"] }
+
+# Used when visualizing data
+colorous = "1.0"
+
+# Used for microbenchmarking
+criterion = { version = "0.5", default-features = false }
+
+# Used when saving raw data to files
+hdf5 = "0.8"
+
+# Used for cache locality optimizations
+# FIXME: Switch to a fixed release once they are available
+hwlocality = { git = "https://github.com/HadrienG2/hwlocality.git" }
+
+# Used for progress report in the binaries
+indicatif = "0.17"
+
+# Used when exporting data visualization
+image = { version = "0.24", default-features = false, features = ["png"] }
+
+# Basic multidimensional array abstraction
+ndarray = "0.15"
+
+# Intrinsics-based SIMD backend
+safe_arch = "0.6"
+
+# Autovectorization-based SIMD backend
+slipstream = "0.2.1"
+
+# Internal to this project
+compute.path = "compute/shared"
+compute_autovec.path = "compute/autovec"
+compute_block.path = "compute/block"
+compute_manualvec.path = "compute/manualvec"
+compute_naive.path = "compute/naive"
+compute_regular.path = "compute/regular"
+data.path = "data"
+
 [profile.release]
 # Max performance at the cost of compile time
 codegen-units = 1
