@@ -45,7 +45,6 @@ impl Simulate for Simulation {
 impl SimulateImpl for Simulation {
     type Values = Values;
 
-    #[inline]
     fn unchecked_step_impl(
         &self,
         [in_u, in_v]: [ArrayView2<Values>; 2],

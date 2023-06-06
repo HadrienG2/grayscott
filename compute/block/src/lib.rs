@@ -5,12 +5,9 @@
 //! cache hit rate, getting us back into compute-bound territory.
 
 use compute::{Simulate, SimulateImpl};
-use data::{
-    concentration::Species,
-    parameters::{stencil_offset, Parameters},
-};
+use data::{concentration::Species, parameters::Parameters};
 use hwlocality::Topology;
-use ndarray::{s, ArrayView2, ArrayViewMut2, Axis};
+use ndarray::{ArrayView2, ArrayViewMut2};
 
 // SIMD compute backend (can be compute_autovec or compute_manualvec)
 use compute_autovec as compute_backend;
@@ -53,56 +50,23 @@ impl Simulate for Simulation {
 impl SimulateImpl for Simulation {
     type Values = Values;
 
-    #[inline]
     fn unchecked_step_impl(
         &self,
         [in_u, in_v]: [ArrayView2<Values>; 2],
         [out_u_center, out_v_center]: [ArrayViewMut2<Values>; 2],
     ) {
-        // If the problem has become small enough for the cache, run it
+        // Is the current grid fragment small enough to fit in L1 cache ?
         if 2 * (in_u.len() + out_u_center.len()) < self.max_vecs_per_block {
+            // If so, process it as is
             self.backend
                 .step_impl([in_u, in_v], [out_u_center, out_v_center]);
-            return;
-        }
-
-        // Otherwise, split the problem in two across its longest dimension
-        // and process the two halves.
-        let stencil_offset = stencil_offset();
-        if out_u_center.nrows() > out_u_center.ncols() {
-            // Splitting the output slice is easy
-            let out_split_point = out_u_center.nrows() / 2;
-            let (out_u_1, out_u_2) = out_u_center.split_at(Axis(0), out_split_point);
-            let (out_v_1, out_v_2) = out_v_center.split_at(Axis(0), out_split_point);
-
-            // On the input side, we must mind the edge elements
-            let in_split_point = out_split_point + stencil_offset[0];
-            let in_slice_1 = s![..in_split_point + stencil_offset[0], ..];
-            let in_u_1 = in_u.slice(in_slice_1);
-            let in_v_1 = in_v.slice(in_slice_1);
-            self.step_impl([in_u_1, in_v_1], [out_u_1, out_v_1]);
-            //
-            let in_slice_2 = s![in_split_point - stencil_offset[0].., ..];
-            let in_u_2 = in_u.slice(in_slice_2);
-            let in_v_2 = in_v.slice(in_slice_2);
-            self.step_impl([in_u_2, in_v_2], [out_u_2, out_v_2]);
         } else {
-            // Splitting the output slice is easy
-            let out_split_point = out_u_center.ncols() / 2;
-            let (out_u_1, out_u_2) = out_u_center.split_at(Axis(1), out_split_point);
-            let (out_v_1, out_v_2) = out_v_center.split_at(Axis(1), out_split_point);
-
-            // On the input side, we must mind the edge elements
-            let in_split_point = out_split_point + stencil_offset[1];
-            let in_slice_1 = s![.., ..in_split_point + stencil_offset[1]];
-            let in_u_1 = in_u.slice(in_slice_1);
-            let in_v_1 = in_v.slice(in_slice_1);
-            self.step_impl([in_u_1, in_v_1], [out_u_1, out_v_1]);
-            //
-            let in_slice_2 = s![.., in_split_point - stencil_offset[1]..];
-            let in_u_2 = in_u.slice(in_slice_2);
-            let in_v_2 = in_v.slice(in_slice_2);
-            self.step_impl([in_u_2, in_v_2], [out_u_2, out_v_2]);
+            // Otherwise, split it and process the two halves sequentially
+            for (in_u_v, out_u_v_center) in
+                Self::split_grid([in_u, in_v], [out_u_center, out_v_center])
+            {
+                self.step_impl(in_u_v, out_u_v_center)
+            }
         }
     }
 }

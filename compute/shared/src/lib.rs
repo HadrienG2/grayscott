@@ -3,7 +3,7 @@
 #[cfg(feature = "criterion")]
 use criterion::{BenchmarkId, Criterion, Throughput};
 use data::{concentration::Species, parameters::Parameters};
-use ndarray::{ArrayView2, ArrayViewMut2};
+use ndarray::{Axis, ArrayView2, ArrayViewMut2};
 
 /// Simulation compute backend interface expected by the "reaction" CLI program
 pub trait Simulate {
@@ -66,6 +66,44 @@ pub trait SimulateImpl: Simulate {
 
         self.unchecked_step_impl([in_u, in_v], [out_u_center, out_v_center]);
     }
+
+    /// Split the grid on which `step_impl()` operates into two parts
+    ///
+    /// The split is performed on the longest axis so that given enough
+    /// splitting iterations, the processed grid fragment becomes close to
+    /// square, which is optimal from the point of view of cache locality.
+    #[inline(always)]
+    fn split_grid<'input, 'output>(
+        [in_u, in_v]: [ArrayView2<'input, Self::Values>; 2],
+        [out_u_center, out_v_center]: [ArrayViewMut2<'output, Self::Values>; 2],
+    ) -> [([ArrayView2<'input, Self::Values>; 2], [ArrayViewMut2<'output, Self::Values>; 2]); 2] {
+        // Split across the longest grid axis
+        let out_shape = out_u_center.shape();
+        let (axis_idx, out_length) = out_shape.iter().enumerate().max_by_key(|(_idx, length)| *length).unwrap();
+        let axis = Axis(axis_idx);
+        let stencil_offset = data::parameters::stencil_offset()[axis_idx];
+
+        // Splitting the output slice is easy
+        let out_split_point = out_length / 2;
+        let (out_u_1, out_u_2) = out_u_center.split_at(axis, out_split_point);
+        let (out_v_1, out_v_2) = out_v_center.split_at(axis, out_split_point);
+
+        // On the input side, we must mind the edge elements
+        let in_split_point = out_split_point + stencil_offset;
+        //
+        let in_end_1 = in_split_point + stencil_offset;
+        let in_u_1 = in_u.clone().split_at(axis, in_end_1).0;
+        let in_v_1 = in_v.clone().split_at(axis, in_end_1).0;
+        let result_1 = ([in_u_1, in_v_1], [out_u_1, out_v_1]);
+        //
+        let in_start_2 = in_split_point - stencil_offset;
+        let in_u_2 = in_u.split_at(axis, in_start_2).1;
+        let in_v_2 = in_v.split_at(axis, in_start_2).1;
+        let result_2 = ([in_u_2, in_v_2], [out_u_2, out_v_2]);
+        //
+        [result_1, result_2]
+    }
+
 }
 
 /// Macro that generates a complete criterion benchmark harness for you
