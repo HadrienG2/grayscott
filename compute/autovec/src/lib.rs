@@ -82,7 +82,7 @@ impl SimulateImpl for Simulation {
     fn unchecked_step_impl(
         &self,
         [in_u, in_v]: [ArrayView2<Self::Values>; 2],
-        [mut out_u, mut out_v]: [ArrayViewMut2<Self::Values>; 2],
+        [mut out_u_center, mut out_v_center]: [ArrayViewMut2<Self::Values>; 2],
     ) {
         // Determine offset from the top-left corner of the stencil to its center
         let stencil_offset = stencil_offset();
@@ -96,8 +96,8 @@ impl SimulateImpl for Simulation {
         let ones = Values::splat(1.0);
 
         // Iterate over center pixels of the species concentration matrices
-        for (((out_u, out_v), win_u), win_v) in (out_u.iter_mut())
-            .zip(out_v.iter_mut())
+        for (((out_u, out_v), win_u), win_v) in (out_u_center.iter_mut())
+            .zip(out_v_center.iter_mut())
             .zip(in_u.windows(STENCIL_SHAPE))
             .zip(in_v.windows(STENCIL_SHAPE))
         {

@@ -57,22 +57,23 @@ impl SimulateImpl for Simulation {
     fn unchecked_step_impl(
         &self,
         [in_u, in_v]: [ArrayView2<Values>; 2],
-        [out_u, out_v]: [ArrayViewMut2<Values>; 2],
+        [out_u_center, out_v_center]: [ArrayViewMut2<Values>; 2],
     ) {
         // If the problem has become small enough for the cache, run it
-        if 2 * (in_u.len() + out_u.len()) < self.max_vecs_per_block {
-            self.backend.step_impl([in_u, in_v], [out_u, out_v]);
+        if 2 * (in_u.len() + out_u_center.len()) < self.max_vecs_per_block {
+            self.backend
+                .step_impl([in_u, in_v], [out_u_center, out_v_center]);
             return;
         }
 
         // Otherwise, split the problem in two across its longest dimension
         // and process the two halves.
         let stencil_offset = stencil_offset();
-        if out_u.nrows() > out_u.ncols() {
+        if out_u_center.nrows() > out_u_center.ncols() {
             // Splitting the output slice is easy
-            let out_split_point = out_u.nrows() / 2;
-            let (out_u_1, out_u_2) = out_u.split_at(Axis(0), out_split_point);
-            let (out_v_1, out_v_2) = out_v.split_at(Axis(0), out_split_point);
+            let out_split_point = out_u_center.nrows() / 2;
+            let (out_u_1, out_u_2) = out_u_center.split_at(Axis(0), out_split_point);
+            let (out_v_1, out_v_2) = out_v_center.split_at(Axis(0), out_split_point);
 
             // On the input side, we must mind the edge elements
             let in_split_point = out_split_point + stencil_offset[0];
@@ -87,9 +88,9 @@ impl SimulateImpl for Simulation {
             self.step_impl([in_u_2, in_v_2], [out_u_2, out_v_2]);
         } else {
             // Splitting the output slice is easy
-            let out_split_point = out_u.ncols() / 2;
-            let (out_u_1, out_u_2) = out_u.split_at(Axis(1), out_split_point);
-            let (out_v_1, out_v_2) = out_v.split_at(Axis(1), out_split_point);
+            let out_split_point = out_u_center.ncols() / 2;
+            let (out_u_1, out_u_2) = out_u_center.split_at(Axis(1), out_split_point);
+            let (out_v_1, out_v_2) = out_v_center.split_at(Axis(1), out_split_point);
 
             // On the input side, we must mind the edge elements
             let in_split_point = out_split_point + stencil_offset[1];
