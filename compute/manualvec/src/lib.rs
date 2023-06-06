@@ -33,18 +33,27 @@ impl Simulate for Simulation {
     }
 
     fn step(&self, species: &mut Species<Self::Concentration>) {
-        let (in_u, out_u) = species.u.in_out();
-        let (in_v, out_v) = species.v.in_out();
-        self.step_impl(
-            [in_u.view(), in_v.view()],
-            [out_u.simd_center_mut(), out_v.simd_center_mut()],
-        );
+        let (in_u_v, out_u_v) = Self::step_impl_input(species);
+        self.step_impl(in_u_v, out_u_v);
     }
 }
 //
 impl SimulateImpl for Simulation {
     type Values = Values;
 
+    fn step_impl_input(
+        species: &mut Species<Self::Concentration>,
+    ) -> (
+        [ArrayView2<Self::Values>; 2],
+        [ArrayViewMut2<Self::Values>; 2],
+    ) {
+        let (in_u, out_u) = species.u.in_out();
+        let (in_v, out_v) = species.v.in_out();
+        (
+            [in_u.view(), in_v.view()],
+            [out_u.simd_center_mut(), out_v.simd_center_mut()],
+        )
+    }
     fn unchecked_step_impl(
         &self,
         [in_u, in_v]: [ArrayView2<Values>; 2],

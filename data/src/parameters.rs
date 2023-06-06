@@ -30,7 +30,7 @@ impl Default for Parameters {
             // Stencil used by the C++ version
             weights: [[1.0; 3]; 3],
             // More mathematically accurate but less fun-looking results
-            /* stencil:
+            /* weights:
             [[0.05, 0.2, 0.05],
             [0.2, 0.0, 0.2],
             [0.05, 0.2, 0.05]]*/

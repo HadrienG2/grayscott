@@ -50,15 +50,15 @@ struct Args {
 cfg_if::cfg_if! {
     // TODO: Add more advanced and preferrable implementations above
     if #[cfg(feature = "compute_block")] {
-        use compute_block::Simulation;
+        type Simulation = compute_block::Simulation;
     } else if #[cfg(feature = "compute_autovec")] {
-        use compute_autovec::Simulation;
+        type Simulation = compute_autovec::Simulation;
     } else if #[cfg(feature = "compute_manualvec")] {
-        use compute_manualvec::Simulation;
+        type Simulation = compute_manualvec::Simulation;
     } else if #[cfg(feature = "compute_regular")] {
-        use compute_regular::Simulation;
+        type Simulation = compute_regular::Simulation;
     } else if #[cfg(any(feature = "compute_naive", test))] {
-        use compute_naive::Simulation;
+        type Simulation = compute_naive::Simulation;
     } else {
         // If no backend was specified, use a backend skeleton that shows what
         // the expected interface looks like and throws a compiler error.

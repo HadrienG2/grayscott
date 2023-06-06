@@ -31,6 +31,11 @@ pub trait SimulateImpl: Simulate {
     /// Can be a single value or some SIMD type containing multiple values
     type Values;
 
+    /// Extract the full grid from the concentrations array
+    fn step_impl_input(
+        species: &mut Species<Self::Concentration>,
+    ) -> ([ArrayView2<Self::Values>; 2], [ArrayViewMut2<Self::Values>; 2]);
+
     /// Perform one simulation time step on the full grid, or a subset thereof
     ///
     /// - `in_u_v` should contain the initial concentrations of species U and V,
