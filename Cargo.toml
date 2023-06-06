@@ -38,7 +38,7 @@ hwlocality = { git = "https://github.com/HadrienG2/hwlocality.git" }
 # Used for progress report in the binaries
 indicatif = "0.17"
 
-# Used when exporting data visualization
+# Used when exporting visualizations as images
 image = { version = "0.24", default-features = false, features = ["png"] }
 
 # Basic multidimensional array abstraction
