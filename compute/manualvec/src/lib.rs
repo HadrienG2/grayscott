@@ -8,7 +8,7 @@
 //! vectorize those anymore.
 
 use cfg_if::cfg_if;
-use compute::Simulate;
+use compute::{Simulate, SimulateImpl};
 use data::{
     concentration::{simd::SIMDConcentration, Species},
     parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
@@ -35,72 +35,71 @@ impl Simulate for Simulation {
     fn step(&self, species: &mut Species<Self::Concentration>) {
         let (in_u, out_u) = species.u.in_out();
         let (in_v, out_v) = species.v.in_out();
-        step_impl(
+        self.step_impl(
             [in_u.view(), in_v.view()],
             [out_u.simd_center_mut(), out_v.simd_center_mut()],
-            &self.params,
         );
     }
 }
+//
+impl SimulateImpl for Simulation {
+    type Values = Values;
 
-/// View-based and stateless implementation of Simulation::step(), used to
-/// deduplicate code between this backend and more advanced backends that do
-/// block-wise processing
-#[inline(always)]
-pub fn step_impl(
-    [in_u, in_v]: [ArrayView2<Values>; 2],
-    [mut out_u_center, mut out_v_center]: [ArrayViewMut2<Values>; 2],
-    params: &Parameters,
-) {
-    // Check that everything is alright in debug mode
-    debug_assert_eq!(in_u.shape(), in_v.shape());
-    debug_assert_eq!(out_u_center.shape(), out_v_center.shape());
-    debug_assert_eq!(out_u_center.nrows(), in_u.nrows() + STENCIL_SHAPE[0] - 1);
-    debug_assert_eq!(out_u_center.ncols(), in_u.ncols() + STENCIL_SHAPE[1] - 1);
+    #[inline]
+    fn unchecked_step_impl(
+        &self,
+        [in_u, in_v]: [ArrayView2<Values>; 2],
+        [mut out_u_center, mut out_v_center]: [ArrayViewMut2<Values>; 2],
+    ) {
+        // Determine offset from the top-left corner of the stencil to its center
+        let stencil_offset = stencil_offset();
 
-    // Determine offset from the top-left corner of the stencil to its center
-    let stencil_offset = stencil_offset();
+        // Prepare vector versions of the scalar computation parameters
+        let diffusion_rate_u = Values::splat(self.params.diffusion_rate_u);
+        let diffusion_rate_v = Values::splat(self.params.diffusion_rate_v);
+        let feed_rate = Values::splat(self.params.feed_rate);
+        let kill_rate = Values::splat(self.params.kill_rate);
+        let time_step = Values::splat(self.params.time_step);
+        let ones = Values::splat(1.0);
 
-    // Prepare vector versions of the scalar computation parameters
-    let diffusion_rate_u = Values::splat(params.diffusion_rate_u);
-    let diffusion_rate_v = Values::splat(params.diffusion_rate_v);
-    let feed_rate = Values::splat(params.feed_rate);
-    let kill_rate = Values::splat(params.kill_rate);
-    let time_step = Values::splat(params.time_step);
-    let ones = Values::splat(1.0);
+        // Iterate over center pixels of the species concentration matrices
+        for (((out_u, out_v), win_u), win_v) in (out_u_center.iter_mut())
+            .zip(out_v_center.iter_mut())
+            .zip(in_u.windows(STENCIL_SHAPE))
+            .zip(in_v.windows(STENCIL_SHAPE))
+        {
+            // Access center value of u
+            let u = win_u[stencil_offset];
+            let v = win_v[stencil_offset];
 
-    // Iterate over center pixels of the species concentration matrices
-    for (((out_u, out_v), win_u), win_v) in (out_u_center.iter_mut())
-        .zip(out_v_center.iter_mut())
-        .zip(in_u.windows(STENCIL_SHAPE))
-        .zip(in_v.windows(STENCIL_SHAPE))
-    {
-        // Access center value of u
-        let u = win_u[stencil_offset];
-        let v = win_v[stencil_offset];
+            // Compute diffusion gradient
+            let [full_u, full_v] = (win_u.iter())
+                .zip(win_v.iter())
+                .zip(
+                    self.params
+                        .weights
+                        .into_iter()
+                        .flat_map(|row| row.into_iter()),
+                )
+                .fold(
+                    [Values::splat(0.); 2],
+                    |[acc_u, acc_v], ((&stencil_u, &stencil_v), weight)| {
+                        let weight = Values::splat(weight);
+                        [
+                            weight.mul_add(stencil_u.sub(u), acc_u),
+                            weight.mul_add(stencil_v.sub(v), acc_v),
+                        ]
+                    },
+                );
 
-        // Compute diffusion gradient
-        let [full_u, full_v] = (win_u.iter())
-            .zip(win_v.iter())
-            .zip(params.weights.into_iter().flat_map(|row| row.into_iter()))
-            .fold(
-                [Values::splat(0.); 2],
-                |[acc_u, acc_v], ((&stencil_u, &stencil_v), weight)| {
-                    let weight = Values::splat(weight);
-                    [
-                        weight.mul_add(stencil_u.sub(u), acc_u),
-                        weight.mul_add(stencil_v.sub(v), acc_v),
-                    ]
-                },
-            );
-
-        // Deduce variation of U and V
-        let uv_square = u.mul(v).mul(v);
-        let du = diffusion_rate_u.mul_add(full_u, feed_rate.mul_sub(ones.sub(u), uv_square));
-        let dv =
-            diffusion_rate_v.mul_add(full_v, (feed_rate.add(kill_rate)).mul_neg_add(v, uv_square));
-        *out_u = du.mul_add(time_step, u);
-        *out_v = dv.mul_add(time_step, v);
+            // Deduce variation of U and V
+            let uv_square = u.mul(v).mul(v);
+            let du = diffusion_rate_u.mul_add(full_u, feed_rate.mul_sub(ones.sub(u), uv_square));
+            let dv = diffusion_rate_v
+                .mul_add(full_v, (feed_rate.add(kill_rate)).mul_neg_add(v, uv_square));
+            *out_u = du.mul_add(time_step, u);
+            *out_v = dv.mul_add(time_step, v);
+        }
     }
 }
 

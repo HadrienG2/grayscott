@@ -3,8 +3,9 @@
 #[cfg(feature = "criterion")]
 use criterion::{BenchmarkId, Criterion, Throughput};
 use data::{concentration::Species, parameters::Parameters};
+use ndarray::{ArrayView2, ArrayViewMut2};
 
-/// Expected reaction simulation backend interface
+/// Simulation compute backend interface expected by the "reaction" CLI program
 pub trait Simulate {
     /// Concentration type
     type Concentration: data::concentration::Concentration;
@@ -14,6 +15,57 @@ pub trait Simulate {
 
     /// Perform one simulation time step
     fn step(&self, species: &mut Species<Self::Concentration>);
+}
+
+/// Lower-level grid-based interface to a simulation's compute backend
+///
+/// Some compute backends expose a lower-level interface based on computations
+/// on grids of concentration values.
+///
+/// This is used by the block-based backends (`block`, `parallel`, ...) to
+/// slice the original step computations into smaller sub-computations for
+/// cache locality and parallelization purposes.
+pub trait SimulateImpl: Simulate {
+    /// Concentration values at a point on the simulation's grid
+    ///
+    /// Can be a single value or some SIMD type containing multiple values
+    type Values;
+
+    /// Perform one simulation time step on the full grid, or a subset thereof
+    ///
+    /// - `in_u_v` should contain the initial concentrations of species U and V,
+    ///   including a neighborhood of size
+    ///   [`data::parameters::stencil_offset()`] around the region of interest.
+    ///   Both concentration array views should point to the same subsets of
+    ///   the full U and V concentration arrays.
+    /// - `out_u_v_centers` will receive the final concentrations. Its position
+    ///   in the output array should match that of the central region of
+    ///   `in_u_v`, without the neighborhood (which will be updated automatically)
+    ///
+    /// This method checks none of the above properties, but is used to
+    /// implement method `step_impl` which performs some sanity checks.
+    fn unchecked_step_impl(
+        &self,
+        in_u_v: [ArrayView2<Self::Values>; 2],
+        out_u_v_centers: [ArrayViewMut2<Self::Values>; 2],
+    );
+
+    /// Like `unchecked_step_impl()`, but with some sanity checks
+    #[inline(always)]
+    fn step_impl(
+        &self,
+        [in_u, in_v]: [ArrayView2<Self::Values>; 2],
+        [out_u_center, out_v_center]: [ArrayViewMut2<Self::Values>; 2],
+    ) {
+        debug_assert_eq!(in_u.shape(), in_v.shape());
+        debug_assert_eq!(out_u_center.shape(), out_v_center.shape());
+
+        let stencil_offset = data::parameters::stencil_offset();
+        debug_assert_eq!(out_u_center.nrows(), in_u.nrows() + 2 * stencil_offset[0]);
+        debug_assert_eq!(out_u_center.ncols(), in_u.ncols() + 2 * stencil_offset[1]);
+
+        self.unchecked_step_impl([in_u, in_v], [out_u_center, out_v_center]);
+    }
 }
 
 /// Macro that generates a complete criterion benchmark harness for you

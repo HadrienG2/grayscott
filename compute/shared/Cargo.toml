@@ -8,3 +8,4 @@ edition.workspace = true
 [dependencies]
 criterion = { workspace = true, optional = true }
 data.workspace = true
+ndarray.workspace = true

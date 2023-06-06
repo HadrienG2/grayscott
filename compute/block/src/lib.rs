@@ -4,8 +4,7 @@
 //! memory bound. This version uses cache blocking techniques to improve the CPU
 //! cache hit rate, getting us back into compute-bound territory.
 
-use compute::Simulate;
-use compute_autovec::Values;
+use compute::{Simulate, SimulateImpl};
 use data::{
     concentration::Species,
     parameters::{stencil_offset, Parameters},
@@ -13,17 +12,21 @@ use data::{
 use hwlocality::Topology;
 use ndarray::{s, ArrayView2, ArrayViewMut2, Axis};
 
+// SIMD compute backend (can be compute_autovec or compute_manualvec)
+use compute_autovec as compute_backend;
+use compute_backend::Values;
+
 /// Gray-Scott reaction simulation
 pub struct Simulation {
     /// Maximal number of SIMD vectors to be manipulated in one processing batch
     max_vecs_per_block: usize,
 
-    /// Simulation parameters
-    params: Parameters,
+    /// SIMD compute backend
+    backend: compute_backend::Simulation,
 }
 //
 impl Simulate for Simulation {
-    type Concentration = <compute_autovec::Simulation as Simulate>::Concentration;
+    type Concentration = <compute_backend::Simulation as Simulate>::Concentration;
 
     fn new(params: Parameters) -> Self {
         // Check minimal CPU L1 cache size in bytes
@@ -33,7 +36,7 @@ impl Simulate for Simulation {
         // Translate that into a number of SIMD vectors
         Self {
             max_vecs_per_block: min_l1_size / std::mem::size_of::<Values>(),
-            params,
+            backend: compute_backend::Simulation::new(params),
         }
     }
 
@@ -47,27 +50,24 @@ impl Simulate for Simulation {
     }
 }
 //
-impl Simulation {
-    fn step_impl(
+impl SimulateImpl for Simulation {
+    type Values = Values;
+
+    #[inline]
+    fn unchecked_step_impl(
         &self,
         [in_u, in_v]: [ArrayView2<Values>; 2],
         [out_u, out_v]: [ArrayViewMut2<Values>; 2],
     ) {
-        // Check that everything is alright in debug mode
-        debug_assert_eq!(in_u.shape(), in_v.shape());
-        debug_assert_eq!(out_u.shape(), out_v.shape());
-        let stencil_offset = stencil_offset();
-        debug_assert_eq!(out_u.nrows(), in_u.nrows() + 2 * stencil_offset[0]);
-        debug_assert_eq!(out_u.ncols(), in_u.ncols() + 2 * stencil_offset[1]);
-
         // If the problem has become small enough for the cache, run it
         if 2 * (in_u.len() + out_u.len()) < self.max_vecs_per_block {
-            compute_autovec::step_impl([in_u, in_v], [out_u, out_v], &self.params);
+            self.backend.step_impl([in_u, in_v], [out_u, out_v]);
             return;
         }
 
         // Otherwise, split the problem in two across its longest dimension
         // and process the two halves.
+        let stencil_offset = stencil_offset();
         if out_u.nrows() > out_u.ncols() {
             // Splitting the output slice is easy
             let out_split_point = out_u.nrows() / 2;
