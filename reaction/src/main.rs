@@ -49,7 +49,9 @@ struct Args {
 // Use the best compute backend allowed by enabled crate features
 cfg_if::cfg_if! {
     // TODO: Add more advanced and preferrable implementations above
-    if #[cfg(feature = "compute_block")] {
+    if #[cfg(feature = "compute_parallel")] {
+        type Simulation = compute_parallel::Simulation;
+    } else if #[cfg(feature = "compute_block")] {
         type Simulation = compute_block::Simulation;
     } else if #[cfg(feature = "compute_autovec")] {
         type Simulation = compute_autovec::Simulation;

@@ -4,6 +4,7 @@ members = [
     "compute/block",
     "compute/manualvec",
     "compute/naive",
+    "compute/parallel",
     "compute/regular",
     "compute/shared",
     "data",
@@ -44,6 +45,9 @@ image = { version = "0.24", default-features = false, features = ["png"] }
 # Basic multidimensional array abstraction
 ndarray = "0.15"
 
+# Data-parallelism library
+rayon = "1.7"
+
 # Intrinsics-based SIMD backend
 safe_arch = "0.6"
 
@@ -56,6 +60,7 @@ compute_autovec.path = "compute/autovec"
 compute_block.path = "compute/block"
 compute_manualvec.path = "compute/manualvec"
 compute_naive.path = "compute/naive"
+compute_parallel.path = "compute/parallel"
 compute_regular.path = "compute/regular"
 data.path = "data"
 

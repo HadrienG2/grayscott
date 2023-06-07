@@ -15,6 +15,7 @@ compute_autovec = { workspace = true, optional = true }
 compute_block = { workspace = true, optional = true }
 compute_manualvec = { workspace = true, optional = true }
 compute_naive = { workspace = true, optional = true }
+compute_parallel = { workspace = true, optional = true }
 compute_regular = { workspace = true, optional = true }
 
 [dev-dependencies]

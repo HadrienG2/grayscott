@@ -1,0 +1,21 @@
+[package]
+name = "compute_parallel"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+compute.workspace = true
+# TODO: Remove direct dependency on autovec once blocking fully works
+compute_autovec.workspace = true
+compute_block.workspace = true
+data = { workspace = true, features = ["slipstream"] }
+hwlocality.workspace = true
+rayon.workspace = true
+
+[dev-dependencies]
+compute = { workspace = true, features = ["criterion"] }
+criterion.workspace = true
+
+[[bench]]
+name = "benchmark"
+harness = false
