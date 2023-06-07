@@ -8,13 +8,12 @@
 //! vectorize those anymore.
 
 use cfg_if::cfg_if;
-use compute::{Simulate, SimulateImpl};
+use compute::{Simulate, SimulateImpl, SimulationGrid};
 use data::{
     concentration::{simd::SIMDConcentration, Species},
     parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
     Precision,
 };
-use ndarray::{ArrayView2, ArrayViewMut2};
 
 /// Chosen concentration type
 pub type Values = <Precision as Scalar>::Vectorized;
@@ -33,20 +32,14 @@ impl Simulate for Simulation {
     }
 
     fn step(&self, species: &mut Species<Self::Concentration>) {
-        let (in_u_v, out_u_v) = Self::step_impl_input(species);
-        self.step_impl(in_u_v, out_u_v);
+        self.step_impl(Self::extract_grid(species));
     }
 }
 //
 impl SimulateImpl for Simulation {
     type Values = Values;
 
-    fn step_impl_input(
-        species: &mut Species<Self::Concentration>,
-    ) -> (
-        [ArrayView2<Self::Values>; 2],
-        [ArrayViewMut2<Self::Values>; 2],
-    ) {
+    fn extract_grid(species: &mut Species<Self::Concentration>) -> SimulationGrid<Self::Values> {
         let (in_u, out_u) = species.u.in_out();
         let (in_v, out_v) = species.v.in_out();
         (
@@ -56,8 +49,7 @@ impl SimulateImpl for Simulation {
     }
     fn unchecked_step_impl(
         &self,
-        [in_u, in_v]: [ArrayView2<Values>; 2],
-        [mut out_u_center, mut out_v_center]: [ArrayViewMut2<Values>; 2],
+        ([in_u, in_v], [mut out_u_center, mut out_v_center]): SimulationGrid<Self::Values>,
     ) {
         // Determine offset from the top-left corner of the stencil to its center
         let stencil_offset = stencil_offset();

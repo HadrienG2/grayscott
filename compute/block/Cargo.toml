@@ -8,7 +8,6 @@ compute.workspace = true
 compute_autovec.workspace = true
 data = { workspace = true, features = ["slipstream"] }
 hwlocality.workspace = true
-ndarray.workspace = true
 
 [dev-dependencies]
 compute = { workspace = true, features = ["criterion"] }

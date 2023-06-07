@@ -31,45 +31,50 @@ pub trait SimulateImpl: Simulate {
     /// Can be a single value or some SIMD type containing multiple values
     type Values;
 
-    /// Extract the full grid from the concentrations array
-    fn step_impl_input(
+    /// Extract a view of the full grid from the concentrations array
+    fn extract_grid(
         species: &mut Species<Self::Concentration>,
-    ) -> ([ArrayView2<Self::Values>; 2], [ArrayViewMut2<Self::Values>; 2]);
+    ) -> SimulationGrid<Self::Values>;
 
-    /// Perform one simulation time step on the full grid, or a subset thereof
+    /// Perform one simulation time step on the full grid or a subset thereof
     ///
-    /// - `in_u_v` should contain the initial concentrations of species U and V,
-    ///   including a neighborhood of size
-    ///   [`data::parameters::stencil_offset()`] around the region of interest.
-    ///   Both concentration array views should point to the same subsets of
-    ///   the full U and V concentration arrays.
-    /// - `out_u_v_centers` will receive the final concentrations. Its position
-    ///   in the output array should match that of the central region of
-    ///   `in_u_v`, without the neighborhood (which will be updated automatically)
-    ///
-    /// This method checks none of the above properties, but is used to
-    /// implement method `step_impl` which performs some sanity checks.
+    /// This method does not check the grid for consistency, but is used to
+    /// implement `step_impl` that does perform some sanity checks.
     fn unchecked_step_impl(
         &self,
-        in_u_v: [ArrayView2<Self::Values>; 2],
-        out_u_v_centers: [ArrayViewMut2<Self::Values>; 2],
+        grid: SimulationGrid<Self::Values>,
     );
 
-    /// Like `unchecked_step_impl()`, but with some sanity checks
-    #[inline(always)]
-    fn step_impl(
-        &self,
-        [in_u, in_v]: [ArrayView2<Self::Values>; 2],
-        [out_u_center, out_v_center]: [ArrayViewMut2<Self::Values>; 2],
-    ) {
+    /// Check that the SimulationGrid seems correct
+    ///
+    /// Note that full correctness checking would involve making sure that the
+    /// input and output array views point to the same region of the full grid,
+    /// which cannot be done. Therefore, this is only a partial sanity check.
+    fn check_grid(([in_u, in_v], [out_u_center, out_v_center]): &SimulationGrid<Self::Values>) {
         debug_assert_eq!(in_u.shape(), in_v.shape());
         debug_assert_eq!(out_u_center.shape(), out_v_center.shape());
 
         let stencil_offset = data::parameters::stencil_offset();
         debug_assert_eq!(out_u_center.nrows(), in_u.nrows() + 2 * stencil_offset[0]);
         debug_assert_eq!(out_u_center.ncols(), in_u.ncols() + 2 * stencil_offset[1]);
+    }
 
-        self.unchecked_step_impl([in_u, in_v], [out_u_center, out_v_center]);
+    /// Like `unchecked_step_impl()`, but with some sanity checks
+    #[inline(always)]
+    fn step_impl(
+        &self,
+        grid: SimulationGrid<Self::Values>,
+    ) {
+        Self::check_grid(&grid);
+        self.unchecked_step_impl(grid);
+    }
+
+    /// Count the number of grid elements which `step_impl()` would manipulate
+    #[inline(always)]
+    fn grid_len(grid: &SimulationGrid<Self::Values>) -> usize {
+        Self::check_grid(grid);
+        let ([in_u, in_v], [out_u_center, out_v_center]) = grid;
+        in_u.len() + in_v.len() + out_u_center.len() + out_v_center.len()
     }
 
     /// Split the grid on which `step_impl()` operates into two parts
@@ -79,9 +84,11 @@ pub trait SimulateImpl: Simulate {
     /// square, which is optimal from the point of view of cache locality.
     #[inline(always)]
     fn split_grid<'input, 'output>(
-        [in_u, in_v]: [ArrayView2<'input, Self::Values>; 2],
-        [out_u_center, out_v_center]: [ArrayViewMut2<'output, Self::Values>; 2],
-    ) -> [([ArrayView2<'input, Self::Values>; 2], [ArrayViewMut2<'output, Self::Values>; 2]); 2] {
+        grid: SimulationGrid<'input, 'output, Self::Values>,
+    ) -> [SimulationGrid<'input, 'output, Self::Values>; 2] {
+        Self::check_grid(&grid);
+        let ([in_u, in_v], [out_u_center, out_v_center]) = grid;
+
         // Split across the longest grid axis
         let out_shape = out_u_center.shape();
         let (axis_idx, out_length) = out_shape.iter().enumerate().max_by_key(|(_idx, length)| *length).unwrap();
@@ -108,8 +115,14 @@ pub trait SimulateImpl: Simulate {
         //
         [result_1, result_2]
     }
-
 }
+//
+/// Low-level representation of the simulation grid used by SimulateImpl
+///
+/// Composed of the input and output concentrations of species U and V. Note
+/// that the input concentrations include a neighborhood of size
+/// [`data::parameters::stencil_offset()`] around the region of interest.
+pub type SimulationGrid<'input, 'output, Values> = ([ArrayView2<'input, Values>; 2], [ArrayViewMut2<'output, Values>; 2]);
 
 /// Macro that generates a complete criterion benchmark harness for you
 #[macro_export]

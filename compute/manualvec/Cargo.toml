@@ -7,7 +7,6 @@ edition.workspace = true
 cfg-if.workspace = true
 compute.workspace = true
 data = { workspace = true, features = ["safe_arch"] }
-ndarray.workspace = true
 safe_arch.workspace = true
 
 [dev-dependencies]
