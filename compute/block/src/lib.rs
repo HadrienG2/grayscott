@@ -12,10 +12,10 @@ use hwlocality::Topology;
 use ndarray::{ArrayView2, ArrayViewMut2};
 
 /// Gray-Scott reaction simulation
-pub struct Simulation<
-    Backend: SimulateImpl = compute_autovec::Simulation,
-    BlockSize: BlockSizeSelector = SingleCore,
-> {
+pub type Simulation = BlockWiseSimulation<compute_autovec::Simulation, SingleCore>;
+
+/// Gray-Scott simulation wrapper that enforces block-wise iteration
+pub struct BlockWiseSimulation<Backend: SimulateImpl, BlockSize: BlockSizeSelector> {
     /// Maximal number of grid elements (scalars or SIMD blocks) to be
     /// manipulated in one processing batch for optimal cache locality
     max_values_per_block: usize,
@@ -28,7 +28,7 @@ pub struct Simulation<
 }
 //
 impl<Backend: SimulateImpl, BlockSize: BlockSizeSelector> Simulate
-    for Simulation<Backend, BlockSize>
+    for BlockWiseSimulation<Backend, BlockSize>
 {
     type Concentration = <Backend as Simulate>::Concentration;
 
@@ -52,7 +52,7 @@ impl<Backend: SimulateImpl, BlockSize: BlockSizeSelector> Simulate
 }
 //
 impl<Backend: SimulateImpl, BlockSize: BlockSizeSelector> SimulateImpl
-    for Simulation<Backend, BlockSize>
+    for BlockWiseSimulation<Backend, BlockSize>
 {
     type Values = Backend::Values;
 
@@ -89,7 +89,7 @@ impl<Backend: SimulateImpl, BlockSize: BlockSizeSelector> SimulateImpl
 /// Block size selection policy
 pub trait BlockSizeSelector {
     /// Knowing the hardware topology, pick a good block size for the
-    /// computation of interest
+    /// computation of interest (results are in bytes)
     fn block_size(topology: &Topology) -> usize;
 }
 
