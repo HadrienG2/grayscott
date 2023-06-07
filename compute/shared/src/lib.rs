@@ -117,7 +117,8 @@ pub trait SimulateImpl: Simulate {
     }
 }
 //
-/// Low-level representation of the simulation grid used by SimulateImpl
+/// Low-level representation of the simulation grid used by SimulateImpl (or
+/// a subset thereof)
 ///
 /// Composed of the input and output concentrations of species U and V. Note
 /// that the input concentrations include a neighborhood of size
