@@ -28,7 +28,7 @@ use std::{
 /// storage would be laid out in terms of the equivalent scalar storage mIJ, in
 /// the special case of a stencil of offset [1, 1] and SIMD vectors of width 2.
 ///
-/// ```
+/// ```text
 /// [0 0] [0       mL1    ] [0       mL2    ] ... [0       mLM    ] [0 0]
 /// [0 0] [m11     m(L+1)1] [m12     m(L+1)2] ... [m1M     m(L+1)M] [0 0]
 /// [0 0] [m21     m(L+2)1] [m22     m(L+2)2] ... [m2M     m(L+2)M] [0 0]
