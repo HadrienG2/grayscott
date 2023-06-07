@@ -7,7 +7,9 @@ use data::{
     Precision,
 };
 use indicatif::{ProgressBar, ProgressFinish, ProgressIterator, ProgressStyle};
+use log::LevelFilter;
 use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
+use syslog::Facility;
 
 /// Convert Gray-Scott simulation output to images
 #[derive(Parser, Debug)]
@@ -81,6 +83,18 @@ cfg_if::cfg_if! {
 }
 
 fn main() {
+    // Enable logging to syslog
+    syslog::init(
+        Facility::default(),
+        if cfg!(debug_assertions) {
+            LevelFilter::Debug
+        } else {
+            LevelFilter::Info
+        },
+        None,
+    )
+    .expect("Failed to initialize syslog");
+
     // Parse CLI arguments and handle unconventional defaults
     let args = Args::parse();
     let kill_rate = args.killrate.unwrap_or(Parameters::default().kill_rate);

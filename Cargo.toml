@@ -2,6 +2,7 @@
 members = [
     "compute/autovec",
     "compute/block",
+    "compute/gpu/shared",
     "compute/manualvec",
     "compute/naive",
     "compute/parallel",
@@ -17,6 +18,9 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace.dependencies]
+# Used to hide Vulkan error handling complexity under an early exit rug ;)
+anyhow = "1.0"
+
 # Used for various feature flag wrangling purposes
 cfg-if = "1.0"
 
@@ -42,6 +46,9 @@ indicatif = "0.17"
 # Used when exporting visualizations as images
 image = { version = "0.24", default-features = false, features = ["png"] }
 
+# Used to log diagnostic info from third-party libraries (e.g. Vulkan)
+log = "0.4"
+
 # Basic multidimensional array abstraction
 ndarray = "0.15"
 
@@ -54,9 +61,16 @@ safe_arch = "0.6"
 # Autovectorization-based SIMD backend
 slipstream = "0.2.1"
 
+# Syslog-based log output
+syslog = "6.1"
+
+# Interface to the Vulkan GPU library
+vulkano = "0.33"
+
 # Internal to this project
 compute.path = "compute/shared"
 compute_autovec.path = "compute/autovec"
+compute_gpu.path = "compute/gpu/shared"
 compute_block.path = "compute/block"
 compute_manualvec.path = "compute/manualvec"
 compute_naive.path = "compute/naive"
@@ -64,8 +78,12 @@ compute_parallel.path = "compute/parallel"
 compute_regular.path = "compute/regular"
 data.path = "data"
 
+[profile.dev]
+# Keep the speed of debug builds reasonable
+opt-level = 1
+
 [profile.release]
-# Max performance at the cost of compile time
+# Maximal and reproducible performance at the cost of compile time
 codegen-units = 1
 # Good for perf profiling
 debug = 1

@@ -12,6 +12,15 @@ you will need to install development packages for the following C/++ libraries:
 - [hdf5](https://github.com/aldanor/hdf5-rust#compatibility)
 - [hwloc](https://github.com/Ichbinjoe/hwloc2-rs#prerequisites)
 
+Additinally, GPU examples use the Vulkan API through the
+[vulkano](https://docs.rs/vulkano) library, which comes with [extra build
+requirements](https://github.com/vulkano-rs/vulkano#setup-and-troubleshooting).
+
+In addition to the Vulkano build requirements, actually running the GPU examples
+requires at least one working Vulkan implementation (e.g. any reasonably modern
+Linux GPU driver). Debug builds additionally enable Vulkan validation layers
+for richer debug logs, so these must be installed too.
+
 The microbenchmarks are implemented using `criterion`, and we use the newer
 `cargo-criterion` runner mechanism, which requires a separate binary that you
 can install using this command:

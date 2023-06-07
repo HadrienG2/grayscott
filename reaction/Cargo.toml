@@ -9,6 +9,8 @@ clap.workspace = true
 compute.workspace = true
 data.workspace = true
 indicatif.workspace = true
+log.workspace = true
+syslog.workspace = true
 
 # Compute backends
 compute_autovec = { workspace = true, optional = true }
