@@ -21,6 +21,9 @@ edition = "2021"
 # Used to hide Vulkan error handling complexity under an early exit rug ;)
 anyhow = "1.0"
 
+# Used to safely manipulate data as bytes
+bytemuck = "1.13"
+
 # Used for various feature flag wrangling purposes
 cfg-if = "1.0"
 
@@ -29,6 +32,9 @@ clap = { version = "4.3", features = ["derive"] }
 
 # Used when visualizing data
 colorous = "1.0"
+
+# Used to lay out data the way GPUs like
+crevice = "0.13"
 
 # Used for microbenchmarking
 criterion = { version = "0.5", default-features = false }

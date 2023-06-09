@@ -162,7 +162,7 @@ impl Simulation {
                 //       C++ version. Which is dubious, since the stencil should
                 //       arguably stay centered on the target pixel. Then again,
                 //       it's just going to result in a few bad edge pixels...
-                params.weights[..stencil_shape[0]]
+                params.weights.0[..stencil_shape[0]]
                     .iter()
                     .flat_map(|row| row[..stencil_shape[1]].iter()),
             )

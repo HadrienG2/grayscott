@@ -48,7 +48,7 @@ impl SimulateStep for Simulation {
                 .fold(
                     [0.; 2],
                     |[acc_u, acc_v], (((in_row, in_col), &stencil_u), &stencil_v)| {
-                        let weight = params.weights[in_row][in_col];
+                        let weight = params.weights.0[in_row][in_col];
                         [acc_u + weight * (stencil_u - u), acc_v + weight * (stencil_v - v)]
                     },
                 );

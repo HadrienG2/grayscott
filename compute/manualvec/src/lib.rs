@@ -78,6 +78,7 @@ impl SimulateCpu for Simulation {
                 .zip(
                     self.params
                         .weights
+                        .0
                         .into_iter()
                         .flat_map(|row| row.into_iter()),
                 )
