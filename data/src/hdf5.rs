@@ -33,7 +33,6 @@ impl Writer {
     ///
     /// The file will be dimensioned to store a certain amount of V species
     /// concentration arrays.
-    ///
     pub fn create(
         config: Config<'_, impl AsRef<Path>>,
         species: &Species<impl Concentration>,
@@ -69,7 +68,6 @@ impl Writer {
     ///
     /// This should automatically happen on Drop, but doing it manually allows
     /// you to catch and handle errors, instead of letting them lead to panics.
-    ///
     pub fn close(self) -> Result<()> {
         self.0.file.close()
     }
@@ -119,8 +117,7 @@ impl Reader {
 
     /// Read the next V species concentration array, if any
     ///
-    /// You can equivalently treat this reader as an iterator of arrays
-    ///
+    /// You can equivalently treat this reader as an iterator of arrays.
     pub fn read(&mut self) -> Option<Result<ScalarConcentration>> {
         (self.state.position < self.num_images).then(|| {
             let result = self

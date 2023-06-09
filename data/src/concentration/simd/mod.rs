@@ -56,7 +56,6 @@ use std::{
 /// that the last few elements of each column be set to zero, at the same time
 /// where we would impose that the top/bottom padding matches the beginning/end
 /// of central content vectors.
-///
 pub struct SIMDConcentration<const WIDTH: usize, Vector: SIMDValues<WIDTH>> {
     /// SIMD data storage
     simd: Array2<Vector>,
@@ -330,14 +329,12 @@ pub trait SIMDValues<const WIDTH: usize, Element = Precision>:
 
     /// Shift vector lanes to the left, leaving zeros behind
     ///
-    /// A left shift of 2 turns `|x1 x2 ... xN|` into `|x3 x4 ... xN 0 0|`
-    ///
+    /// A left shift of 2 turns `|x1 x2 ... xN|` into `|x3 x4 ... xN 0 0|`.
     fn shift_left(self, offset: usize) -> Self;
 
     /// Shift vector lanes to the right, leaving zeros behind
     ///
-    /// A right shift of 2 turns `|x1 x2 ... xN|` into `|0 0 x1 x2 ... xN-2|`
-    ///
+    /// A right shift of 2 turns `|x1 x2 ... xN|` into `|0 0 x1 x2 ... xN-2|`.
     fn shift_right(self, offset: usize) -> Self;
 
     /// SIMD-sized matrix transpose
@@ -350,7 +347,6 @@ pub trait SIMDValues<const WIDTH: usize, Element = Precision>:
     /// lanes and vectors is flipped:
     ///
     /// `|m11 m21 ... mN1|`, `|m12 m22 ... mN2|`, ..., `|m1N m2N ... mNN|`
-    ///
     fn transpose(matrix: [Self; WIDTH]) -> [Self; WIDTH];
 
     /// Store vector into scalar storage, which must be suitably sized
@@ -362,7 +358,6 @@ pub trait SIMDValues<const WIDTH: usize, Element = Precision>:
 /// We use i32 for indices because x86 SIMD instruction sets have poor support
 /// for unsigned integers and we don't want indices to be larger than data and
 /// become the vectorization bottleneck.
-///
 pub trait SIMDIndices<const WIDTH: usize>: Copy {
     /// Matching mask type for blending
     type Mask: SIMDMask<WIDTH>;

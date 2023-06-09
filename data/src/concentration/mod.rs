@@ -22,7 +22,6 @@ impl<C: Concentration> Species<C> {
     /// Set up species concentration storage as the C++ version does
     ///
     /// `shape` specifies the concentration matrix dimensions, e.g. [1080, 1920]
-    ///
     pub fn new(shape: [usize; 2]) -> Self {
         // Start with U = 1.0 and V = 0.0 everywhere
         let mut u = Evolving::<C>::ones_out(shape);
@@ -123,7 +122,6 @@ impl<C: Concentration> Evolving<C> {
 /// should not expose any of it through methods of this trait. For all intents
 /// and purpose, they should behave as if an ndarray of scalars of the right
 /// dimensions had been allocated.
-///
 pub trait Concentration {
     /// Create an array of a certain shape, filled with defaulted elements
     fn default(shape: [usize; 2]) -> Self;
@@ -140,7 +138,6 @@ pub trait Concentration {
     /// Retrieve the shape of the internal data store
     ///
     /// The interpretation of this value is implementation-dependent.
-    ///
     fn raw_shape(&self) -> [usize; 2] {
         self.shape()
     }
@@ -150,7 +147,6 @@ pub trait Concentration {
     /// Like the constructor's shape, this slice is expressed in units of scalar
     /// numbers, as if the storage were a 2D ndarray of scalars of the size
     /// specified at construction time.
-    ///
     fn fill_slice(&mut self, slice: [Range<usize>; 2], value: Precision);
 
     /// Finalize the table before making it the output
@@ -158,13 +154,11 @@ pub trait Concentration {
     /// This is useful when the data layout calls for some duplication or
     /// zeroing of elements, which we don't want to perform on every operation
     /// but only when the final output is going to be read.
-    ///
     fn finalize(&mut self) {}
 
     /// View the matrix as a 2D ndarray
     ///
     /// This operation may require reshuffling data, do not use it frequently.
-    ///
     fn make_scalar_view(&mut self) -> ScalarConcentrationView;
 }
 //
