@@ -3,7 +3,7 @@
 //! This version follows the logic of the naive_propagation.cpp example from the
 //! C++ tutorial, and is slow for the same reason.
 
-use compute::Simulate;
+use compute::SimulateStep;
 use data::{
     array2,
     concentration::{ScalarConcentration, Species},
@@ -16,7 +16,7 @@ pub struct Simulation {
     params: Parameters,
 }
 //
-impl Simulate for Simulation {
+impl SimulateStep for Simulation {
     type Concentration = ScalarConcentration;
 
     fn new(params: Parameters) -> Self {

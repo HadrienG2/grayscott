@@ -7,7 +7,7 @@
 //! computation. Better code generation can be obtained by discriminating these
 //! two scenarios.
 
-use compute::Simulate;
+use compute::SimulateStep;
 use data::{
     array2,
     concentration::ScalarConcentration,
@@ -26,7 +26,7 @@ pub struct Simulation {
     params: Parameters,
 }
 //
-impl Simulate for Simulation {
+impl SimulateStep for Simulation {
     type Concentration = ScalarConcentration;
 
     fn new(params: Parameters) -> Self {

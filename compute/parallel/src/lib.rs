@@ -3,7 +3,7 @@
 //! This crates implements a parallel version of the Gray-Scott simulation based
 //! on domain decomposition and fork-join parallelism.
 
-use compute::{Simulate, SimulateCpu, SimulationGrid};
+use compute::{CpuGrid, Simulate, SimulateCpu, SimulateStep};
 use compute_block::{BlockSizeSelector, SingleCore};
 use data::{concentration::Species, parameters::Parameters};
 use hwlocality::Topology;
@@ -27,7 +27,7 @@ where
     backend: Backend,
 }
 //
-impl<Backend: SimulateCpu + Sync> Simulate for ParallelSimulation<Backend>
+impl<Backend: SimulateCpu + Sync> SimulateStep for ParallelSimulation<Backend>
 where
     Backend::Values: Send + Sync,
 {
@@ -54,11 +54,11 @@ where
 {
     type Values = Backend::Values;
 
-    fn extract_grid(species: &mut Species<Self::Concentration>) -> SimulationGrid<Self::Values> {
+    fn extract_grid(species: &mut Species<Self::Concentration>) -> CpuGrid<Self::Values> {
         Backend::extract_grid(species)
     }
 
-    fn unchecked_step_impl(&self, grid: SimulationGrid<Self::Values>) {
+    fn unchecked_step_impl(&self, grid: CpuGrid<Self::Values>) {
         rayon::iter::split(grid, |subgrid| {
             if Self::grid_len(&subgrid) <= self.sequential_len_threshold {
                 (subgrid, None)

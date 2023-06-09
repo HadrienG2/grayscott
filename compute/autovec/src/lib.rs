@@ -8,7 +8,7 @@
 //! revolving around picking the right vector width.
 
 use cfg_if::cfg_if;
-use compute::{Simulate, SimulateCpu, SimulationGrid};
+use compute::{CpuGrid, SimulateCpu, SimulateStep};
 use data::{
     concentration::{simd::SIMDConcentration, Species},
     parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
@@ -57,7 +57,7 @@ pub struct Simulation {
     params: Parameters,
 }
 //
-impl Simulate for Simulation {
+impl SimulateStep for Simulation {
     type Concentration = SIMDConcentration<WIDTH, Values>;
 
     fn new(params: Parameters) -> Self {
@@ -72,7 +72,7 @@ impl Simulate for Simulation {
 impl SimulateCpu for Simulation {
     type Values = Values;
 
-    fn extract_grid(species: &mut Species<Self::Concentration>) -> SimulationGrid<Self::Values> {
+    fn extract_grid(species: &mut Species<Self::Concentration>) -> CpuGrid<Self::Values> {
         let (in_u, out_u) = species.u.in_out();
         let (in_v, out_v) = species.v.in_out();
         (
@@ -83,7 +83,7 @@ impl SimulateCpu for Simulation {
 
     fn unchecked_step_impl(
         &self,
-        ([in_u, in_v], [mut out_u_center, mut out_v_center]): SimulationGrid<Self::Values>,
+        ([in_u, in_v], [mut out_u_center, mut out_v_center]): CpuGrid<Self::Values>,
     ) {
         // Determine offset from the top-left corner of the stencil to its center
         let stencil_offset = stencil_offset();

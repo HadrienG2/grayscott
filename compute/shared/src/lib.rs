@@ -13,14 +13,55 @@ pub trait Simulate {
     /// Set up the simulation
     fn new(params: Parameters) -> Self;
 
-    /// Perform one simulation time step
+    /// Perform `steps` simulation time steps
+    ///
+    /// At the end of the simulation, the input concentrations of `species` will
+    /// contain the final simulation results.
+    fn steps(&self, species: &mut Species<Self::Concentration>, steps: usize);
+}
+
+/// Simplified version of Simulate that simulates a single time step at a time
+///
+/// If you implement this, then a [`Simulate`] implementation that loops while
+/// flipping the concentration arrays will be automatically provided.
+///
+/// This is good enough for single- and multi-core CPU computations, but GPU
+/// and distributed computations may benefit from the batching of simulation
+/// time steps that is enabled by direct implementation of the `Simulate` trait.
+pub trait SimulateStep {
+    /// Concentration type
+    type Concentration: data::concentration::Concentration;
+
+    /// Set up the simulation
+    fn new(params: Parameters) -> Self;
+
+    /// Perform a single simulation time step
+    ///
+    /// At the end of the simulation, the output concentrations of `species`
+    /// will contain the final simulation results. It is the job of the caller
+    /// to flip the concentrations if they want the result to be their input.
     fn step(&self, species: &mut Species<Self::Concentration>);
+}
+//
+impl<T: SimulateStep> Simulate for T {
+    type Concentration = <T as SimulateStep>::Concentration;
+
+    fn new(params: Parameters) -> Self {
+        <T as SimulateStep>::new(params)
+    }
+
+    fn steps(&self, species: &mut Species<Self::Concentration>, steps: usize) {
+        for _ in 0..steps {
+            self.step(species);
+            species.flip();
+        }
+    }
 }
 
 /// Lower-level grid-based interface to a CPU compute backend
 ///
-/// Some compute backends expose a lower-level interface based on computations
-/// on grids of concentration values.
+/// Some CPU compute backends expose a lower-level interface based on
+/// computations on grids of concentration values.
 ///
 /// This is used by the block-based backends (`block`, `parallel`, ...) to
 /// slice the original step computations into smaller sub-computations for
@@ -34,7 +75,7 @@ pub trait SimulateCpu: Simulate {
     /// Extract a view of the full grid from the concentrations array
     fn extract_grid(
         species: &mut Species<Self::Concentration>,
-    ) -> SimulationGrid<Self::Values>;
+    ) -> CpuGrid<Self::Values>;
 
     /// Perform one simulation time step on the full grid or a subset thereof
     ///
@@ -42,15 +83,15 @@ pub trait SimulateCpu: Simulate {
     /// implement `step_impl` that does perform some sanity checks.
     fn unchecked_step_impl(
         &self,
-        grid: SimulationGrid<Self::Values>,
+        grid: CpuGrid<Self::Values>,
     );
 
-    /// Check that the SimulationGrid seems correct
+    /// Check that the CpuGrid seems correct
     ///
     /// Note that full correctness checking would involve making sure that the
     /// input and output array views point to the same region of the full grid,
     /// which cannot be done. Therefore, this is only a partial sanity check.
-    fn check_grid(([in_u, in_v], [out_u_center, out_v_center]): &SimulationGrid<Self::Values>) {
+    fn check_grid(([in_u, in_v], [out_u_center, out_v_center]): &CpuGrid<Self::Values>) {
         debug_assert_eq!(in_u.shape(), in_v.shape());
         debug_assert_eq!(out_u_center.shape(), out_v_center.shape());
 
@@ -63,7 +104,7 @@ pub trait SimulateCpu: Simulate {
     #[inline(always)]
     fn step_impl(
         &self,
-        grid: SimulationGrid<Self::Values>,
+        grid: CpuGrid<Self::Values>,
     ) {
         Self::check_grid(&grid);
         self.unchecked_step_impl(grid);
@@ -71,7 +112,7 @@ pub trait SimulateCpu: Simulate {
 
     /// Count the number of grid elements which `step_impl()` would manipulate
     #[inline(always)]
-    fn grid_len(grid: &SimulationGrid<Self::Values>) -> usize {
+    fn grid_len(grid: &CpuGrid<Self::Values>) -> usize {
         Self::check_grid(grid);
         let ([in_u, in_v], [out_u_center, out_v_center]) = grid;
         in_u.len() + in_v.len() + out_u_center.len() + out_v_center.len()
@@ -84,8 +125,8 @@ pub trait SimulateCpu: Simulate {
     /// square, which is optimal from the point of view of cache locality.
     #[inline(always)]
     fn split_grid<'input, 'output>(
-        grid: SimulationGrid<'input, 'output, Self::Values>,
-    ) -> [SimulationGrid<'input, 'output, Self::Values>; 2] {
+        grid: CpuGrid<'input, 'output, Self::Values>,
+    ) -> [CpuGrid<'input, 'output, Self::Values>; 2] {
         Self::check_grid(&grid);
         let ([in_u, in_v], [out_u_center, out_v_center]) = grid;
 
@@ -122,7 +163,7 @@ pub trait SimulateCpu: Simulate {
 /// Composed of the input and output concentrations of species U and V. Note
 /// that the input concentrations include a neighborhood of size
 /// [`data::parameters::stencil_offset()`] around the region of interest.
-pub type SimulationGrid<'input, 'output, Values> = ([ArrayView2<'input, Values>; 2], [ArrayViewMut2<'output, Values>; 2]);
+pub type CpuGrid<'input, 'output, Values> = ([ArrayView2<'input, Values>; 2], [ArrayViewMut2<'output, Values>; 2]);
 
 /// Macro that generates a complete criterion benchmark harness for you
 #[macro_export]
@@ -145,21 +186,23 @@ pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name
     use std::hint::black_box;
 
     let sim = Simulation::new(black_box(Parameters::default()));
-    let mut group = c.benchmark_group(format!("{backend_name}::step"));
-    for size_pow2 in 3..=9 {
-        let size = 2usize.pow(size_pow2);
-        let shape = [size, 2 * size];
-        let num_elems = (shape[0] * shape[1]) as u64;
+    let mut group = c.benchmark_group(format!("{backend_name}::steps"));
+    for num_steps in 1..10 {
+        for size_pow2 in 3..=9 {
+            let size = 2usize.pow(size_pow2);
+            let shape = [size, 2 * size];
+            let num_elems = (shape[0] * shape[1]) as u64;
 
-        let mut species = Species::<Simulation::Concentration>::new(black_box(shape));
+            let mut species = Species::<Simulation::Concentration>::new(black_box(shape));
 
-        group.throughput(Throughput::Elements(num_elems));
-        group.bench_function(BenchmarkId::from_parameter(num_elems), |b| {
-            b.iter(|| {
-                sim.step(&mut species);
-                species.flip();
+            group.throughput(Throughput::Elements(num_elems * num_steps));
+            group.bench_function(BenchmarkId::from_parameter(format!("{num_elems}elems,{num_steps}steps")), |b| {
+                b.iter(|| {
+                    sim.steps(&mut species, num_steps as usize);
+                    species.flip();
+                });
             });
-        });
+        }
     }
     group.finish();
 }

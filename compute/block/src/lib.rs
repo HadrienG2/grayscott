@@ -4,7 +4,7 @@
 //! memory bound. This version uses cache blocking techniques to improve the CPU
 //! cache hit rate, getting us back into compute-bound territory.
 
-use compute::{Simulate, SimulateCpu, SimulationGrid};
+use compute::{CpuGrid, Simulate, SimulateCpu, SimulateStep};
 use data::{concentration::Species, parameters::Parameters};
 use hwlocality::Topology;
 use std::marker::PhantomData;
@@ -25,7 +25,7 @@ pub struct BlockWiseSimulation<Backend: SimulateCpu, BlockSize: BlockSizeSelecto
     block_size: PhantomData<BlockSize>,
 }
 //
-impl<Backend: SimulateCpu, BlockSize: BlockSizeSelector> Simulate
+impl<Backend: SimulateCpu, BlockSize: BlockSizeSelector> SimulateStep
     for BlockWiseSimulation<Backend, BlockSize>
 {
     type Concentration = <Backend as Simulate>::Concentration;
@@ -53,11 +53,11 @@ impl<Backend: SimulateCpu, BlockSize: BlockSizeSelector> SimulateCpu
 {
     type Values = Backend::Values;
 
-    fn extract_grid(species: &mut Species<Self::Concentration>) -> SimulationGrid<Self::Values> {
+    fn extract_grid(species: &mut Species<Self::Concentration>) -> CpuGrid<Self::Values> {
         Backend::extract_grid(species)
     }
 
-    fn unchecked_step_impl(&self, grid: SimulationGrid<Self::Values>) {
+    fn unchecked_step_impl(&self, grid: CpuGrid<Self::Values>) {
         // Is the current grid fragment small enough?
         if Self::grid_len(&grid) < self.max_values_per_block {
             // If so, process it as is

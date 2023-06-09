@@ -77,7 +77,7 @@ cfg_if::cfg_if! {
                 std::compile_error!("Please enable at least one compute backend via crate features")
             }
 
-            fn step(&self, _species: &mut Species<ScalarConcentration>) {}
+            fn steps(&self, _species: &mut Species<ScalarConcentration>, _steps: usize) {}
         }
     }
 }
@@ -137,10 +137,7 @@ fn main() {
     // Run the simulation
     for _ in (0..args.nbimage).progress_with(progress) {
         // Move the simulation forward
-        for _ in 0..steps_per_image {
-            simulation.step(&mut species);
-            species.flip();
-        }
+        simulation.steps(&mut species, steps_per_image);
 
         // Write a new image
         writer
