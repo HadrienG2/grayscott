@@ -23,59 +23,6 @@ use vulkano::{
     ExtensionProperties, VulkanLibrary,
 };
 
-/// Set up a Vulkan compute context
-///
-/// Setting up Vulkan in a manner that allows for easy debugging involves a
-/// fair amount of boilerplate. This function aims to cut out the boilerplate by
-/// making a number of rather non-controversial choices for you, so that you
-/// can focus on the interesting choices (what do you need from your Device,
-/// which devices you prefer to others...
-///
-/// Feel free to leverage [`default_config()`] in conjunction with struct update
-/// syntax, when you don't care about particular settings.
-pub fn setup_vulkan<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>(
-    mut config: VulkanConfig<MemAlloc, CommAlloc>,
-) -> anyhow::Result<VulkanContext<MemAlloc, CommAlloc>> {
-    let library = load_library()?;
-
-    let instance = setup_instance(
-        library.clone(),
-        (config.layers)(&library),
-        (config.instance_extensions)(&library),
-        config.enumerate_portability,
-    )?;
-
-    let physical_device = select_physical_device(
-        &instance,
-        |device| {
-            let (features, extensions) = (config.device_features_extensions)(&device);
-            device.supported_features().contains(&features)
-                && device.supported_extensions().contains(&extensions)
-                && (config.other_device_requirements)(device)
-        },
-        config.device_preference,
-    )?;
-
-    let (features, extensions) = (config.device_features_extensions)(&physical_device);
-    let (device, queues) = create_logical_device(
-        physical_device.clone(),
-        features,
-        extensions,
-        (config.queues)(&physical_device),
-    )?;
-
-    let memory_allocator = (config.memory_allocator)(device.clone());
-    let command_allocator = (config.command_buffer_allocator)(device.clone());
-
-    Ok(VulkanContext {
-        _messenger: instance._messenger,
-        device,
-        queues,
-        memory_allocator,
-        command_allocator,
-    })
-}
-
 /// Vulkan compute context
 ///
 /// Common setup you need in order to perform any useful computation with Vulkan.
@@ -84,12 +31,14 @@ pub fn setup_vulkan<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator
 ///
 /// Keep this struct alive as long as you're using Vulkan, as that's how long
 /// debug logging is going to keep printing useful info ;)
+///
+/// Built from the [`VulkanConfig`] configuration struct
 pub struct VulkanContext<
     MemAlloc: MemoryAllocator = StandardMemoryAllocator,
     CommAlloc: CommandBufferAllocator = StandardCommandBufferAllocator,
 > {
-    /// Messenger that sends Vulkan debug messages to the log crate
-    _messenger: DebugUtilsMessenger,
+    /// Messenger that sends Vulkan debug messages to the [`log`] crate
+    _messenger: Option<DebugUtilsMessenger>,
 
     /// Logical device (used for resource allocation)
     pub device: Arc<Device>,
@@ -104,23 +53,18 @@ pub struct VulkanContext<
     pub command_allocator: CommAlloc,
 }
 
-/// Suggested default Vulkan configuration (see [`VulkanConfig`] docs for more)
-pub fn default_vulkan_config(
-) -> VulkanConfig<StandardMemoryAllocator, StandardCommandBufferAllocator> {
-    VulkanConfig {
-        layers: Box::new(default_layers),
-        instance_extensions: Box::new(default_instance_extensions),
-        enumerate_portability: false,
-        device_features_extensions: Box::new(default_features_extensions),
-        other_device_requirements: Box::new(default_other_device_requirements),
-        device_preference: Box::new(default_device_preference),
-        queues: Box::new(|device| vec![default_queue(device)]),
-        memory_allocator: Box::new(default_memory_allocator),
-        command_buffer_allocator: Box::new(default_command_buffer_allocator),
-    }
-}
-
-/// Vulkan configuration
+/// Vulkan compute context configuration
+///
+/// A default configuration is provided via the [`default()`] method and
+/// documented in the various fields of this struct. You can change these fields
+/// to adjust the configuration, check out their documentation to see what their
+/// default behavior is.
+///
+/// Once you're satisfied with the configuration, used the [`setup()`] method
+/// to set up the Vulkan context.
+///
+/// [`default()`]: VulkanConfig::default()
+/// [`setup()`]: VulkanConfig::setup()
 pub struct VulkanConfig<
     MemAlloc: MemoryAllocator = StandardMemoryAllocator,
     CommAlloc: CommandBufferAllocator = StandardCommandBufferAllocator,
@@ -132,7 +76,7 @@ pub struct VulkanConfig<
     /// layers, instead of activating them in code.
     ///
     /// By default, VK_LAYER_KHRONOS_validation is enabled on debug builds.
-    layers: Box<dyn FnOnce(&VulkanLibrary) -> Vec<String>>,
+    pub layers: Box<dyn FnOnce(&VulkanLibrary) -> Vec<String>>,
 
     /// Decide which instance extensions should be enabled
     ///
@@ -141,11 +85,12 @@ pub struct VulkanConfig<
     /// APIs...), but were also occasionally used to plug holes in the Vulkan
     /// specification that affect device enumeration.
     ///
-    /// We **require** the ext_debug_utils extension in order to provide a good
-    /// debugging experience. Additionally, in debug builds, we also enable
-    /// khr_get_physical_device_properties2, which is a prerequisite for other
-    /// robustness features that we enable by default.
-    instance_extensions: Box<dyn FnOnce(&VulkanLibrary) -> InstanceExtensions>,
+    /// By default, we require the ext_debug_utils extension in order to provide
+    /// a good debugging experience. Additionally, in debug builds, we also
+    /// enable khr_get_physical_device_properties2 on older Vulkan versions,
+    /// which is a prerequisite for the device robustness features that we
+    /// enable by default.
+    pub instance_extensions: Box<dyn FnOnce(&VulkanLibrary) -> InstanceExtensions>,
 
     /// Truth that Vulkan Portability devices should be enumerated
     ///
@@ -154,7 +99,7 @@ pub struct VulkanConfig<
     /// obscure features. By setting this flag, you enable these devices to be
     /// discovered. In exchange, your device selection callback needs to account
     /// for the possibility that some core Vulkan features may be absent.
-    enumerate_portability: bool,
+    pub enumerate_portability: bool,
 
     /// Decide which device features and extensions should be enabled
     ///
@@ -196,7 +141,7 @@ pub struct VulkanConfig<
     //         Vulkan, notamment MoltenVK et WebGL. N'a pas l'air si compliqué à
     //         assurer. Mais penser à modifier aussi l'énumération des devices.
     //       - ext_shader_subgroup_xyz => Opérations subgroups
-    device_features_extensions: Box<dyn FnMut(&PhysicalDevice) -> (Features, DeviceExtensions)>,
+    pub device_features_extensions: Box<dyn FnMut(&PhysicalDevice) -> (Features, DeviceExtensions)>,
 
     /// Impose additional device requirements
     ///
@@ -233,7 +178,7 @@ pub struct VulkanConfig<
     //       - max_uniform_buffer_range
     //       - subgroup_<properties> (if using subgroups)
     //       - subgroup_supported_(operations|stages) (if using subgroups)
-    other_device_requirements: Box<dyn FnMut(&PhysicalDevice) -> bool>,
+    pub other_device_requirements: Box<dyn FnMut(&PhysicalDevice) -> bool>,
 
     /// Decide which device is best
     ///
@@ -255,7 +200,7 @@ pub struct VulkanConfig<
     /// This should be enough to disambiguate all common multi-device scenarios,
     /// but edge cases like machines with heterogeneous GPUs plugged in will
     /// require better preference criteria.
-    device_preference: Box<dyn FnMut(&PhysicalDevice, &PhysicalDevice) -> Ordering>,
+    pub device_preference: Box<dyn FnMut(&PhysicalDevice, &PhysicalDevice) -> Ordering>,
 
     /// Configure command queues
     ///
@@ -269,7 +214,7 @@ pub struct VulkanConfig<
     /// this purpose, at it may be the most performant in single-queue use
     /// cases. If you want to experiment with multi-queue workflows, this is
     /// the tuning knob that you want.
-    queues: Box<dyn FnOnce(&PhysicalDevice) -> Vec<QueueCreateInfo>>,
+    pub queues: Box<dyn FnOnce(&PhysicalDevice) -> Vec<QueueCreateInfo>>,
 
     /// Set up a memory allocator
     ///
@@ -278,7 +223,7 @@ pub struct VulkanConfig<
     ///
     /// By default, we use vulkano's standard general-purpose memory allocator.
     /// You can switch to a different memory allocation strategy by tuning this.
-    memory_allocator: Box<dyn FnOnce(Arc<Device>) -> MemAlloc>,
+    pub memory_allocator: Box<dyn FnOnce(Arc<Device>) -> MemAlloc>,
 
     /// Set up a command buffer allocator
     ///
@@ -287,7 +232,87 @@ pub struct VulkanConfig<
     ///
     /// By default, we use vulkano's standard general-purpose memory allocator.
     /// You can switch to a different memory allocation strategy by tuning this.
-    command_buffer_allocator: Box<dyn FnOnce(Arc<Device>) -> CommAlloc>,
+    pub command_buffer_allocator: Box<dyn FnOnce(Arc<Device>) -> CommAlloc>,
+}
+//
+impl VulkanConfig<StandardMemoryAllocator, StandardCommandBufferAllocator> {
+    /// Suggested defaults for all configuration items
+    ///
+    /// You can use struct update syntax to change only some settings, keeping
+    /// the others to their default values:
+    ///
+    /// ```
+    /// # use compute_gpu::VulkanConfig;
+    /// let config = VulkanConfig {
+    ///     enumerate_portability: true,
+    ///     .. VulkanConfig::default()
+    /// };
+    /// ```
+    pub fn default() -> Self {
+        Self {
+            layers: Box::new(default_layers),
+            instance_extensions: Box::new(default_instance_extensions),
+            enumerate_portability: false,
+            device_features_extensions: Box::new(default_features_extensions),
+            other_device_requirements: Box::new(default_other_device_requirements),
+            device_preference: Box::new(default_device_preference),
+            queues: Box::new(|device| vec![default_queue(device)]),
+            memory_allocator: Box::new(default_memory_allocator),
+            command_buffer_allocator: Box::new(default_command_buffer_allocator),
+        }
+    }
+}
+//
+impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
+    VulkanConfig<MemAlloc, CommAlloc>
+{
+    /// Set up a Vulkan compute context with this configuration
+    ///
+    /// ```
+    /// # use compute_gpu::VulkanConfig;
+    /// let context = VulkanConfig::default().setup()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn setup(mut self) -> anyhow::Result<VulkanContext<MemAlloc, CommAlloc>> {
+        let library = load_library()?;
+
+        let instance = setup_instance(
+            library.clone(),
+            (self.layers)(&library),
+            (self.instance_extensions)(&library),
+            self.enumerate_portability,
+        )?;
+
+        let physical_device = select_physical_device(
+            &instance,
+            |device| {
+                let (features, extensions) = (self.device_features_extensions)(&device);
+                device.supported_features().contains(&features)
+                    && device.supported_extensions().contains(&extensions)
+                    && (self.other_device_requirements)(device)
+            },
+            self.device_preference,
+        )?;
+
+        let (features, extensions) = (self.device_features_extensions)(&physical_device);
+        let (device, queues) = create_logical_device(
+            physical_device.clone(),
+            features,
+            extensions,
+            (self.queues)(&physical_device),
+        )?;
+
+        let memory_allocator = (self.memory_allocator)(device.clone());
+        let command_allocator = (self.command_buffer_allocator)(device.clone());
+
+        Ok(VulkanContext {
+            _messenger: instance._messenger,
+            device,
+            queues,
+            memory_allocator,
+            command_allocator,
+        })
+    }
 }
 
 /// Suggested set of layers to enable
@@ -450,62 +475,73 @@ fn setup_instance(
         enumerate_portability,
         ..InstanceCreateInfo::application_from_cargo_toml()
     };
-
-    type DUMS = DebugUtilsMessageSeverity;
-    type DUMT = DebugUtilsMessageType;
-    let mut debug_messenger_info = DebugUtilsMessengerCreateInfo {
-        message_severity: DUMS::ERROR | DUMS::WARNING,
-        message_type: DUMT::GENERAL,
-        ..DebugUtilsMessengerCreateInfo::user_callback(Arc::new(|message: &Message| {
-            // SAFETY: This callback must not call into Vulkan APIs
-            let level = match message.severity {
-                DUMS::ERROR => log::Level::Error,
-                DUMS::WARNING => log::Level::Warn,
-                DUMS::INFO => log::Level::Debug,
-                DUMS::VERBOSE => log::Level::Trace,
-                _ => log::Level::Info,
-            };
-            let target = message
-                .layer_prefix
-                .map(|layer| format!("Vulkan {:?} {layer}", message.ty))
-                .unwrap_or(format!("Vulkan {:?}", message.ty));
-            log!(target: &target, level, "{}", message.description);
-        }))
-    };
-    if cfg!(debug_assertions) {
-        debug_messenger_info.message_severity |= DUMS::INFO | DUMS::VERBOSE;
-        debug_messenger_info.message_type |= DUMT::VALIDATION | DUMT::PERFORMANCE;
-    };
-
     info!("Will now create a Vulkan instance with configuration {create_info:#?}");
-    let instance = unsafe {
-        // Safe because our logger does not call into Vulkan APIs
-        Instance::with_debug_utils_messengers(
-            library,
-            create_info,
-            std::iter::once(debug_messenger_info.clone()),
-        )?
+
+    let instance = if enabled_extensions.ext_debug_utils {
+        type DUMS = DebugUtilsMessageSeverity;
+        type DUMT = DebugUtilsMessageType;
+        let mut debug_messenger_info = DebugUtilsMessengerCreateInfo {
+            message_severity: DUMS::ERROR | DUMS::WARNING,
+            message_type: DUMT::GENERAL,
+            ..DebugUtilsMessengerCreateInfo::user_callback(Arc::new(|message: &Message| {
+                // SAFETY: This callback must not call into Vulkan APIs
+                let level = match message.severity {
+                    DUMS::ERROR => log::Level::Error,
+                    DUMS::WARNING => log::Level::Warn,
+                    DUMS::INFO => log::Level::Debug,
+                    DUMS::VERBOSE => log::Level::Trace,
+                    _ => log::Level::Info,
+                };
+                let target = message
+                    .layer_prefix
+                    .map(|layer| format!("Vulkan {:?} {layer}", message.ty))
+                    .unwrap_or(format!("Vulkan {:?}", message.ty));
+                log!(target: &target, level, "{}", message.description);
+            }))
+        };
+        if cfg!(debug_assertions) {
+            debug_messenger_info.message_severity |= DUMS::INFO | DUMS::VERBOSE;
+            debug_messenger_info.message_type |= DUMT::VALIDATION | DUMT::PERFORMANCE;
+        };
+        let instance = unsafe {
+            // Safe because our logger does not call into Vulkan APIs
+            Instance::with_debug_utils_messengers(
+                library,
+                create_info,
+                std::iter::once(debug_messenger_info.clone()),
+            )?
+        };
+        let messenger =
+            unsafe { DebugUtilsMessenger::new(instance.clone(), debug_messenger_info)? };
+        DebuggedInstance {
+            instance,
+            _messenger: Some(messenger),
+        }
+    } else {
+        DebuggedInstance {
+            instance: Instance::new(library, create_info)?,
+            _messenger: None,
+        }
     };
-    let _messenger = unsafe { DebugUtilsMessenger::new(instance.clone(), debug_messenger_info)? };
+
     trace!(
         "Vulkan instance supports Vulkan v{}",
         instance.api_version()
     );
 
-    Ok(DebuggedInstance {
-        instance,
-        _messenger,
-    })
+    Ok(instance)
 }
 
 /// Vulkan instance with debug logging
+///
+/// Logging will stop once this struct is dropped, even if there are
+/// other Arc<Instance> remaining in flight
 struct DebuggedInstance {
     /// Vulkan instance
     instance: Arc<Instance>,
 
-    /// Messenger that logs instance debug messages, should be kept alive as
-    /// long as the instance is kept alive
-    _messenger: DebugUtilsMessenger,
+    /// Messenger that logs instance debug messages
+    _messenger: Option<DebugUtilsMessenger>,
 }
 //
 impl Deref for DebuggedInstance {
@@ -631,10 +667,11 @@ mod tests {
     #[test]
     fn setup_vulkan() -> anyhow::Result<()> {
         init_logger();
-        super::setup_vulkan(VulkanConfig {
+        VulkanConfig {
             enumerate_portability: true,
-            ..default_vulkan_config()
-        })?;
+            ..VulkanConfig::default()
+        }
+        .setup()?;
         Ok(())
     }
 }

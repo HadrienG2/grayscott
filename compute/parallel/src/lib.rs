@@ -3,7 +3,7 @@
 //! This crates implements a parallel version of the Gray-Scott simulation based
 //! on domain decomposition and fork-join parallelism.
 
-use compute::{Simulate, SimulateImpl, SimulationGrid};
+use compute::{Simulate, SimulateCpu, SimulationGrid};
 use compute_block::{BlockSizeSelector, SingleCore};
 use data::{concentration::Species, parameters::Parameters};
 use hwlocality::Topology;
@@ -15,7 +15,7 @@ use rayon::prelude::*;
 pub type Simulation = ParallelSimulation<compute_autovec::Simulation>;
 
 /// Gray-Scott simulation wrapper that enforces parallel iteration
-pub struct ParallelSimulation<Backend: SimulateImpl + Sync>
+pub struct ParallelSimulation<Backend: SimulateCpu + Sync>
 where
     Backend::Values: Send + Sync,
 {
@@ -27,7 +27,7 @@ where
     backend: Backend,
 }
 //
-impl<Backend: SimulateImpl + Sync> Simulate for ParallelSimulation<Backend>
+impl<Backend: SimulateCpu + Sync> Simulate for ParallelSimulation<Backend>
 where
     Backend::Values: Send + Sync,
 {
@@ -48,7 +48,7 @@ where
     }
 }
 //
-impl<Backend: SimulateImpl + Sync> SimulateImpl for ParallelSimulation<Backend>
+impl<Backend: SimulateCpu + Sync> SimulateCpu for ParallelSimulation<Backend>
 where
     Backend::Values: Send + Sync,
 {

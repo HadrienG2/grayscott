@@ -17,7 +17,7 @@ pub trait Simulate {
     fn step(&self, species: &mut Species<Self::Concentration>);
 }
 
-/// Lower-level grid-based interface to a simulation's compute backend
+/// Lower-level grid-based interface to a CPU compute backend
 ///
 /// Some compute backends expose a lower-level interface based on computations
 /// on grids of concentration values.
@@ -25,7 +25,7 @@ pub trait Simulate {
 /// This is used by the block-based backends (`block`, `parallel`, ...) to
 /// slice the original step computations into smaller sub-computations for
 /// cache locality and parallelization purposes.
-pub trait SimulateImpl: Simulate {
+pub trait SimulateCpu: Simulate {
     /// Concentration values at a point on the simulation's grid
     ///
     /// Can be a single value or some SIMD type containing multiple values
@@ -117,8 +117,7 @@ pub trait SimulateImpl: Simulate {
     }
 }
 //
-/// Low-level representation of the simulation grid used by SimulateImpl (or
-/// a subset thereof)
+/// Low-level representation of the simulation grid used by SimulateCpu
 ///
 /// Composed of the input and output concentrations of species U and V. Note
 /// that the input concentrations include a neighborhood of size

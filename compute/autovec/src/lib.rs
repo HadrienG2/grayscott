@@ -8,7 +8,7 @@
 //! revolving around picking the right vector width.
 
 use cfg_if::cfg_if;
-use compute::{Simulate, SimulateImpl, SimulationGrid};
+use compute::{Simulate, SimulateCpu, SimulationGrid};
 use data::{
     concentration::{simd::SIMDConcentration, Species},
     parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
@@ -69,7 +69,7 @@ impl Simulate for Simulation {
     }
 }
 //
-impl SimulateImpl for Simulation {
+impl SimulateCpu for Simulation {
     type Values = Values;
 
     fn extract_grid(species: &mut Species<Self::Concentration>) -> SimulationGrid<Self::Values> {

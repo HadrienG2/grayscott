@@ -4,7 +4,7 @@
 //! memory bound. This version uses cache blocking techniques to improve the CPU
 //! cache hit rate, getting us back into compute-bound territory.
 
-use compute::{Simulate, SimulateImpl, SimulationGrid};
+use compute::{Simulate, SimulateCpu, SimulationGrid};
 use data::{concentration::Species, parameters::Parameters};
 use hwlocality::Topology;
 use std::marker::PhantomData;
@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 pub type Simulation = BlockWiseSimulation<compute_autovec::Simulation, SingleCore>;
 
 /// Gray-Scott simulation wrapper that enforces block-wise iteration
-pub struct BlockWiseSimulation<Backend: SimulateImpl, BlockSize: BlockSizeSelector> {
+pub struct BlockWiseSimulation<Backend: SimulateCpu, BlockSize: BlockSizeSelector> {
     /// Maximal number of grid elements (scalars or SIMD blocks) to be
     /// manipulated in one processing batch for optimal cache locality
     max_values_per_block: usize,
@@ -25,7 +25,7 @@ pub struct BlockWiseSimulation<Backend: SimulateImpl, BlockSize: BlockSizeSelect
     block_size: PhantomData<BlockSize>,
 }
 //
-impl<Backend: SimulateImpl, BlockSize: BlockSizeSelector> Simulate
+impl<Backend: SimulateCpu, BlockSize: BlockSizeSelector> Simulate
     for BlockWiseSimulation<Backend, BlockSize>
 {
     type Concentration = <Backend as Simulate>::Concentration;
@@ -48,7 +48,7 @@ impl<Backend: SimulateImpl, BlockSize: BlockSizeSelector> Simulate
     }
 }
 //
-impl<Backend: SimulateImpl, BlockSize: BlockSizeSelector> SimulateImpl
+impl<Backend: SimulateCpu, BlockSize: BlockSizeSelector> SimulateCpu
     for BlockWiseSimulation<Backend, BlockSize>
 {
     type Values = Backend::Values;
