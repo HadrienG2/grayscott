@@ -139,7 +139,7 @@ impl<C: Concentration> Evolving<C> {
 /// dimensions had been allocated.
 pub trait Concentration: Sized {
     /// Parameters needed to initialize and operate on the concentration storage
-    type Context;
+    type Context: Sized;
 
     /// Errors returned from methods
     type Error: Sized;
