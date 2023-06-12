@@ -5,7 +5,7 @@ use crate::{
     Precision,
 };
 use hdf5::{Dataset, File};
-use std::path::Path;
+use std::{borrow::Borrow, path::Path};
 
 pub use hdf5::Result;
 
@@ -57,7 +57,7 @@ impl Writer {
     /// Write a new V species concentration to the file
     pub fn write(&mut self, species: &mut Species<impl Concentration>) -> Result<()> {
         self.0.dataset.write_slice(
-            species.v.make_scalar_input_view(),
+            species.v.make_scalar_input_view()?.borrow(),
             (self.0.position, .., ..),
         )?;
         self.0.position += 1;

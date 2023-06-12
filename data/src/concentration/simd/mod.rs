@@ -5,7 +5,7 @@ mod safe_arch;
 #[cfg(feature = "slipstream")]
 mod slipstream;
 
-use super::{Concentration, ScalarConcentration, ScalarConcentrationView};
+use super::{Concentration, ScalarConcentration};
 use crate::{
     array2, array_each_mut,
     parameters::{stencil_offset, STENCIL_SHAPE},
@@ -14,6 +14,7 @@ use crate::{
 use ndarray::{s, Array2, ArrayView2, ArrayViewMut2, Axis};
 use std::{
     array,
+    convert::Infallible,
     ops::{BitAnd, Range},
 };
 
@@ -128,16 +129,20 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vec
 impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
     for SIMDConcentration<WIDTH, Vector>
 {
-    fn default(shape: [usize; 2]) -> Self {
-        Self::from_scalar_elem(shape, Precision::default())
+    type Context = ();
+
+    type Error = Infallible;
+
+    fn default(_context: &mut (), shape: [usize; 2]) -> Result<Self, Infallible> {
+        Ok(Self::from_scalar_elem(shape, Precision::default()))
     }
 
-    fn zeros(shape: [usize; 2]) -> Self {
-        Self::from_scalar_elem(shape, 0.0)
+    fn zeros(_context: &mut (), shape: [usize; 2]) -> Result<Self, Infallible> {
+        Ok(Self::from_scalar_elem(shape, 0.0))
     }
 
-    fn ones(shape: [usize; 2]) -> Self {
-        Self::from_scalar_elem(shape, 1.0)
+    fn ones(_context: &mut (), shape: [usize; 2]) -> Result<Self, Infallible> {
+        Ok(Self::from_scalar_elem(shape, 1.0))
     }
 
     fn shape(&self) -> [usize; 2] {
@@ -152,7 +157,12 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
         [rows, cols]
     }
 
-    fn fill_slice(&mut self, [scalar_rows, cols]: [Range<usize>; 2], value: Precision) {
+    fn fill_slice(
+        &mut self,
+        _context: &mut (),
+        [scalar_rows, cols]: [Range<usize>; 2],
+        value: Precision,
+    ) -> Result<(), Infallible> {
         // Ignore stencil edges which are not affected by this operation
         let mut simd_center = self.simd_center_mut();
 
@@ -177,9 +187,10 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
             }
             current_row.increment();
         }
+        Ok(())
     }
 
-    fn finalize(&mut self) {
+    fn finalize(&mut self, _context: &mut ()) -> Result<(), Infallible> {
         // Ignore the left and right edge, these should stay at 0 forever
         let [center_rows, center_cols] = self.simd_center_range();
         debug_assert!((self.simd.slice(s![.., ..center_cols.start]).iter())
@@ -223,9 +234,12 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
                 bottom_block.fill(Vector::splat(0.0));
             }
         }
+        Ok(())
     }
 
-    fn make_scalar_view(&mut self) -> ScalarConcentrationView {
+    type ScalarView<'a> = ArrayView2<'a, Precision>;
+
+    fn make_scalar_view(&mut self, _context: &mut ()) -> Result<Self::ScalarView<'_>, Infallible> {
         // Lazily allocate scalar data storage
         if self.scalar.is_empty() {
             self.scalar = ScalarConcentration::default(self.shape());
@@ -307,13 +321,13 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
         }
 
         // Emit the scalar results
-        self.scalar.view()
+        Ok(self.scalar.view())
     }
 }
 
 /// SIMD vector of floating-point values, as needed by SIMDConcentration
 pub trait SIMDValues<const WIDTH: usize, Element = Precision>:
-    Copy + PartialEq + Into<[Element; WIDTH]>
+    Copy + PartialEq + Into<[Element; WIDTH]> + 'static
 {
     /// Matching vector type for vector of indices
     type Indices: SIMDIndices<WIDTH, Mask = Self::Mask>;

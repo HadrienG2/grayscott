@@ -11,7 +11,7 @@ pub trait Simulate {
     type Concentration: data::concentration::Concentration;
 
     /// Set up the simulation
-    fn new(params: Parameters) -> Self;
+    fn new(params: Parameters) -> (Self, Self::Concentration::InitParameters);
 
     /// Perform `steps` simulation time steps
     ///
@@ -33,7 +33,7 @@ pub trait SimulateStep {
     type Concentration: data::concentration::Concentration;
 
     /// Set up the simulation
-    fn new(params: Parameters) -> Self;
+    fn new(params: Parameters) -> (Self, Self::Concentration::InitParameters);
 
     /// Perform a single simulation time step
     ///
