@@ -212,7 +212,7 @@ pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name
     let sim = Simulation::new(black_box(Parameters::default())).unwrap();
     let mut group = c.benchmark_group(format!("{backend_name}::steps"));
     for num_steps in 1..10 {
-        for size_pow2 in 3..=9 {
+        for size_pow2 in 3..=10 {
             let size = 2usize.pow(size_pow2);
             let shape = [size, 2 * size];
             let num_elems = (shape[0] * shape[1]) as u64;
@@ -220,11 +220,16 @@ pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name
             let mut species = sim.make_species(black_box(shape)).unwrap();
 
             group.throughput(Throughput::Elements(num_elems * num_steps));
-            group.bench_function(BenchmarkId::from_parameter(format!("{num_elems}elems,{num_steps}steps")), |b| {
-                b.iter(|| {
-                    sim.perform_steps(&mut species, num_steps as usize).unwrap();
-                });
-            });
+            group.bench_function(
+                BenchmarkId::from_parameter(
+                    format!("{}x{}elems,{}steps", shape[1], shape[0], num_steps)
+                ),
+                |b| {
+                    b.iter(|| {
+                        sim.perform_steps(&mut species, num_steps as usize).unwrap();
+                    });
+                }
+            );
         }
     }
     group.finish();

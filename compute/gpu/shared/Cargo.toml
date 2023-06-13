@@ -9,5 +9,4 @@ vulkano.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-# TODO: Remove once done testing
-env_logger = "0.10"
+env_logger.workspace = true

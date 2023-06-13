@@ -213,7 +213,8 @@ impl ImageConcentration {
         assert_eq!(
             self.owner,
             Owner::Gpu,
-            "Some CPU-side data hasn't been uploaded yet. Did you call finalize()?"
+            "Some CPU-side data hasn't been uploaded yet. \
+            Did you call finalize() after your last CPU-side modification?"
         );
         &self.gpu_image
     }
