@@ -7,7 +7,7 @@
 //! computation. Better code generation can be obtained by discriminating these
 //! two scenarios.
 
-use compute::SimulateStep;
+use compute::{SimulateBase, SimulateStep};
 use data::{
     array2,
     concentration::ScalarConcentration,
@@ -15,7 +15,7 @@ use data::{
     Precision,
 };
 use ndarray::{s, ArrayView2};
-use std::ops::Range;
+use std::{convert::Infallible, ops::Range};
 
 /// Chosen concentration type
 type Species = data::concentration::Species<ScalarConcentration>;
@@ -25,15 +25,22 @@ pub struct Simulation {
     /// Simulation parameters
     params: Parameters,
 }
-//
-impl SimulateStep for Simulation {
+impl SimulateBase for Simulation {
     type Concentration = ScalarConcentration;
 
-    fn new(params: Parameters) -> Self {
-        Self { params }
+    type Error = Infallible;
+
+    fn new(params: Parameters) -> Result<Self, Infallible> {
+        Ok(Self { params })
     }
 
-    fn step(&self, species: &mut Species) {
+    fn make_species(&self, shape: [usize; 2]) -> Result<Species, Infallible> {
+        Species::new((), shape)
+    }
+}
+//
+impl SimulateStep for Simulation {
+    fn perform_step(&self, species: &mut Species) -> Result<(), Infallible> {
         // Locate the regular center of the species concentration matrix
         let shape = species.shape();
         let stencil_offset = stencil_offset();
@@ -45,6 +52,7 @@ impl SimulateStep for Simulation {
         // Process the center and the edge of the matrix separately
         self.step_center(species, center_range.clone());
         self.step_edge(species, center_range);
+        Ok(())
     }
 }
 //

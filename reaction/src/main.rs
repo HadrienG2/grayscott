@@ -1,7 +1,6 @@
 use clap::Parser;
-use compute::Simulate;
+use compute::{Simulate, SimulateBase};
 use data::{
-    concentration::Species,
     hdf5::{self, Writer},
     parameters::Parameters,
     Precision,
@@ -64,20 +63,35 @@ cfg_if::cfg_if! {
     } else if #[cfg(any(feature = "compute_naive", test))] {
         type Simulation = compute_naive::Simulation;
     } else {
-        // If no backend was specified, use a backend skeleton that shows what
-        // the expected interface looks like and throws a compiler error.
-        use data::concentration::ScalarConcentration;
+        // If no backend was specified, use a backend skeleton that throws a
+        // minimal number of compiler errors.
+        use data::concentration::{ScalarConcentration, Species};
+        use std::convert::Infallible;
         //
         struct Simulation;
         //
-        impl Simulate for Simulation {
+        impl SimulateBase for Simulation {
             type Concentration = ScalarConcentration;
 
-            fn new(_params: Parameters) -> Self {
+            type Error = Infallible;
+
+            fn new(_params: Parameters) -> Result<Self, Infallible> {
                 std::compile_error!("Please enable at least one compute backend via crate features")
             }
 
-            fn steps(&self, _species: &mut Species<ScalarConcentration>, _steps: usize) {}
+            fn make_species(&self, shape: [usize; 2]) -> Result<Species<ScalarConcentration>, Infallible> {
+                Species::new((), shape)
+            }
+        }
+        //
+        impl Simulate for Simulation {
+            fn perform_steps(
+                &self,
+                _species: &mut Species<ScalarConcentration>,
+                _steps: usize
+            ) -> Result<(), Infallible> {
+                Ok(())
+            }
         }
     }
 }
@@ -109,11 +123,13 @@ fn main() {
         feed_rate,
         time_step,
         ..Default::default()
-    });
+    })
+    .expect("Failed to create simulation");
 
     // Set up chemical species concentration storage
-    type Concentration = <Simulation as Simulate>::Concentration;
-    let mut species = Species::<Concentration>::new([args.nbrow, args.nbcol]);
+    let mut species = simulation
+        .make_species([args.nbrow, args.nbcol])
+        .expect("Failed to set up simulation grid");
     let mut writer = Writer::create(
         hdf5::Config {
             file_name,
@@ -137,11 +153,17 @@ fn main() {
     // Run the simulation
     for _ in (0..args.nbimage).progress_with(progress) {
         // Move the simulation forward
-        simulation.steps(&mut species, steps_per_image);
+        simulation
+            .perform_steps(&mut species, steps_per_image)
+            .expect("Failed to compute simulation steps");
 
         // Write a new image
         writer
-            .write(&mut species)
+            .write(
+                species
+                    .make_result_view()
+                    .expect("Failed to extract result"),
+            )
             .expect("Failed to write down results");
     }
 

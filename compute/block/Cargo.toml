@@ -6,8 +6,9 @@ edition.workspace = true
 [dependencies]
 compute.workspace = true
 compute_autovec.workspace = true
-data = { workspace = true, features = ["slipstream"] }
+data.workspace = true
 hwlocality.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 compute = { workspace = true, features = ["criterion"] }

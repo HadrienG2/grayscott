@@ -18,9 +18,6 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace.dependencies]
-# Used to hide Vulkan error handling complexity under an early exit rug ;)
-anyhow = "1.0"
-
 # Used to safely manipulate data as bytes
 bytemuck = "1.13"
 
@@ -58,6 +55,9 @@ log = "0.4"
 # Basic multidimensional array abstraction
 ndarray = "0.15"
 
+# Used to safely handle self-referential data
+ouroboros = "0.15"
+
 # Data-parallelism library
 rayon = "1.7"
 
@@ -69,6 +69,9 @@ slipstream = "0.2.1"
 
 # Syslog-based log output
 syslog = "6.1"
+
+# Used to ease writing new error types
+thiserror = "1.0"
 
 # Interface to the Vulkan GPU library
 vulkano = "0.33"

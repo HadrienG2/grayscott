@@ -8,15 +8,18 @@
 //! vectorize those anymore.
 
 use cfg_if::cfg_if;
-use compute::{CpuGrid, SimulateCpu, SimulateStep};
+use compute::{CpuGrid, SimulateBase, SimulateCpu};
 use data::{
-    concentration::{simd::SIMDConcentration, Species},
+    concentration::simd::SIMDConcentration,
     parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
     Precision,
 };
+use std::convert::Infallible;
 
-/// Chosen concentration type
+/// Chosen concentration type (see below for vector size choice details)
 pub type Values = <Precision as Scalar>::Vectorized;
+type Concentration = SIMDConcentration<{ Values::WIDTH }, Values>;
+type Species = data::concentration::Species<Concentration>;
 
 /// Gray-Scott reaction simulation
 pub struct Simulation {
@@ -24,22 +27,24 @@ pub struct Simulation {
     params: Parameters,
 }
 //
-impl SimulateStep for Simulation {
-    type Concentration = SIMDConcentration<{ Values::WIDTH }, Values>;
+impl SimulateBase for Simulation {
+    type Concentration = Concentration;
 
-    fn new(params: Parameters) -> Self {
-        Self { params }
+    type Error = Infallible;
+
+    fn new(params: Parameters) -> Result<Self, Infallible> {
+        Ok(Self { params })
     }
 
-    fn step(&self, species: &mut Species<Self::Concentration>) {
-        self.step_impl(Self::extract_grid(species));
+    fn make_species(&self, shape: [usize; 2]) -> Result<Species, Infallible> {
+        Species::new((), shape)
     }
 }
 //
 impl SimulateCpu for Simulation {
     type Values = Values;
 
-    fn extract_grid(species: &mut Species<Self::Concentration>) -> CpuGrid<Self::Values> {
+    fn extract_grid(species: &mut Species) -> CpuGrid<Self::Values> {
         let (in_u, out_u) = species.u.in_out();
         let (in_v, out_v) = species.v.in_out();
         (
