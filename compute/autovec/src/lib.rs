@@ -8,48 +8,18 @@
 //! revolving around picking the right vector width.
 
 use cfg_if::cfg_if;
-use compute::{CpuGrid, SimulateCpu, SimulateStep};
+use compute::{CpuGrid, SimulateBase, SimulateCpu};
 use data::{
-    concentration::{simd::SIMDConcentration, Species},
+    concentration::simd::SIMDConcentration,
     parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
     Precision,
 };
 use slipstream::{vector::align, Vector};
+use std::convert::Infallible;
 
-// Pick vector size based on hardware support for vectorization of
-// floating-point operations (which are the bulk of our SIMD workload)
-const PRECISION_SIZE: usize = std::mem::size_of::<Precision>();
-cfg_if! {
-    if #[cfg(target_feature = "avx512f")] {
-        pub const WIDTH: usize = 64 / PRECISION_SIZE;
-        pub type Values = Vector<align::Align64, Precision, WIDTH>;
-    } else if #[cfg(target_feature = "avx")] {
-        pub const WIDTH: usize = 32 / PRECISION_SIZE;
-        pub type Values = Vector<align::Align32, Precision, WIDTH>;
-    } else {
-        // NOTE: While most non-Intel CPUs use 128-bit vectorization, not all do.
-        //       A benefit of autovectorization, however, is that supporting new
-        //       hardware can just be a matter of adding cases in this cfg_if.
-        pub const WIDTH: usize = 16 / PRECISION_SIZE;
-        pub type Values = Vector<align::Align16, Precision, WIDTH>;
-    }
-}
-
-// Use FMA if supported in hardware (unlike GCC, LLVM does not do it automatically)
-cfg_if! {
-    // NOTE: Extend this when porting to more CPU architectures
-    if #[cfg(any(target_feature = "fma", target_feature = "vfp4"))] {
-        #[inline(always)]
-        pub fn mul_add(x: Values, y: Values, z: Values) -> Values {
-            x.mul_add(y, z)
-        }
-    } else {
-        #[inline(always)]
-        pub fn mul_add(x: Values, y: Values, z: Values) -> Values {
-            x * y + z
-        }
-   }
-}
+/// Chosen concentration type (see below for vector size choice details)
+type Concentration = SIMDConcentration<WIDTH, Values>;
+type Species = data::concentration::Species<Concentration>;
 
 /// Gray-Scott reaction simulation
 pub struct Simulation {
@@ -57,22 +27,24 @@ pub struct Simulation {
     params: Parameters,
 }
 //
-impl SimulateStep for Simulation {
-    type Concentration = SIMDConcentration<WIDTH, Values>;
+impl SimulateBase for Simulation {
+    type Concentration = Concentration;
 
-    fn new(params: Parameters) -> Self {
-        Self { params }
+    type Error = Infallible;
+
+    fn new(params: Parameters) -> Result<Self, Infallible> {
+        Ok(Self { params })
     }
 
-    fn step(&self, species: &mut Species<Self::Concentration>) {
-        self.step_impl(Self::extract_grid(species));
+    fn make_species(&self, shape: [usize; 2]) -> Result<Species, Infallible> {
+        Species::new((), shape)
     }
 }
 //
 impl SimulateCpu for Simulation {
     type Values = Values;
 
-    fn extract_grid(species: &mut Species<Self::Concentration>) -> CpuGrid<Self::Values> {
+    fn extract_grid(species: &mut Species) -> CpuGrid<Values> {
         let (in_u, out_u) = species.u.in_out();
         let (in_v, out_v) = species.v.in_out();
         (
@@ -83,7 +55,7 @@ impl SimulateCpu for Simulation {
 
     fn unchecked_step_impl(
         &self,
-        ([in_u, in_v], [mut out_u_center, mut out_v_center]): CpuGrid<Self::Values>,
+        ([in_u, in_v], [mut out_u_center, mut out_v_center]): CpuGrid<Values>,
     ) {
         // Determine offset from the top-left corner of the stencil to its center
         let stencil_offset = stencil_offset();
@@ -139,4 +111,39 @@ impl SimulateCpu for Simulation {
             *out_v = mul_add(dv, time_step, v);
         }
     }
+}
+
+// Pick vector size based on hardware support for vectorization of
+// floating-point operations (which are the bulk of our SIMD workload)
+const PRECISION_SIZE: usize = std::mem::size_of::<Precision>();
+cfg_if! {
+    if #[cfg(target_feature = "avx512f")] {
+        pub const WIDTH: usize = 64 / PRECISION_SIZE;
+        pub type Values = Vector<align::Align64, Precision, WIDTH>;
+    } else if #[cfg(target_feature = "avx")] {
+        pub const WIDTH: usize = 32 / PRECISION_SIZE;
+        pub type Values = Vector<align::Align32, Precision, WIDTH>;
+    } else {
+        // NOTE: While most non-Intel CPUs use 128-bit vectorization, not all do.
+        //       A benefit of autovectorization, however, is that supporting new
+        //       hardware can just be a matter of adding cases in this cfg_if.
+        pub const WIDTH: usize = 16 / PRECISION_SIZE;
+        pub type Values = Vector<align::Align16, Precision, WIDTH>;
+    }
+}
+
+// Use FMA if supported in hardware (unlike GCC, LLVM does not do it automatically)
+cfg_if! {
+    // NOTE: Extend this when porting to more CPU architectures
+    if #[cfg(any(target_feature = "fma", target_feature = "vfp4"))] {
+        #[inline(always)]
+        pub fn mul_add(x: Values, y: Values, z: Values) -> Values {
+            x.mul_add(y, z)
+        }
+    } else {
+        #[inline(always)]
+        pub fn mul_add(x: Values, y: Values, z: Values) -> Values {
+            x * y + z
+        }
+   }
 }

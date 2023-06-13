@@ -48,7 +48,7 @@ impl<A: Align, const WIDTH: usize> SIMDIndices<WIDTH> for Vector<A, i32, WIDTH> 
     }
 }
 
-impl<A: Align, const WIDTH: usize> SIMDValues<WIDTH> for Vector<A, Precision, WIDTH> {
+impl<A: Align + 'static, const WIDTH: usize> SIMDValues<WIDTH> for Vector<A, Precision, WIDTH> {
     type Indices = Vector<A, i32, WIDTH>;
 
     type Mask = <Self as Masked>::Mask;

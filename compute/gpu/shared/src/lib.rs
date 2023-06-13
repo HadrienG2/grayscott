@@ -1,7 +1,7 @@
-use anyhow::anyhow;
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
 use std::{cmp::Ordering, ops::Deref, sync::Arc};
+use thiserror::Error;
 use vulkano::{
     command_buffer::allocator::{
         CommandBufferAllocator, StandardCommandBufferAllocator,
@@ -9,18 +9,18 @@ use vulkano::{
     },
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
-        Device, DeviceCreateInfo, DeviceExtensions, Features, Queue, QueueCreateInfo,
-        QueueFamilyProperties, QueueFlags,
+        Device, DeviceCreateInfo, DeviceCreationError, DeviceExtensions, Features, Queue,
+        QueueCreateInfo, QueueFamilyProperties, QueueFlags,
     },
     instance::{
         debug::{
             DebugUtilsMessageSeverity, DebugUtilsMessageType, DebugUtilsMessenger,
-            DebugUtilsMessengerCreateInfo, Message,
+            DebugUtilsMessengerCreateInfo, DebugUtilsMessengerCreationError, Message,
         },
-        Instance, InstanceCreateInfo, InstanceExtensions, Version,
+        Instance, InstanceCreateInfo, InstanceCreationError, InstanceExtensions, Version,
     },
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
-    ExtensionProperties, VulkanLibrary,
+    ExtensionProperties, LoadingError, OomError, VulkanError, VulkanLibrary,
 };
 
 /// Vulkan compute context
@@ -271,9 +271,9 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
     /// ```
     /// # use compute_gpu::VulkanConfig;
     /// let context = VulkanConfig::default().setup()?;
-    /// # Ok::<(), anyhow::Error>(())
+    /// # Ok::<(), compute_gpu::Error>(())
     /// ```
-    pub fn setup(mut self) -> anyhow::Result<VulkanContext<MemAlloc, CommAlloc>> {
+    pub fn setup(mut self) -> Result<VulkanContext<MemAlloc, CommAlloc>> {
         let library = load_library()?;
 
         let instance = setup_instance(
@@ -314,6 +314,33 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
         })
     }
 }
+
+/// Things that can go wrong while setting up a VulkanContext
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("failed to create a debug utils messenger")]
+    DebugUtilsMessengerCreation(#[from] DebugUtilsMessengerCreationError),
+
+    #[error("failed to create logical device")]
+    DeviceCreation(#[from] DeviceCreationError),
+
+    #[error("failed to create a Vulkan instance")]
+    InstanceCreation(#[from] InstanceCreationError),
+
+    #[error("failed to load the Vulkan library")]
+    Loading(#[from] LoadingError),
+
+    #[error("no physical device matches requirements")]
+    NoMatchingDevice,
+
+    #[error("ran out of memory")]
+    Oom(#[from] OomError),
+
+    #[error("encountered Vulkan runtime error")]
+    Vulkan(#[from] VulkanError),
+}
+//
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Suggested set of layers to enable
 #[allow(unused_variables)]
@@ -419,7 +446,7 @@ fn default_command_buffer_allocator(device: Arc<Device>) -> StandardCommandBuffe
 }
 
 /// Load the Vulkan library
-fn load_library() -> anyhow::Result<Arc<VulkanLibrary>> {
+fn load_library() -> Result<Arc<VulkanLibrary>> {
     let library = VulkanLibrary::new()?;
     info!("Loaded Vulkan library");
     trace!("- Supports Vulkan v{}", library.api_version());
@@ -460,7 +487,7 @@ fn setup_instance(
     enabled_layers: Vec<String>,
     enabled_extensions: InstanceExtensions,
     enumerate_portability: bool,
-) -> anyhow::Result<DebuggedInstance> {
+) -> Result<DebuggedInstance> {
     let unsupported_extensions = *library.supported_extensions()
         - library.supported_extensions_with_layers(enabled_layers.iter().map(String::as_ref))?;
     if unsupported_extensions != InstanceExtensions::empty() {
@@ -572,7 +599,7 @@ fn select_physical_device(
     instance: &DebuggedInstance,
     mut requirements: impl FnMut(&PhysicalDevice) -> bool,
     mut preference: impl FnMut(&PhysicalDevice, &PhysicalDevice) -> Ordering,
-) -> anyhow::Result<Arc<PhysicalDevice>> {
+) -> Result<Arc<PhysicalDevice>> {
     let selected_device = instance
         .enumerate_physical_devices()?
         .inspect(|device| {
@@ -609,7 +636,7 @@ fn select_physical_device(
         info!("Selected device {}", device.properties().device_name);
         Ok(device)
     } else {
-        Err(anyhow!("Did not find any device matching requirements"))
+        Err(Error::NoMatchingDevice)
     }
 }
 
@@ -631,7 +658,7 @@ fn create_logical_device(
     enabled_features: Features,
     enabled_extensions: DeviceExtensions,
     queue_create_infos: Vec<QueueCreateInfo>,
-) -> anyhow::Result<(Arc<Device>, Box<[Arc<Queue>]>)> {
+) -> Result<(Arc<Device>, Box<[Arc<Queue>]>)> {
     let create_info = DeviceCreateInfo {
         enabled_features,
         enabled_extensions,
@@ -665,7 +692,7 @@ mod tests {
     }
 
     #[test]
-    fn setup_vulkan() -> anyhow::Result<()> {
+    fn setup_vulkan() -> Result<()> {
         init_logger();
         VulkanConfig {
             enumerate_portability: true,

@@ -7,7 +7,6 @@ pub mod simd;
 use crate::array2;
 use crate::Precision;
 use ndarray::{s, Array2, ArrayView2};
-use std::borrow::Borrow;
 use std::convert::Infallible;
 use std::ops::Range;
 
@@ -28,7 +27,11 @@ pub struct Species<C: Concentration> {
 impl<C: Concentration> Species<C> {
     /// Set up species concentration storage as the C++ version does
     ///
-    /// `shape` specifies the concentration matrix dimensions, e.g. [1080, 1920]
+    /// - `context` provides some additional context needed to set up storage.
+    ///   For simpler containers, this will be (), but more advanced use cases
+    ///   like GPU need this possibility.
+    /// - `shape` specifies the concentration matrix dimensions in
+    ///   [rows, columns] format, e.g. [1080, 1920]
     pub fn new(mut context: C::Context, shape: [usize; 2]) -> Result<Self, C::Error> {
         // Start with U = 1.0 and V = 0.0 everywhere
         let mut u = Evolving::<C>::ones_out(&mut context, shape)?;
@@ -64,11 +67,21 @@ impl<C: Concentration> Species<C> {
         self.u.raw_shape()
     }
 
-    /// Make the output concentrations become the input ones
+    /// Make the output concentrations become the input ones and vice versa
     pub fn flip(&mut self) -> Result<(), C::Error> {
         self.u.flip(&mut self.context)?;
         self.v.flip(&mut self.context)?;
         Ok(())
+    }
+
+    /// Access a scalar view of V's current input concentration
+    ///
+    /// The concentration of the V species is the effective result of the
+    /// simulation (what gets stored to HDF5, etc). For some compute backends
+    /// (SIMD, GPU...), some expensive preprocessing steps may be needed in
+    /// order to get to a normal 2D view of it. This is how you get this done.
+    pub fn make_result_view(&mut self) -> Result<C::ScalarView<'_>, C::Error> {
+        self.v.0[0].make_scalar_view(&mut self.context)
     }
 }
 
@@ -81,11 +94,6 @@ impl<C: Concentration> Evolving<C> {
     pub fn in_out(&mut self) -> (&C, &mut C) {
         let [input, output] = &mut self.0;
         (input, output)
-    }
-
-    /// View the input concentration as a 2D array of scalars
-    pub fn make_scalar_input_view(&mut self) -> Result<C::ScalarView<'_>, C::Error> {
-        self.0[0].make_scalar_view()
     }
 
     /// Set up concentration storage with all-zeros output concentration
@@ -142,7 +150,7 @@ pub trait Concentration: Sized {
     type Context: Sized;
 
     /// Errors returned from methods
-    type Error: Sized;
+    type Error: std::error::Error + Send + Sync + Sized + 'static;
 
     /// Create an array of a certain shape, whose contents are meant to be overwritten
     fn default(context: &mut Self::Context, shape: [usize; 2]) -> Result<Self, Self::Error>;
@@ -190,12 +198,12 @@ pub trait Concentration: Sized {
     /// (e.g. duplication, zeroing of elements, submission of GPU commands...),
     /// which we don't want to perform on every operation but only when the
     /// final output is going to be read.
-    fn finalize(&mut self, context: &mut Self::Context) -> Result<(), Self::Error> {
+    fn finalize(&mut self, _context: &mut Self::Context) -> Result<(), Self::Error> {
         Ok(())
     }
 
     /// Reinterpretation of the matrix as a 2D ndarray
-    type ScalarView<'a>: Borrow<ArrayView2<'a, Precision>>
+    type ScalarView<'a>: AsScalars
     where
         Self: 'a;
 
@@ -206,6 +214,11 @@ pub trait Concentration: Sized {
         &mut self,
         context: &mut Self::Context,
     ) -> Result<Self::ScalarView<'_>, Self::Error>;
+}
+//
+/// Data that can be reinterpreted as a 2D ndarray of scalar data
+pub trait AsScalars {
+    fn as_scalars(&self) -> ArrayView2<Precision>;
 }
 
 /// Straightforward Concentration implementation based on an ndarray of floats
@@ -248,5 +261,11 @@ impl Concentration for ScalarConcentration {
 
     fn make_scalar_view(&mut self, _context: &mut ()) -> Result<Self::ScalarView<'_>, Infallible> {
         Ok(self.view())
+    }
+}
+//
+impl AsScalars for ArrayView2<'_, Precision> {
+    fn as_scalars(&self) -> ArrayView2<Precision> {
+        self.reborrow()
     }
 }

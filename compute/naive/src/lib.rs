@@ -3,12 +3,16 @@
 //! This version follows the logic of the naive_propagation.cpp example from the
 //! C++ tutorial, and is slow for the same reason.
 
-use compute::SimulateStep;
+use compute::{SimulateBase, SimulateStep};
 use data::{
     array2,
-    concentration::{ScalarConcentration, Species},
+    concentration::ScalarConcentration,
     parameters::{stencil_offset, Parameters},
 };
+use std::convert::Infallible;
+
+/// Chosen concentration type
+type Species = data::concentration::Species<ScalarConcentration>;
 
 /// Gray-Scott reaction simulation
 pub struct Simulation {
@@ -16,14 +20,22 @@ pub struct Simulation {
     params: Parameters,
 }
 //
-impl SimulateStep for Simulation {
+impl SimulateBase for Simulation {
     type Concentration = ScalarConcentration;
 
-    fn new(params: Parameters) -> Self {
-        Self { params }
+    type Error = Infallible;
+
+    fn new(params: Parameters) -> Result<Self, Infallible> {
+        Ok(Self { params })
     }
 
-    fn step(&self, species: &mut Species<ScalarConcentration>) {
+    fn make_species(&self, shape: [usize; 2]) -> Result<Species, Infallible> {
+        Species::new((), shape)
+    }
+}
+//
+impl SimulateStep for Simulation {
+    fn perform_step(&self, species: &mut Species) -> Result<(), Infallible> {
         // Access species concentration matrices
         let shape = species.shape();
         let (in_u, out_u) = species.u.in_out();
@@ -61,5 +73,6 @@ impl SimulateStep for Simulation {
             *out_u = u + du * params.time_step;
             *out_v = v + dv * params.time_step;
         });
+        Ok(())
     }
 }

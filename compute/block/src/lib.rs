@@ -4,10 +4,14 @@
 //! memory bound. This version uses cache blocking techniques to improve the CPU
 //! cache hit rate, getting us back into compute-bound territory.
 
-use compute::{CpuGrid, Simulate, SimulateCpu, SimulateStep};
-use data::{concentration::Species, parameters::Parameters};
-use hwlocality::Topology;
+use compute::{CpuGrid, SimulateBase, SimulateCpu};
+use data::{
+    concentration::{Concentration, Species},
+    parameters::Parameters,
+};
+use hwlocality::{errors::RawHwlocError, Topology};
 use std::marker::PhantomData;
+use thiserror::Error;
 
 /// Gray-Scott reaction simulation
 pub type Simulation = BlockWiseSimulation<compute_autovec::Simulation, SingleCore>;
@@ -25,26 +29,29 @@ pub struct BlockWiseSimulation<Backend: SimulateCpu, BlockSize: BlockSizeSelecto
     block_size: PhantomData<BlockSize>,
 }
 //
-impl<Backend: SimulateCpu, BlockSize: BlockSizeSelector> SimulateStep
+impl<Backend: SimulateCpu, BlockSize: BlockSizeSelector> SimulateBase
     for BlockWiseSimulation<Backend, BlockSize>
 {
-    type Concentration = <Backend as Simulate>::Concentration;
+    type Concentration = <Backend as SimulateBase>::Concentration;
 
-    fn new(params: Parameters) -> Self {
+    type Error =
+        Error<<Backend as SimulateBase>::Error, <Self::Concentration as Concentration>::Error>;
+
+    fn new(params: Parameters) -> Result<Self, Self::Error> {
         // Determine the desired block size in bytes
-        let topology = Topology::new().expect("Failed to probe hwloc topology");
+        let topology = Topology::new().map_err(Error::Hwloc)?;
         let max_bytes_per_block = BlockSize::block_size(&topology);
 
         // Translate that into a number of SIMD vectors
-        Self {
+        Ok(Self {
             max_values_per_block: max_bytes_per_block / std::mem::size_of::<Backend::Values>(),
-            backend: Backend::new(params),
+            backend: Backend::new(params).map_err(Error::Backend)?,
             block_size: PhantomData,
-        }
+        })
     }
 
-    fn step(&self, species: &mut Species<Self::Concentration>) {
-        self.step_impl(Self::extract_grid(species));
+    fn make_species(&self, shape: [usize; 2]) -> Result<Species<Self::Concentration>, Self::Error> {
+        self.backend.make_species(shape).map_err(Error::Backend)
     }
 }
 //
@@ -88,4 +95,25 @@ impl BlockSizeSelector for SingleCore {
     fn block_size(topology: &Topology) -> usize {
         topology.cpu_cache_stats().smallest_data_cache_sizes()[0] as usize
     }
+}
+
+/// Things that can go wrong when performing block-wise simulation
+#[derive(Clone, Debug, Error)]
+pub enum Error<BackendError: std::error::Error, ConcentrationError: std::error::Error> {
+    /// Error from the backend
+    #[error(transparent)]
+    Backend(BackendError),
+
+    /// Error from hwloc
+    #[error("failed to query hardware topology")]
+    Hwloc(RawHwlocError),
+
+    /// Error from the Concentration implementation
+    ///
+    /// In an ideal world, this error kind wouldn't be needed, as Backend can
+    /// cover this case. But Rust is not yet smart enough to treat From as
+    /// a transitive operation (if T: From<U> and U: From<V>, then T: From<V>).
+    #[doc(hidden)]
+    #[error(transparent)]
+    Concentration(#[from] ConcentrationError),
 }

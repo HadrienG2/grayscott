@@ -2,22 +2,39 @@
 
 #[cfg(feature = "criterion")]
 use criterion::{BenchmarkId, Criterion, Throughput};
-use data::{concentration::Species, parameters::Parameters};
+use data::{concentration::{Species, Concentration}, parameters::Parameters};
 use ndarray::{Axis, ArrayView2, ArrayViewMut2};
+use std::error::Error;
 
-/// Simulation compute backend interface expected by the "reaction" CLI program
-pub trait Simulate {
+/// Commonalities between the two Simulate interfaces
+pub trait SimulateBase: Sized {
     /// Concentration type
-    type Concentration: data::concentration::Concentration;
+    type Concentration: Concentration;
+
+    /// Error type used by simulation operations
+    type Error: Error + From<<Self::Concentration as Concentration>::Error> + Send + Sync;
 
     /// Set up the simulation
-    fn new(params: Parameters) -> (Self, Self::Concentration::InitParameters);
+    fn new(params: Parameters) -> Result<Self, Self::Error>;
 
-    /// Perform `steps` simulation time steps
+    /// Set up a species concentration grid
+    fn make_species(
+        &self,
+        shape: [usize; 2],
+    ) -> Result<Species<Self::Concentration>, Self::Error>;
+}
+
+/// Simulation compute backend interface expected by the "reaction" CLI program
+pub trait Simulate: SimulateBase {
+    /// Perform `steps` simulation time steps on the specified grid
     ///
     /// At the end of the simulation, the input concentrations of `species` will
     /// contain the final simulation results.
-    fn steps(&self, species: &mut Species<Self::Concentration>, steps: usize);
+    fn perform_steps(
+        &self,
+        species: &mut Species<Self::Concentration>,
+        steps: usize
+    ) -> Result<(), Self::Error>;
 }
 
 /// Simplified version of Simulate that simulates a single time step at a time
@@ -28,33 +45,29 @@ pub trait Simulate {
 /// This is good enough for single- and multi-core CPU computations, but GPU
 /// and distributed computations may benefit from the batching of simulation
 /// time steps that is enabled by direct implementation of the `Simulate` trait.
-pub trait SimulateStep {
-    /// Concentration type
-    type Concentration: data::concentration::Concentration;
-
-    /// Set up the simulation
-    fn new(params: Parameters) -> (Self, Self::Concentration::InitParameters);
-
+pub trait SimulateStep: SimulateBase {
     /// Perform a single simulation time step
     ///
     /// At the end of the simulation, the output concentrations of `species`
     /// will contain the final simulation results. It is the job of the caller
     /// to flip the concentrations if they want the result to be their input.
-    fn step(&self, species: &mut Species<Self::Concentration>);
+    fn perform_step(
+        &self,
+        species: &mut Species<Self::Concentration>
+    ) -> Result<(), Self::Error>;
 }
 //
 impl<T: SimulateStep> Simulate for T {
-    type Concentration = <T as SimulateStep>::Concentration;
-
-    fn new(params: Parameters) -> Self {
-        <T as SimulateStep>::new(params)
-    }
-
-    fn steps(&self, species: &mut Species<Self::Concentration>, steps: usize) {
+    fn perform_steps(
+        &self,
+        species: &mut Species<Self::Concentration>,
+        steps: usize
+    ) -> Result<(), Self::Error> {
         for _ in 0..steps {
-            self.step(species);
-            species.flip();
+            self.perform_step(species)?;
+            species.flip()?;
         }
+        Ok(())
     }
 }
 
@@ -66,6 +79,8 @@ impl<T: SimulateStep> Simulate for T {
 /// This is used by the block-based backends (`block`, `parallel`, ...) to
 /// slice the original step computations into smaller sub-computations for
 /// cache locality and parallelization purposes.
+///
+/// If you implement this, then Simulate will be implemented automatically
 pub trait SimulateCpu: Simulate {
     /// Concentration values at a point on the simulation's grid
     ///
@@ -164,6 +179,15 @@ pub trait SimulateCpu: Simulate {
 /// that the input concentrations include a neighborhood of size
 /// [`data::parameters::stencil_offset()`] around the region of interest.
 pub type CpuGrid<'input, 'output, Values> = ([ArrayView2<'input, Values>; 2], [ArrayViewMut2<'output, Values>; 2]);
+//
+impl<T: SimulateCpu> SimulateStep for T {
+    fn perform_step(
+        &self,
+        species: &mut Species<Self::Concentration>,
+    ) -> Result<(), Self::Error> {
+        Ok(self.step_impl(Self::extract_grid(species)))
+    }
+}
 
 /// Macro that generates a complete criterion benchmark harness for you
 #[macro_export]
@@ -185,7 +209,7 @@ macro_rules! criterion_benchmark {
 pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name: &str) {
     use std::hint::black_box;
 
-    let sim = Simulation::new(black_box(Parameters::default()));
+    let sim = Simulation::new(black_box(Parameters::default())).unwrap();
     let mut group = c.benchmark_group(format!("{backend_name}::steps"));
     for num_steps in 1..10 {
         for size_pow2 in 3..=9 {
@@ -193,13 +217,12 @@ pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name
             let shape = [size, 2 * size];
             let num_elems = (shape[0] * shape[1]) as u64;
 
-            let mut species = Species::<Simulation::Concentration>::new(black_box(shape));
+            let mut species = sim.make_species(black_box(shape)).unwrap();
 
             group.throughput(Throughput::Elements(num_elems * num_steps));
             group.bench_function(BenchmarkId::from_parameter(format!("{num_elems}elems,{num_steps}steps")), |b| {
                 b.iter(|| {
-                    sim.steps(&mut species, num_steps as usize);
-                    species.flip();
+                    sim.perform_steps(&mut species, num_steps as usize).unwrap();
                 });
             });
         }

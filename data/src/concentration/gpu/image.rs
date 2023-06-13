@@ -1,25 +1,32 @@
 //! Image-based GPU concentration storage
 
-use crate::{concentration::Concentration, Precision};
+use crate::{
+    concentration::{AsScalars, Concentration},
+    Precision,
+};
 use ndarray::{s, ArrayView2, ArrayViewMut2};
 use std::{
     collections::{HashMap, HashSet},
     ops::Range,
     sync::Arc,
 };
+use thiserror::Error;
 use vulkano::{
-    buffer::{Buffer, BufferCreateInfo, BufferError, BufferUsage, Subbuffer},
+    buffer::{
+        subbuffer::BufferReadGuard, Buffer, BufferCreateInfo, BufferError, BufferUsage, Subbuffer,
+    },
     command_buffer::{
-        allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
-        CopyBufferToImageInfo, CopyImageToBufferInfo, PrimaryAutoCommandBuffer,
+        allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, BuildError,
+        CommandBufferBeginError, CommandBufferExecError, CommandBufferUsage, CopyBufferToImageInfo,
+        CopyError, CopyImageToBufferInfo, PrimaryAutoCommandBuffer,
     },
     device::Queue,
     format::Format,
-    image::{ImageAccess, ImageCreateFlags, ImageDimensions, ImageUsage, StorageImage},
+    image::{ImageAccess, ImageCreateFlags, ImageDimensions, ImageError, ImageUsage, StorageImage},
     memory::allocator::{
         AllocationCreateInfo, MemoryAllocatePreference, MemoryUsage, StandardMemoryAllocator,
     },
-    sync::GpuFuture,
+    sync::{FlushError, GpuFuture},
     DeviceSize,
 };
 
@@ -56,17 +63,17 @@ pub struct ImageConcentration {
 impl Concentration for ImageConcentration {
     type Context = ImageContext;
 
-    type Error = anyhow::Error;
+    type Error = Error;
 
-    fn default(context: &mut ImageContext, shape: [usize; 2]) -> anyhow::Result<Self> {
+    fn default(context: &mut ImageContext, shape: [usize; 2]) -> Result<Self> {
         Self::new(context, shape, Buffer::new_slice::<Precision>, Owner::Gpu)
     }
 
-    fn zeros(context: &mut ImageContext, shape: [usize; 2]) -> anyhow::Result<Self> {
+    fn zeros(context: &mut ImageContext, shape: [usize; 2]) -> Result<Self> {
         Self::constant(context, shape, 0.0)
     }
 
-    fn ones(context: &mut ImageContext, shape: [usize; 2]) -> anyhow::Result<Self> {
+    fn ones(context: &mut ImageContext, shape: [usize; 2]) -> Result<Self> {
         Self::constant(context, shape, 1.0)
     }
 
@@ -82,7 +89,7 @@ impl Concentration for ImageConcentration {
         context: &mut ImageContext,
         slice: [Range<usize>; 2],
         value: Precision,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         // If the image has already been used on GPU, download the new version
         if self.owner == Owner::Gpu {
             context.download(self.gpu_image.clone(), self.cpu_buffer.clone())?;
@@ -104,25 +111,23 @@ impl Concentration for ImageConcentration {
         Ok(())
     }
 
-    fn finalize(&mut self, context: &mut Self::Context) -> Result<(), Self::Error> {
+    fn finalize(&mut self, context: &mut Self::Context) -> Result<()> {
         context.upload_all()?;
         self.owner = Owner::Gpu;
         Ok(())
     }
 
-    // FIXME: This cannot literally be a ScalarConcentrationView, at best it can
-    //        be an AsRef<ScalarConcentrationView>. Fix the trait definition.
-    //        Also, I'll likely need self-ref types, try ouroboros.
-    type ScalarView<'a> = ArrayView2<'a, Precision>;
+    type ScalarView<'a> = ScalarView<'a>;
 
-    fn make_scalar_view(
-        &mut self,
-        context: &mut ImageContext,
-    ) -> anyhow::Result<Self::ScalarView<'_>> {
+    fn make_scalar_view(&mut self, context: &mut ImageContext) -> Result<Self::ScalarView<'_>> {
         context.download(self.gpu_image.clone(), self.cpu_buffer.clone())?;
-        let buffer_contents = self.cpu_buffer.read()?;
-        Ok(ArrayView2::from_shape(self.shape(), &mut buffer_contents)
-            .expect("The shape should be right"))
+        Ok(ScalarViewBuilder {
+            buffer: self.cpu_buffer.read()?,
+            view_builder: |buffer| {
+                ArrayView2::from_shape(self.shape(), &buffer).expect("The shape should be right")
+            },
+        }
+        .build())
     }
 }
 //
@@ -140,9 +145,9 @@ impl ImageConcentration {
             BufferCreateInfo,
             AllocationCreateInfo,
             DeviceSize,
-        ) -> Result<CpuBuffer, BufferError>,
+        ) -> std::result::Result<CpuBuffer, BufferError>,
         owner: Owner,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         let num_texels = rows * cols;
         let texel_size = std::mem::size_of::<Precision>();
         assert_eq!(texel_size, 4, "Must adjust image format");
@@ -182,11 +187,7 @@ impl ImageConcentration {
     }
 
     /// Variation of new() that sets all buffer elements to the same value
-    fn constant(
-        context: &mut ImageContext,
-        shape: [usize; 2],
-        element: Precision,
-    ) -> anyhow::Result<Self> {
+    fn constant(context: &mut ImageContext, shape: [usize; 2], element: Precision) -> Result<Self> {
         let result = Self::new(
             context,
             shape,
@@ -209,7 +210,30 @@ impl ImageConcentration {
     /// You must not cache this `Arc<StorageImage>` across simulation steps, as
     /// the actual image you are reading/writing will change between steps.
     pub fn access_image(&self) -> &Arc<StorageImage> {
+        assert_eq!(
+            self.owner,
+            Owner::Gpu,
+            "Some CPU-side data hasn't been uploaded yet. Did you call finalize()?"
+        );
         &self.gpu_image
+    }
+}
+
+/// Scalar CPU-side view of an ImageConcentration
+#[ouroboros::self_referencing]
+pub struct ScalarView<'concentration> {
+    /// Read lock on the CPU-side data
+    buffer: BufferReadGuard<'concentration, [Precision]>,
+
+    /// 2D array view that gets actually exposed to the user
+    #[borrows(buffer)]
+    #[not_covariant]
+    view: ArrayView2<'this, Precision>,
+}
+//
+impl AsScalars for ScalarView<'_> {
+    fn as_scalars(&self) -> ArrayView2<Precision> {
+        self.with_view(|view| view.reborrow())
     }
 }
 
@@ -248,7 +272,7 @@ impl ImageContext {
         command_allocator: Arc<CommAlloc>,
         upload_queue: Arc<Queue>,
         download_queue: Arc<Queue>,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         let queue_family_indices = [
             upload_queue.queue_family_index(),
             download_queue.queue_family_index(),
@@ -293,7 +317,7 @@ impl ImageContext {
     }
 
     /// Update the GPU view of all modified image
-    fn upload_all(&mut self) -> anyhow::Result<()> {
+    fn upload_all(&mut self) -> Result<()> {
         let mut builder = CommandBufferBuilder::primary(
             &self.command_allocator,
             self.upload_queue.queue_family_index(),
@@ -315,7 +339,7 @@ impl ImageContext {
     /// Unlike uploads, downloads are eager because we usually only need a
     /// single image on the CPU, so batching is a pessimization. Furthermore, it
     /// is hard to track when GPU images are modified, or even accessed.
-    fn download(&mut self, gpu: Arc<StorageImage>, cpu: CpuBuffer) -> anyhow::Result<()> {
+    fn download(&mut self, gpu: Arc<StorageImage>, cpu: CpuBuffer) -> Result<()> {
         assert!(
             !self.pending_uploads.contains_key(&cpu),
             "Attempting to download a stale image from the GPU. \
@@ -336,6 +360,33 @@ impl ImageContext {
     }
 }
 
+/// Errors that can occur while using images
+#[derive(Clone, Debug, Error)]
+pub enum Error {
+    #[error("failed to start recording a command buffer")]
+    CommandBufferBegin(#[from] CommandBufferBeginError),
+
+    #[error("failed to build a command buffer")]
+    CommandBufferBuild(#[from] BuildError),
+
+    #[error("failed to execute a command buffer")]
+    CommandBufferExec(#[from] CommandBufferExecError),
+
+    #[error("failed to record a copy command")]
+    Copy(#[from] CopyError),
+
+    #[error("failed to create or manipulate a buffer")]
+    Buffer(#[from] BufferError),
+
+    #[error("failed to submit commands to the GPU")]
+    Flush(#[from] FlushError),
+
+    #[error("failed to create or manipulate an image")]
+    Image(#[from] ImageError),
+}
+//
+pub type Result<T> = std::result::Result<T, Error>;
+
 /// Memory allocator (hardcoded for now)
 type MemAlloc = StandardMemoryAllocator;
 
@@ -348,6 +399,3 @@ type CommAlloc = StandardCommandBufferAllocator;
 /// Command buffer builder
 type CommandBufferBuilder<CommAlloc> =
     AutoCommandBufferBuilder<PrimaryAutoCommandBuffer, CommAlloc>;
-
-/// Command buffer
-type CommandBuffer<CommAlloc> = PrimaryAutoCommandBuffer<CommAlloc>;

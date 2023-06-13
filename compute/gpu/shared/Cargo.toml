@@ -4,9 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-anyhow.workspace = true
 log.workspace = true
 vulkano.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 # TODO: Remove once done testing
