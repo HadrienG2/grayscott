@@ -3,9 +3,7 @@
 use crate::{concentration::Concentration, Precision};
 use ndarray::{s, ArrayView2, ArrayViewMut2};
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    fmt::Debug,
-    hash::Hash,
+    collections::{HashMap, HashSet},
     ops::Range,
     sync::Arc,
 };
@@ -13,7 +11,7 @@ use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferError, BufferUsage, Subbuffer},
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
-        CopyBufferToImageInfo, CopyError, CopyImageToBufferInfo, PrimaryAutoCommandBuffer,
+        CopyBufferToImageInfo, CopyImageToBufferInfo, PrimaryAutoCommandBuffer,
     },
     device::Queue,
     format::Format,
@@ -50,6 +48,9 @@ pub struct ImageConcentration {
 
     /// CPU version of the concentration
     cpu_buffer: CpuBuffer,
+
+    /// Which device currently owns the data
+    owner: Owner,
 }
 //
 impl Concentration for ImageConcentration {
@@ -58,7 +59,7 @@ impl Concentration for ImageConcentration {
     type Error = anyhow::Error;
 
     fn default(context: &mut ImageContext, shape: [usize; 2]) -> anyhow::Result<Self> {
-        Self::new(context, shape, Buffer::new_slice::<Precision>)
+        Self::new(context, shape, Buffer::new_slice::<Precision>, Owner::Gpu)
     }
 
     fn zeros(context: &mut ImageContext, shape: [usize; 2]) -> anyhow::Result<Self> {
@@ -82,7 +83,13 @@ impl Concentration for ImageConcentration {
         slice: [Range<usize>; 2],
         value: Precision,
     ) -> anyhow::Result<()> {
-        context.download(&self.gpu_image)?;
+        // If the image has already been used on GPU, download the new version
+        if self.owner == Owner::Gpu {
+            context.download(self.gpu_image.clone(), self.cpu_buffer.clone())?;
+            self.owner = Owner::Cpu;
+        }
+
+        // Perform the desired modification
         {
             let mut buffer_contents = self.cpu_buffer.write()?;
             let slice = s![slice[0].clone(), slice[1].clone()];
@@ -91,7 +98,15 @@ impl Concentration for ImageConcentration {
                 .slice_mut(slice)
                 .fill(value);
         }
-        context.touch_cpu(&self.cpu_buffer, &self.gpu_image);
+
+        // Schedule an eventual upload to the GPU
+        context.schedule_upload(&self.cpu_buffer, &self.gpu_image);
+        Ok(())
+    }
+
+    fn finalize(&mut self, context: &mut Self::Context) -> Result<(), Self::Error> {
+        context.upload_all()?;
+        self.owner = Owner::Gpu;
         Ok(())
     }
 
@@ -104,7 +119,7 @@ impl Concentration for ImageConcentration {
         &mut self,
         context: &mut ImageContext,
     ) -> anyhow::Result<Self::ScalarView<'_>> {
-        context.download(&self.gpu_image)?;
+        context.download(self.gpu_image.clone(), self.cpu_buffer.clone())?;
         let buffer_contents = self.cpu_buffer.read()?;
         Ok(ArrayView2::from_shape(self.shape(), &mut buffer_contents)
             .expect("The shape should be right"))
@@ -126,45 +141,43 @@ impl ImageConcentration {
             AllocationCreateInfo,
             DeviceSize,
         ) -> Result<CpuBuffer, BufferError>,
+        owner: Owner,
     ) -> anyhow::Result<Self> {
-        let (gpu_image, cpu_buffer) =
-            context.register_image(|allocator, queue_family_indices| {
-                let num_texels = rows * cols;
-                let texel_size = std::mem::size_of::<Precision>();
-                assert_eq!(texel_size, 4, "Must adjust image format");
-                let gpu_image = StorageImage::with_usage(
-                    allocator,
-                    ImageDimensions::Dim2d {
-                        width: cols.try_into().unwrap(),
-                        height: rows.try_into().unwrap(),
-                        array_layers: 1,
-                    },
-                    Format::R32_SFLOAT,
-                    ImageUsage::TRANSFER_SRC
-                        | ImageUsage::TRANSFER_DST
-                        | ImageUsage::SAMPLED
-                        | ImageUsage::STORAGE,
-                    ImageCreateFlags::empty(),
-                    queue_family_indices.iter().copied(),
-                )?;
-                let cpu_buffer = make_buffer(
-                    allocator,
-                    BufferCreateInfo {
-                        usage: BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST,
-                        ..Default::default()
-                    },
-                    AllocationCreateInfo {
-                        usage: MemoryUsage::Download,
-                        allocate_preference: MemoryAllocatePreference::Unknown,
-                        ..Default::default()
-                    },
-                    num_texels.try_into().unwrap(),
-                )?;
-                Ok((gpu_image, cpu_buffer))
-            })?;
+        let num_texels = rows * cols;
+        let texel_size = std::mem::size_of::<Precision>();
+        assert_eq!(texel_size, 4, "Must adjust image format");
+        let gpu_image = StorageImage::with_usage(
+            context.memory_allocator(),
+            ImageDimensions::Dim2d {
+                width: cols.try_into().unwrap(),
+                height: rows.try_into().unwrap(),
+                array_layers: 1,
+            },
+            Format::R32_SFLOAT,
+            ImageUsage::TRANSFER_SRC
+                | ImageUsage::TRANSFER_DST
+                | ImageUsage::SAMPLED
+                | ImageUsage::STORAGE,
+            ImageCreateFlags::empty(),
+            context.queue_family_indices(),
+        )?;
+        let cpu_buffer = make_buffer(
+            context.memory_allocator(),
+            BufferCreateInfo {
+                usage: BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                usage: MemoryUsage::Download,
+                allocate_preference: MemoryAllocatePreference::Unknown,
+                ..Default::default()
+            },
+            num_texels.try_into().unwrap(),
+        )?;
         Ok(Self {
             gpu_image,
             cpu_buffer,
+            owner,
         })
     }
 
@@ -174,7 +187,7 @@ impl ImageConcentration {
         shape: [usize; 2],
         element: Precision,
     ) -> anyhow::Result<Self> {
-        Self::new(
+        let result = Self::new(
             context,
             shape,
             |allocator, buffer_info, allocation_info, len| {
@@ -185,30 +198,35 @@ impl ImageConcentration {
                     (0..len.try_into().unwrap()).map(|_| element),
                 )
             },
-        )
+            Owner::Cpu,
+        )?;
+        context.schedule_upload(&result.cpu_buffer, &result.gpu_image);
+        Ok(result)
     }
 
     /// Access the inner image for GPU work
     ///
-    /// You must not cache this `Arc<StorageImage>` across simulation steps:
-    ///
-    /// - The actual image you are accessing will change between steps
-    /// - CPU -> GPU uploads are performed lazily on image access, so it's
-    ///   important for us to know when images are accessed.
-    pub fn access_image(
-        &mut self,
-        context: &mut ImageContext,
-    ) -> anyhow::Result<&Arc<StorageImage>> {
-        context.upload(&self.cpu_buffer)?;
-        context.touch_gpu(&self.gpu_image, &self.cpu_buffer);
-        Ok(&self.gpu_image)
+    /// You must not cache this `Arc<StorageImage>` across simulation steps, as
+    /// the actual image you are reading/writing will change between steps.
+    pub fn access_image(&self) -> &Arc<StorageImage> {
+        &self.gpu_image
     }
+}
+
+/// Who currently owns the data of an ImageConcentration
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Owner {
+    Cpu,
+    Gpu,
 }
 
 /// External state needed to manipulate ImageConcentrations
 pub struct ImageContext {
-    /// Variable state
-    state: ContextState,
+    /// Buffer/image allocator
+    memory_allocator: Arc<MemAlloc>,
+
+    /// Queue family indices of the upload and download queues
+    queue_family_indices: HashSet<u32>,
 
     /// Command buffer allocator
     command_allocator: Arc<CommAlloc>,
@@ -239,10 +257,8 @@ impl ImageContext {
         .collect();
 
         Ok(Self {
-            state: ContextState::Initialization {
-                memory_allocator,
-                queue_family_indices,
-            },
+            memory_allocator,
+            queue_family_indices,
             command_allocator,
             pending_uploads: HashMap::new(),
             upload_queue,
@@ -250,183 +266,73 @@ impl ImageContext {
         })
     }
 
-    /// Register a new (image, buffer) pair
-    fn register_image(
-        &mut self,
-        make_image: impl FnOnce(
-            &MemAlloc,
-            &HashSet<u32>,
-        ) -> anyhow::Result<(Arc<StorageImage>, CpuBuffer)>,
-    ) -> anyhow::Result<(Arc<StorageImage>, CpuBuffer)> {
-        let ContextState::Initialization {
-            memory_allocator,
-            queue_family_indices,
-        } = &mut self.state else {
-            panic!("New images may not be registered after simulation has started!")
-        };
-        let (image, buffer) = make_image(&memory_allocator, &queue_family_indices)?;
-        self.pending_uploads.insert(buffer.clone(), image.clone());
-        Ok((image, buffer))
+    /// Get access to the memory allocator
+    fn memory_allocator(&self) -> &MemAlloc {
+        &self.memory_allocator
+    }
+
+    /// Query which queue family indices images may be used with
+    fn queue_family_indices(&self) -> impl IntoIterator<Item = u32> + '_ {
+        self.queue_family_indices.iter().copied()
     }
 
     /// Signal that the CPU version of an image has been modified
     ///
     /// This does not trigger an immediate upload because this image could be
-    /// modified further on the CPU side before we actually need it on the GPU.
+    /// modified further on the CPU side before we actually need it on the GPU,
+    /// and other images may also be modified.
     ///
     /// Instead, the upload is delayed until the moment where we actually need
-    /// the image to be on the GPU side.
-    fn touch_cpu(&mut self, cpu: &CpuBuffer, gpu: &Arc<StorageImage>) {
-        Self::touch(&mut self.pending_uploads, cpu, gpu);
-    }
-
-    /// Signal that the GPU version of an image has been accessed
-    ///
-    /// We pessimistically treat accesses as modifications, and modifications
-    /// on the GPU side are treated just like touch_cpu handles the CPU side.
-    //
-    // FIXME: Try to get away with specifying only the StorageImage and
-    //        keeping a HashSet<StorageImage, CpuBuffer> around
-    fn touch_gpu(&mut self, gpu: &Arc<StorageImage>, cpu: &CpuBuffer) {
-        Self::touch(self.state.pending_downloads(), gpu, cpu);
-        debug_assert!(
-            !self.pending_uploads.contains_key(cpu),
-            "Should not touch GPU data while a CPU upload is still pending!"
-        );
-    }
-
-    /// Generic logic of the touch_xyz functions
-    fn touch<Src: Clone + Eq + Hash, Dst: Clone + Debug + Eq>(
-        map: &mut HashMap<Src, Dst>,
-        src: &Src,
-        dst: &Dst,
-    ) {
-        match map.entry(src.clone()) {
-            Entry::Occupied(occupied) => debug_assert_eq!(occupied.get(), dst),
-            Entry::Vacant(vacant) => {
-                vacant.insert(dst.clone());
-            }
-        }
-    }
-
-    /// Update the GPU view of an image if the CPU side has changed
-    fn upload(&mut self, cpu: &CpuBuffer) -> anyhow::Result<()> {
-        Self::sync(
-            cpu,
-            &mut self.pending_uploads,
-            &self.command_allocator,
-            &self.upload_queue,
-            |builder, src, dst| {
-                builder.copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(src, dst))
-            },
-        )
-    }
-
-    /// Update the CPU view of an image if the GPU side has changed
-    fn download(&mut self, gpu: &Arc<StorageImage>) -> anyhow::Result<()> {
-        if self.state.gpu_state_exposed() {
-            Self::sync(
-                gpu,
-                self.state.pending_downloads(),
-                &self.command_allocator,
-                &self.download_queue,
-                |builder, src, dst| {
-                    builder.copy_image_to_buffer(CopyImageToBufferInfo::image_buffer(src, dst))
-                },
-            )
+    /// the image to be on the GPU side, at which point upload_all is called.
+    fn schedule_upload(&mut self, cpu: &CpuBuffer, gpu: &Arc<StorageImage>) {
+        if let Some(target) = self.pending_uploads.get(cpu) {
+            debug_assert_eq!(target, gpu);
         } else {
-            Ok(())
+            self.pending_uploads.insert(cpu.clone(), gpu.clone());
         }
     }
 
-    /// Generic logic of the upload and download functions
-    ///
-    /// - `src` is the entity from which data is being transferred
-    /// - `pending` records the list of similar data transfers that are pending
-    /// - `allocator` is used to record command buffers
-    /// - `queue` is where the command buffers will eventually be submitted
-    /// - `record` tells how the underlying upload/download command is recorded
-    //
-    // FIXME: The current design will result in useless downloads in multi-step
-    //        workflows, because we'll download to CPU data from GPU steps we
-    //        do not care about. To fix this while retaining batched command
-    //        submissions, we'll need a two-pass API: first collect needs, then
-    //        start a batch download. Alternatively, we can just download
-    //        images one by one for now, I think that's better.
-    fn sync<Src: Eq + Hash, Dst>(
-        src: &Src,
-        pending: &mut HashMap<Src, Dst>,
-        allocator: &CommAlloc,
-        queue: &Queue,
-        record: impl FnMut(
-            &mut CommandBufferBuilder<CommAlloc>,
-            Src,
-            Dst,
-        ) -> Result<&mut CommandBufferBuilder<CommAlloc>, CopyError>,
-    ) -> anyhow::Result<()> {
-        // Exit early if there is no need to update this particular image
-        if !pending.contains_key(src) {
-            return Ok(());
-        }
-
-        // Otherwise, update all images with pending changes
-        let mut commands = CommandBufferBuilder::primary(
-            allocator,
-            queue.queue_family_index(),
+    /// Update the GPU view of all modified image
+    fn upload_all(&mut self) -> anyhow::Result<()> {
+        let mut builder = CommandBufferBuilder::primary(
+            &self.command_allocator,
+            self.upload_queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         )?;
-        for (src, dst) in pending.drain() {
-            record(&mut commands, src, dst)?;
+        for (src, dst) in self.pending_uploads.drain() {
+            builder.copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(src, dst))?;
         }
-        let commands = commands.build()?;
-        vulkano::sync::now(queue.device().clone())
+        let commands = builder.build()?;
+        vulkano::sync::now(self.upload_queue.device().clone())
             .then_execute_same_queue(commands)?
             .then_signal_fence_and_flush()?
             .wait(None)?;
         Ok(())
     }
-}
 
-/// Part of ImageContext that changes between initialization and operation
-enum ContextState {
-    /// Context is being initialized (new images are still being added)
-    Initialization {
-        /// Buffer/image allocator
-        memory_allocator: Arc<MemAlloc>,
-
-        /// Queue family indices of the upload and download queues
-        queue_family_indices: HashSet<u32>,
-    },
-
-    /// Context is operational (all images have been added, ready for action)
-    Operation {
-        /// Modified GPU data that should eventually be downloaded to the CPU
-        pending_downloads: HashMap<Arc<StorageImage>, CpuBuffer>,
-    },
-}
-//
-impl ContextState {
-    /// Truth that GPU state has been exposed and there may be pending downloads
-    fn gpu_state_exposed(&self) -> bool {
-        if let ContextState::Operation { .. } = self {
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Switch out of the initialization phase as needed, then access the
-    /// pending downloads hashmap
-    fn pending_downloads(&mut self) -> &mut HashMap<Arc<StorageImage>, CpuBuffer> {
-        if let ContextState::Initialization { .. } = self {
-            *self = ContextState::Operation {
-                pending_downloads: HashMap::new(),
-            }
-        }
-        let ContextState::Operation { pending_downloads } = self else {
-            unreachable!()
-        };
-        pending_downloads
+    /// Update the CPU view of an image
+    ///
+    /// Unlike uploads, downloads are eager because we usually only need a
+    /// single image on the CPU, so batching is a pessimization. Furthermore, it
+    /// is hard to track when GPU images are modified, or even accessed.
+    fn download(&mut self, gpu: Arc<StorageImage>, cpu: CpuBuffer) -> anyhow::Result<()> {
+        assert!(
+            !self.pending_uploads.contains_key(&cpu),
+            "Attempting to download a stale image from the GPU. \
+            Did you call finalize() after your last CPU-side modification?"
+        );
+        let mut builder = CommandBufferBuilder::primary(
+            &self.command_allocator,
+            self.download_queue.queue_family_index(),
+            CommandBufferUsage::OneTimeSubmit,
+        )?;
+        builder.copy_image_to_buffer(CopyImageToBufferInfo::image_buffer(gpu, cpu))?;
+        let commands = builder.build()?;
+        vulkano::sync::now(self.download_queue.device().clone())
+            .then_execute_same_queue(commands)?
+            .then_signal_fence_and_flush()?
+            .wait(None)?;
+        Ok(())
     }
 }
 

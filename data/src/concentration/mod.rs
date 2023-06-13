@@ -144,13 +144,19 @@ pub trait Concentration: Sized {
     /// Errors returned from methods
     type Error: Sized;
 
-    /// Create an array of a certain shape, filled with defaulted elements
+    /// Create an array of a certain shape, whose contents are meant to be overwritten
     fn default(context: &mut Self::Context, shape: [usize; 2]) -> Result<Self, Self::Error>;
 
     /// Create an array of a certain shape, filled with zeros
+    ///
+    /// You must call finalize() once you're done modifying the array (if you're
+    /// using Evolving::flip, it takes care of this)
     fn zeros(context: &mut Self::Context, shape: [usize; 2]) -> Result<Self, Self::Error>;
 
     /// Create an array of a certain shape, filled with ones
+    ///
+    /// You must call finalize() once you're done modifying the array (if you're
+    /// using Evolving::flip, it takes care of this)
     fn ones(context: &mut Self::Context, shape: [usize; 2]) -> Result<Self, Self::Error>;
 
     /// Retrieve the shape that was passed in to the constructor
@@ -168,6 +174,9 @@ pub trait Concentration: Sized {
     /// Like the constructor's shape, this slice is expressed in units of scalar
     /// numbers, as if the storage were a 2D ndarray of scalars of the size
     /// specified at construction time.
+    ///
+    /// You must call finalize() once you're done modifying the array (if you're
+    /// using Evolving::flip, it takes care of this)
     fn fill_slice(
         &mut self,
         context: &mut Self::Context,
@@ -177,7 +186,7 @@ pub trait Concentration: Sized {
 
     /// Finalize the output table before making it the input
     ///
-    /// This is useful when the data layout calls for some expensive operation
+    /// Implement this when the data layout calls for some expensive operation
     /// (e.g. duplication, zeroing of elements, submission of GPU commands...),
     /// which we don't want to perform on every operation but only when the
     /// final output is going to be read.
