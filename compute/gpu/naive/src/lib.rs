@@ -178,9 +178,8 @@ impl SimulateBase for Simulation {
         );
         // TODO: Also test that device can handle this problem size. Properties
         //       to be checked include max_buffer_size,
-        //       max_compute_work_group_count,
-        //       max_compute_work_group_invocations, max_image_dimension2_d,
-        //       max_memory_allocation_size
+        //       max_compute_work_group_count, max_image_dimension2_d,
+        //       max_memory_allocation_size, max_uniform_buffer_range
         Ok(Species::new(
             ImageContext::new(
                 self.context.memory_allocator.clone(),
