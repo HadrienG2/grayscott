@@ -1,6 +1,14 @@
+use directories::ProjectDirs;
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
-use std::{cmp::Ordering, ops::Deref, sync::Arc};
+use std::{
+    cmp::Ordering,
+    fs::File,
+    io::{Read, Write},
+    ops::Deref,
+    path::PathBuf,
+    sync::Arc,
+};
 use thiserror::Error;
 use vulkano::{
     command_buffer::allocator::{
@@ -20,6 +28,7 @@ use vulkano::{
         Instance, InstanceCreateInfo, InstanceCreationError, InstanceExtensions, Version,
     },
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
+    pipeline::cache::PipelineCache,
     ExtensionProperties, LoadingError, OomError, VulkanError, VulkanLibrary,
 };
 
@@ -51,6 +60,9 @@ pub struct VulkanContext<
 
     /// Command buffer allocator (used for command buffer allocation)
     pub command_allocator: CommAlloc,
+
+    /// Pipeline cache (used for e.g. compiled shader caching)
+    pub pipeline_cache: PersistentPipelineCache,
 }
 
 /// Vulkan compute context configuration
@@ -276,7 +288,7 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
     pub fn setup(mut self) -> Result<VulkanContext<MemAlloc, CommAlloc>> {
         let library = load_library()?;
 
-        let instance = setup_instance(
+        let instance = DebuggedInstance::setup(
             library.clone(),
             (self.layers)(&library),
             (self.instance_extensions)(&library),
@@ -305,12 +317,16 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
         let memory_allocator = (self.memory_allocator)(device.clone());
         let command_allocator = (self.command_buffer_allocator)(device.clone());
 
+        let dirs = ProjectDirs::from("", "", "grayscott").ok_or(Error::HomeDirNotFound)?;
+        let pipeline_cache = PersistentPipelineCache::new(&dirs, device.clone())?;
+
         Ok(VulkanContext {
             _messenger: instance._messenger,
             device,
             queues,
             memory_allocator,
             command_allocator,
+            pipeline_cache,
         })
     }
 }
@@ -338,6 +354,12 @@ pub enum Error {
 
     #[error("encountered Vulkan runtime error")]
     Vulkan(#[from] VulkanError),
+
+    #[error("home directory not found")]
+    HomeDirNotFound,
+
+    #[error("failed to read or write on-disk pipeline cache")]
+    PipelineCacheIo(#[from] std::io::Error),
 }
 //
 pub type Result<T> = std::result::Result<T, Error>;
@@ -471,94 +493,6 @@ fn load_library() -> Result<Arc<VulkanLibrary>> {
     Ok(library)
 }
 
-/// Set up a Vulkan instance
-///
-/// This is the point where layers and instance extensions are enabled. See
-/// [`suggested_layers()`] and [`suggested_instance_extensions()`] for suggested
-/// layers and instance extensions.
-///
-/// If you set `enumerate_portability` to `true` here, you will be able to use
-/// devices that do not fully conform to the Vulkan specification, like MoltenVK
-/// on macOS and iOS, but in that case your device requirements and preferences
-/// must account for the associated [non-conforming
-/// behavior](https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VK_KHR_portability_subset.html).
-fn setup_instance(
-    library: Arc<VulkanLibrary>,
-    enabled_layers: Vec<String>,
-    enabled_extensions: InstanceExtensions,
-    enumerate_portability: bool,
-) -> Result<DebuggedInstance> {
-    let unsupported_extensions = *library.supported_extensions()
-        - library.supported_extensions_with_layers(enabled_layers.iter().map(String::as_ref))?;
-    if unsupported_extensions != InstanceExtensions::empty() {
-        debug!(
-            "Selected layer(s) {enabled_layers:?} do NOT support extensions {unsupported_extensions:#?}"
-        );
-    }
-
-    let create_info = InstanceCreateInfo {
-        enabled_extensions,
-        enabled_layers,
-        enumerate_portability,
-        ..InstanceCreateInfo::application_from_cargo_toml()
-    };
-    info!("Will now create a Vulkan instance with configuration {create_info:#?}");
-
-    let instance = if enabled_extensions.ext_debug_utils {
-        type DUMS = DebugUtilsMessageSeverity;
-        type DUMT = DebugUtilsMessageType;
-        let mut debug_messenger_info = DebugUtilsMessengerCreateInfo {
-            message_severity: DUMS::ERROR | DUMS::WARNING,
-            message_type: DUMT::GENERAL,
-            ..DebugUtilsMessengerCreateInfo::user_callback(Arc::new(|message: &Message| {
-                // SAFETY: This callback must not call into Vulkan APIs
-                let level = match message.severity {
-                    DUMS::ERROR => log::Level::Error,
-                    DUMS::WARNING => log::Level::Warn,
-                    DUMS::INFO => log::Level::Debug,
-                    DUMS::VERBOSE => log::Level::Trace,
-                    _ => log::Level::Info,
-                };
-                let target = message
-                    .layer_prefix
-                    .map(|layer| format!("Vulkan {:?} {layer}", message.ty))
-                    .unwrap_or(format!("Vulkan {:?}", message.ty));
-                log!(target: &target, level, "{}", message.description);
-            }))
-        };
-        if cfg!(debug_assertions) {
-            debug_messenger_info.message_severity |= DUMS::INFO | DUMS::VERBOSE;
-            debug_messenger_info.message_type |= DUMT::VALIDATION | DUMT::PERFORMANCE;
-        };
-        let instance = unsafe {
-            // Safe because our logger does not call into Vulkan APIs
-            Instance::with_debug_utils_messengers(
-                library,
-                create_info,
-                std::iter::once(debug_messenger_info.clone()),
-            )?
-        };
-        let messenger =
-            unsafe { DebugUtilsMessenger::new(instance.clone(), debug_messenger_info)? };
-        DebuggedInstance {
-            instance,
-            _messenger: Some(messenger),
-        }
-    } else {
-        DebuggedInstance {
-            instance: Instance::new(library, create_info)?,
-            _messenger: None,
-        }
-    };
-
-    trace!(
-        "Vulkan instance supports Vulkan v{}",
-        instance.api_version()
-    );
-
-    Ok(instance)
-}
-
 /// Vulkan instance with debug logging
 ///
 /// Logging will stop once this struct is dropped, even if there are
@@ -569,6 +503,94 @@ struct DebuggedInstance {
 
     /// Messenger that logs instance debug messages
     _messenger: Option<DebugUtilsMessenger>,
+}
+//
+impl DebuggedInstance {
+    /// Set up a Vulkan instance
+    ///
+    /// This is the point where layers and instance extensions are enabled. See
+    /// [`suggested_layers()`] and [`suggested_instance_extensions()`] for suggested
+    /// layers and instance extensions.
+    ///
+    /// If you set `enumerate_portability` to `true` here, you will be able to use
+    /// devices that do not fully conform to the Vulkan specification, like MoltenVK
+    /// on macOS and iOS, but in that case your device requirements and preferences
+    /// must account for the associated [non-conforming
+    /// behavior](https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VK_KHR_portability_subset.html).
+    fn setup(
+        library: Arc<VulkanLibrary>,
+        enabled_layers: Vec<String>,
+        enabled_extensions: InstanceExtensions,
+        enumerate_portability: bool,
+    ) -> Result<DebuggedInstance> {
+        let unsupported_extensions = *library.supported_extensions()
+            - library
+                .supported_extensions_with_layers(enabled_layers.iter().map(String::as_ref))?;
+        if unsupported_extensions != InstanceExtensions::empty() {
+            debug!(
+                "Selected layer(s) {enabled_layers:?} do NOT support extensions {unsupported_extensions:#?}"
+            );
+        }
+
+        let create_info = InstanceCreateInfo {
+            enabled_extensions,
+            enabled_layers,
+            enumerate_portability,
+            ..InstanceCreateInfo::application_from_cargo_toml()
+        };
+        info!("Will now create a Vulkan instance with configuration {create_info:#?}");
+
+        let result = if enabled_extensions.ext_debug_utils {
+            type DUMS = DebugUtilsMessageSeverity;
+            type DUMT = DebugUtilsMessageType;
+            let mut debug_messenger_info = DebugUtilsMessengerCreateInfo {
+                message_severity: DUMS::ERROR | DUMS::WARNING,
+                message_type: DUMT::GENERAL,
+                ..DebugUtilsMessengerCreateInfo::user_callback(Arc::new(|message: &Message| {
+                    // SAFETY: This callback must not call into Vulkan APIs
+                    let level = match message.severity {
+                        DUMS::ERROR => log::Level::Error,
+                        DUMS::WARNING => log::Level::Warn,
+                        DUMS::INFO => log::Level::Debug,
+                        DUMS::VERBOSE => log::Level::Trace,
+                        _ => log::Level::Info,
+                    };
+                    let target = message
+                        .layer_prefix
+                        .map(|layer| format!("Vulkan {:?} {layer}", message.ty))
+                        .unwrap_or(format!("Vulkan {:?}", message.ty));
+                    log!(target: &target, level, "{}", message.description);
+                }))
+            };
+            if cfg!(debug_assertions) {
+                debug_messenger_info.message_severity |= DUMS::INFO | DUMS::VERBOSE;
+                debug_messenger_info.message_type |= DUMT::VALIDATION | DUMT::PERFORMANCE;
+            };
+            let instance = unsafe {
+                // Safe because our logger does not call into Vulkan APIs
+                Instance::with_debug_utils_messengers(
+                    library,
+                    create_info,
+                    std::iter::once(debug_messenger_info.clone()),
+                )?
+            };
+            let messenger =
+                unsafe { DebugUtilsMessenger::new(instance.clone(), debug_messenger_info)? };
+            Self {
+                instance,
+                _messenger: Some(messenger),
+            }
+        } else {
+            Self {
+                instance: Instance::new(library, create_info)?,
+                _messenger: None,
+            }
+        };
+
+        trace!("Vulkan instance supports Vulkan v{}", result.api_version());
+
+        Ok(result)
+    }
 }
 //
 impl Deref for DebuggedInstance {
@@ -668,6 +690,67 @@ fn create_logical_device(
     info!("Will now create a logical device with configuration {create_info:#?}");
     let (device, queues) = Device::new(physical_device, create_info)?;
     Ok((device, queues.collect()))
+}
+
+/// GPU pipeline cache (to avoid things like shader recompilations)
+pub struct PersistentPipelineCache {
+    /// In-RAM cache
+    cache: Arc<PipelineCache>,
+
+    /// Path to be used for on-disk persistence
+    path: PathBuf,
+}
+//
+impl PersistentPipelineCache {
+    /// Attempt to load the pipeline cache from disk, otherwise create a new one
+    fn new(dirs: &ProjectDirs, device: Arc<Device>) -> Result<Self> {
+        let path = dirs.cache_dir().join("gpu_pipelines.bin");
+
+        // TODO: Consider treating some I/O errors as fatal and others as okay
+        let cache = if let Ok(mut cache_file) = File::open(&path) {
+            let mut data = Vec::new();
+            cache_file.read_to_end(&mut data)?;
+            // Assumed safe because we hopefully created this file...
+            unsafe { PipelineCache::with_data(device, &data)? }
+        } else {
+            PipelineCache::empty(device)?
+        };
+
+        Ok(Self { cache, path })
+    }
+
+    /// Write the pipeline cache back to disk
+    fn write(&self) -> Result<()> {
+        let data = self.cache.get_data()?;
+        let wal_path = self.path.with_extension("wal");
+        let mut file = File::create(&wal_path)?;
+        match file.write_all(&data) {
+            Ok(_) => {
+                std::fs::rename(wal_path, &self.path)?;
+                Ok(())
+            }
+            Err(e) => {
+                std::fs::remove_file(wal_path)?;
+                Err(e.into())
+            }
+        }
+    }
+}
+//
+impl Deref for PersistentPipelineCache {
+    type Target = Arc<PipelineCache>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.cache
+    }
+}
+//
+impl Drop for PersistentPipelineCache {
+    fn drop(&mut self) {
+        if let Err(e) = self.write() {
+            error!("Failed to write pipeline cache to disk: {e}");
+        }
+    }
 }
 
 /// Format Vulkan extension properties for display

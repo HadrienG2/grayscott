@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+directories.workspace = true
 log.workspace = true
 vulkano.workspace = true
 thiserror.workspace = true
