@@ -1,12 +1,11 @@
 //! Moving concentration data to and from HDF5 files
 
 use crate::{
-    concentration::{Concentration, ScalarConcentration, Species},
+    concentration::{AsScalars, Concentration, ScalarConcentration, Species},
     Precision,
 };
 use hdf5::{Dataset, File};
-use ndarray::ArrayView2;
-use std::{borrow::Borrow, path::Path};
+use std::path::Path;
 
 pub use hdf5::Result;
 
@@ -56,13 +55,10 @@ impl Writer {
     }
 
     /// Write a new V species concentration to the file
-    pub fn write<'result>(
-        &mut self,
-        result: impl Borrow<ArrayView2<'result, Precision>>,
-    ) -> Result<()> {
+    pub fn write<'result>(&mut self, result: impl AsScalars) -> Result<()> {
         self.0
             .dataset
-            .write_slice(result.borrow(), (self.0.position, .., ..))?;
+            .write_slice(result.as_scalars(), (self.0.position, .., ..))?;
         self.0.position += 1;
         Ok(())
     }

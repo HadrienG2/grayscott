@@ -65,7 +65,11 @@ In the same spirit as the C++ version, the code is sliced into several crates:
       cache hit rate, as the `_link_block` C++ version does.
     * The `parallel` backend implements multi-threaded iteration using
       [rayon](https://docs.rs/rayon).
-    * TODO: Add more backends here as they are implemented.
+    * The `gpu_xyz` backends implement GPU-based computations using the Vulkan
+      API.
+        * The `gpu_naive` backend starts simple with image-based concentrations
+          and a straightforward algorithm.
+        * TODO: Add more backends here as they are implemented.
 - `reaction` is a binary that runs the simulation. It uses the same CLI argument
   syntax as the `xyz_gray_scott` binaries from the C++ version, but the
   choice of compute backend is made through Cargo features. For each

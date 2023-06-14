@@ -10,7 +10,7 @@ use log::LevelFilter;
 use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 use syslog::Facility;
 
-/// Convert Gray-Scott simulation output to images
+/// Perform Gray-Scott simulation
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -50,7 +50,9 @@ struct Args {
 // Use the best compute backend allowed by enabled crate features
 cfg_if::cfg_if! {
     // TODO: Add more advanced and preferrable implementations above
-    if #[cfg(feature = "compute_parallel")] {
+    if #[cfg(feature = "compute_gpu_naive")] {
+        type Simulation = compute_gpu_naive::Simulation;
+    } else if #[cfg(feature = "compute_parallel")] {
         type Simulation = compute_parallel::Simulation;
     } else if #[cfg(feature = "compute_block")] {
         type Simulation = compute_block::Simulation;

@@ -1,0 +1,21 @@
+[package]
+name = "compute_gpu_naive"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+compute.workspace = true
+compute_gpu.workspace = true
+crevice.workspace = true
+data = { workspace = true, features = ["gpu"] }
+thiserror.workspace = true
+vulkano.workspace = true
+vulkano-shaders.workspace = true
+
+[dev-dependencies]
+compute = { workspace = true, features = ["criterion"] }
+criterion.workspace = true
+
+[[bench]]
+name = "benchmark"
+harness = false

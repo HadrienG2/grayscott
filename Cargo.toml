@@ -3,6 +3,7 @@ members = [
     "compute/autovec",
     "compute/block",
     "compute/gpu/shared",
+    "compute/gpu/naive",
     "compute/manualvec",
     "compute/naive",
     "compute/parallel",
@@ -23,6 +24,9 @@ bytemuck = "1.13"
 
 # Used for various feature flag wrangling purposes
 cfg-if = "1.0"
+
+# Used for GPU-style small-matrix linear algebra
+cgmath = "0.18"
 
 # Used when processing user CLI arguments in binaries
 clap = { version = "4.3", features = ["derive"] }
@@ -81,11 +85,13 @@ thiserror = "1.0"
 
 # Interface to the Vulkan GPU library
 vulkano = "0.33"
+vulkano-shaders = "0.33"
 
 # Internal to this project
 compute.path = "compute/shared"
 compute_autovec.path = "compute/autovec"
 compute_gpu.path = "compute/gpu/shared"
+compute_gpu_naive.path = "compute/gpu/naive"
 compute_block.path = "compute/block"
 compute_manualvec.path = "compute/manualvec"
 compute_naive.path = "compute/naive"

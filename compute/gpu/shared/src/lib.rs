@@ -15,6 +15,7 @@ use vulkano::{
         CommandBufferAllocator, StandardCommandBufferAllocator,
         StandardCommandBufferAllocatorCreateInfo,
     },
+    descriptor_set::allocator::{DescriptorSetAllocator, StandardDescriptorSetAllocator},
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
         Device, DeviceCreateInfo, DeviceCreationError, DeviceExtensions, Features, Queue,
@@ -45,6 +46,7 @@ use vulkano::{
 pub struct VulkanContext<
     MemAlloc: MemoryAllocator = StandardMemoryAllocator,
     CommAlloc: CommandBufferAllocator = StandardCommandBufferAllocator,
+    DescAlloc: DescriptorSetAllocator = StandardDescriptorSetAllocator,
 > {
     /// Messenger that sends Vulkan debug messages to the [`log`] crate
     _messenger: Option<DebugUtilsMessenger>,
@@ -56,10 +58,13 @@ pub struct VulkanContext<
     pub queues: Box<[Arc<Queue>]>,
 
     /// Memory allocator (used for image and buffer allocation)
-    pub memory_allocator: MemAlloc,
+    pub memory_allocator: Arc<MemAlloc>,
 
-    /// Command buffer allocator (used for command buffer allocation)
-    pub command_allocator: CommAlloc,
+    /// Command buffer allocator
+    pub command_allocator: Arc<CommAlloc>,
+
+    /// Descriptor set allocator
+    pub descriptor_allocator: DescAlloc,
 
     /// Pipeline cache (used for e.g. compiled shader caching)
     pub pipeline_cache: PersistentPipelineCache,
@@ -80,6 +85,7 @@ pub struct VulkanContext<
 pub struct VulkanConfig<
     MemAlloc: MemoryAllocator = StandardMemoryAllocator,
     CommAlloc: CommandBufferAllocator = StandardCommandBufferAllocator,
+    DescAlloc: DescriptorSetAllocator = StandardDescriptorSetAllocator,
 > {
     /// Decide which Vulkan layers should be enabled
     ///
@@ -149,9 +155,6 @@ pub struct VulkanConfig<
     //
     //       ...and these extensions:
     //       - khr_performance_query => Perf counters, pour en savoir plus
-    //       - khr_portability_subset => Portabilité vers des implèmes partielles de
-    //         Vulkan, notamment MoltenVK et WebGL. N'a pas l'air si compliqué à
-    //         assurer. Mais penser à modifier aussi l'énumération des devices.
     //       - ext_shader_subgroup_xyz => Opérations subgroups
     pub device_features_extensions: Box<dyn FnMut(&PhysicalDevice) -> (Features, DeviceExtensions)>,
 
@@ -242,12 +245,27 @@ pub struct VulkanConfig<
     /// Command buffers are used to submit work to the GPU. They too need to be
     /// allocated using a specialized allocator.
     ///
-    /// By default, we use vulkano's standard general-purpose memory allocator.
-    /// You can switch to a different memory allocation strategy by tuning this.
-    pub command_buffer_allocator: Box<dyn FnOnce(Arc<Device>) -> CommAlloc>,
+    /// By default, we use vulkano's standard general-purpose allocator.
+    /// You can switch to a different allocation strategy by tuning this.
+    pub command_allocator: Box<dyn FnOnce(Arc<Device>) -> CommAlloc>,
+
+    /// Set up a descriptor set allocator
+    ///
+    /// Descriptor sets are used to bind resources to GPU pipelines. Again, a
+    /// specialized allocator is needed here.
+    ///
+    /// By default, we use vulkano's standard general-purpose allocator.
+    /// You can switch to a different allocation strategy by tuning this.
+    pub descriptor_allocator: Box<dyn FnOnce(Arc<Device>) -> DescAlloc>,
 }
 //
-impl VulkanConfig<StandardMemoryAllocator, StandardCommandBufferAllocator> {
+impl
+    VulkanConfig<
+        StandardMemoryAllocator,
+        StandardCommandBufferAllocator,
+        StandardDescriptorSetAllocator,
+    >
+{
     /// Suggested defaults for all configuration items
     ///
     /// You can use struct update syntax to change only some settings, keeping
@@ -270,7 +288,8 @@ impl VulkanConfig<StandardMemoryAllocator, StandardCommandBufferAllocator> {
             device_preference: Box::new(default_device_preference),
             queues: Box::new(|device| vec![default_queue(device)]),
             memory_allocator: Box::new(default_memory_allocator),
-            command_buffer_allocator: Box::new(default_command_buffer_allocator),
+            command_allocator: Box::new(default_command_buffer_allocator),
+            descriptor_allocator: Box::new(StandardDescriptorSetAllocator::new),
         }
     }
 }
@@ -314,8 +333,9 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
             (self.queues)(&physical_device),
         )?;
 
-        let memory_allocator = (self.memory_allocator)(device.clone());
-        let command_allocator = (self.command_buffer_allocator)(device.clone());
+        let memory_allocator = Arc::new((self.memory_allocator)(device.clone()));
+        let command_allocator = Arc::new((self.command_allocator)(device.clone()));
+        let descriptor_allocator = (self.descriptor_allocator)(device.clone());
 
         let dirs = ProjectDirs::from("", "", "grayscott").ok_or(Error::HomeDirNotFound)?;
         let pipeline_cache = PersistentPipelineCache::new(&dirs, device.clone())?;
@@ -327,6 +347,7 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
             memory_allocator,
             command_allocator,
             pipeline_cache,
+            descriptor_allocator,
         })
     }
 }
@@ -706,6 +727,8 @@ impl PersistentPipelineCache {
     fn new(dirs: &ProjectDirs, device: Arc<Device>) -> Result<Self> {
         let path = dirs.cache_dir().join("gpu_pipelines.bin");
 
+        println!("Cache path is {path:?}");
+
         // TODO: Consider treating some I/O errors as fatal and others as okay
         let cache = if let Ok(mut cache_file) = File::open(&path) {
             let mut data = Vec::new();
@@ -722,6 +745,15 @@ impl PersistentPipelineCache {
     /// Write the pipeline cache back to disk
     fn write(&self) -> Result<()> {
         let data = self.cache.get_data()?;
+
+        let dir = self
+            .path
+            .parent()
+            .expect("Pipeline cache shouldn't be dumped in current directory!");
+        if !dir.try_exists()? {
+            std::fs::create_dir_all(dir)?;
+        }
+
         let wal_path = self.path.with_extension("wal");
         let mut file = File::create(&wal_path)?;
         match file.write_all(&data) {

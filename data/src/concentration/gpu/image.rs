@@ -26,7 +26,7 @@ use vulkano::{
     memory::allocator::{
         AllocationCreateInfo, MemoryAllocatePreference, MemoryUsage, StandardMemoryAllocator,
     },
-    sync::{FlushError, GpuFuture},
+    sync::{FlushError, GpuFuture, Sharing},
     DeviceSize,
 };
 
@@ -151,6 +151,7 @@ impl ImageConcentration {
         let num_texels = rows * cols;
         let texel_size = std::mem::size_of::<Precision>();
         assert_eq!(texel_size, 4, "Must adjust image format");
+
         let gpu_image = StorageImage::with_usage(
             context.memory_allocator(),
             ImageDimensions::Dim2d {
@@ -166,9 +167,16 @@ impl ImageConcentration {
             ImageCreateFlags::empty(),
             context.queue_family_indices(),
         )?;
+
+        let sharing = if context.queue_family_indices().count() > 1 {
+            Sharing::Concurrent(context.queue_family_indices().collect())
+        } else {
+            Sharing::Exclusive
+        };
         let cpu_buffer = make_buffer(
             context.memory_allocator(),
             BufferCreateInfo {
+                sharing,
                 usage: BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST,
                 ..Default::default()
             },
@@ -179,6 +187,7 @@ impl ImageConcentration {
             },
             num_texels.try_into().unwrap(),
         )?;
+
         Ok(Self {
             gpu_image,
             cpu_buffer,
@@ -297,7 +306,7 @@ impl ImageContext {
     }
 
     /// Query which queue family indices images may be used with
-    fn queue_family_indices(&self) -> impl IntoIterator<Item = u32> + '_ {
+    fn queue_family_indices(&self) -> impl Iterator<Item = u32> + '_ {
         self.queue_family_indices.iter().copied()
     }
 
@@ -329,7 +338,7 @@ impl ImageContext {
         }
         let commands = builder.build()?;
         vulkano::sync::now(self.upload_queue.device().clone())
-            .then_execute_same_queue(commands)?
+            .then_execute(self.upload_queue.clone(), commands)?
             .then_signal_fence_and_flush()?
             .wait(None)?;
         Ok(())
@@ -354,7 +363,7 @@ impl ImageContext {
         builder.copy_image_to_buffer(CopyImageToBufferInfo::image_buffer(gpu, cpu))?;
         let commands = builder.build()?;
         vulkano::sync::now(self.download_queue.device().clone())
-            .then_execute_same_queue(commands)?
+            .then_execute(self.download_queue.clone(), commands)?
             .then_signal_fence_and_flush()?
             .wait(None)?;
         Ok(())
@@ -376,7 +385,7 @@ pub enum Error {
     #[error("failed to record a copy command")]
     Copy(#[from] CopyError),
 
-    #[error("failed to create or manipulate a buffer")]
+    #[error("failed to create or manipulate a data buffer")]
     Buffer(#[from] BufferError),
 
     #[error("failed to submit commands to the GPU")]

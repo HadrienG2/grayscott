@@ -209,9 +209,12 @@ macro_rules! criterion_benchmark {
 pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name: &str) {
     use std::hint::black_box;
 
+    env_logger::init();
+
     let sim = Simulation::new(black_box(Parameters::default())).unwrap();
     let mut group = c.benchmark_group(format!("{backend_name}::steps"));
-    for num_steps in 1..10 {
+    for num_steps_pow2 in 0..=5 {
+        let num_steps = 2u64.pow(num_steps_pow2);
         for size_pow2 in 3..=10 {
             let size = 2usize.pow(size_pow2);
             let shape = [size, 2 * size];
@@ -227,6 +230,7 @@ pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name
                 |b| {
                     b.iter(|| {
                         sim.perform_steps(&mut species, num_steps as usize).unwrap();
+                        species.make_result_view().unwrap();
                     });
                 }
             );
