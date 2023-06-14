@@ -146,7 +146,7 @@ impl SimulateBase for Simulation {
         // This simple shader can't accomodate a shape that is not a multiple
         // of the work group size
         assert!(
-            shape
+            Self::shape_to_global_size(shape)
                 .iter()
                 .zip(WORK_GROUP_SIZE.iter())
                 .all(|(&sh, &wg)| sh % usize::try_from(wg).unwrap() == 0),
@@ -184,9 +184,9 @@ impl Simulate for Simulation {
             );
 
         // Determine the GPU dispatch size
-        let shape = species.shape();
+        let global_size = Self::shape_to_global_size(species.shape());
         let dispatch_size = std::array::from_fn(|i| {
-            let shape = shape.get(i).copied().unwrap_or(1);
+            let shape = global_size[i];
             let work_group_size = usize::try_from(WORK_GROUP_SIZE[i]).unwrap();
             debug_assert_eq!(shape % work_group_size, 0, "Checked by make_species");
             u32::try_from(shape / work_group_size).unwrap()
@@ -281,6 +281,11 @@ impl Simulation {
     /// This implementation only uses one queue, therefore we can take shortcuts
     fn queue(&self) -> &Arc<Queue> {
         &self.context.queues[0]
+    }
+
+    /// Convert a Concentration shape into a global device work size
+    fn shape_to_global_size([rows, cols]: [usize; 2]) -> [usize; 3] {
+        [cols, rows, 1]
     }
 }
 
