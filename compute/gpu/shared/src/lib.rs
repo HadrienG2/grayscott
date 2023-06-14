@@ -727,8 +727,6 @@ impl PersistentPipelineCache {
     fn new(dirs: &ProjectDirs, device: Arc<Device>) -> Result<Self> {
         let path = dirs.cache_dir().join("gpu_pipelines.bin");
 
-        println!("Cache path is {path:?}");
-
         // TODO: Consider treating some I/O errors as fatal and others as okay
         let cache = if let Ok(mut cache_file) = File::open(&path) {
             let mut data = Vec::new();
