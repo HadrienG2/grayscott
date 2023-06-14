@@ -72,7 +72,31 @@ impl SimulateBase for Simulation {
     fn new(params: Parameters) -> Result<Self> {
         // Set up Vulkan
         let context = VulkanConfig {
-            // FIXME: Write down resource requirements
+            other_device_requirements: Box::new(|device| {
+                let properties = device.properties();
+                let num_samplers = 2;
+                let num_storage_images = 2;
+                let num_uniforms = 1;
+                properties.max_bound_descriptor_sets >= 2
+                    && properties.max_compute_work_group_invocations
+                        >= WORK_GROUP_SIZE.iter().copied().product::<u32>()
+                    && properties
+                        .max_compute_work_group_size
+                        .iter()
+                        .zip(WORK_GROUP_SIZE.iter())
+                        .all(|(max, requested)| *max >= *requested)
+                    && properties.max_descriptor_set_samplers >= num_samplers
+                    && properties.max_per_stage_descriptor_samplers >= num_samplers
+                    && properties.max_descriptor_set_storage_images >= num_storage_images
+                    && properties.max_per_stage_descriptor_storage_images >= num_storage_images
+                    && properties.max_descriptor_set_uniform_buffers >= num_uniforms
+                    && properties.max_per_stage_descriptor_uniform_buffers >= num_uniforms
+                    && properties.max_per_set_descriptors.unwrap_or(u32::MAX)
+                        >= num_samplers + num_storage_images
+                    && properties.max_per_stage_resources
+                        >= 2 * num_samplers + num_storage_images + num_uniforms
+                    && properties.max_sampler_allocation_count >= num_samplers
+            }),
             ..VulkanConfig::default()
         }
         .setup()?;
@@ -152,6 +176,11 @@ impl SimulateBase for Simulation {
                 .all(|(&sh, &wg)| sh % usize::try_from(wg).unwrap() == 0),
             "Shader is not compatible with this grid shape"
         );
+        // TODO: Also test that device can handle this problem size. Properties
+        //       to be checked include max_buffer_size,
+        //       max_compute_work_group_count,
+        //       max_compute_work_group_invocations, max_image_dimension2_d,
+        //       max_memory_allocation_size
         Ok(Species::new(
             ImageContext::new(
                 self.context.memory_allocator.clone(),
