@@ -65,14 +65,14 @@ log = "0.4"
 # Basic multidimensional array abstraction
 ndarray = "0.15"
 
-# Used to safely handle self-referential data
-ouroboros = "0.15"
-
 # Data-parallelism library
 rayon = "1.7"
 
 # Intrinsics-based SIMD backend
 safe_arch = "0.6"
+
+# Used to safely handle self-referential data
+self_cell = "1.0"
 
 # Autovectorization-based SIMD backend
 slipstream = "0.2.1"

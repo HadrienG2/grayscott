@@ -23,7 +23,11 @@ use vulkano::{
         CommandBufferUsage, PipelineExecutionError,
     },
     descriptor_set::{DescriptorSetCreationError, PersistentDescriptorSet, WriteDescriptorSet},
-    device::Queue,
+    device::{
+        physical::{PhysicalDevice, PhysicalDeviceError},
+        Queue,
+    },
+    format::FormatFeatures,
     image::{
         view::{ImageView, ImageViewCreateInfo, ImageViewCreationError},
         ImageUsage, StorageImage,
@@ -70,38 +74,22 @@ impl SimulateBase for Simulation {
     type Error = Error;
 
     fn new(params: Parameters) -> Result<Self> {
+        // Check that ImageConcentration supports what we need
+        assert!(
+            ImageConcentration::image_format_info()
+                .usage
+                .contains(ImageUsage::SAMPLED | ImageUsage::STORAGE),
+            "ImageConcentration does not enable all required usage flags"
+        );
+
         // Set up Vulkan
         let context = VulkanConfig {
-            other_device_requirements: Box::new(|device| {
-                let properties = device.properties();
-                let num_samplers = 2;
-                let num_storage_images = 2;
-                let num_uniforms = 1;
-                properties.max_bound_descriptor_sets >= 2
-                    && properties.max_compute_work_group_invocations
-                        >= WORK_GROUP_SIZE.iter().copied().product::<u32>()
-                    && properties
-                        .max_compute_work_group_size
-                        .iter()
-                        .zip(WORK_GROUP_SIZE.iter())
-                        .all(|(max, requested)| *max >= *requested)
-                    && properties.max_descriptor_set_samplers >= num_samplers
-                    && properties.max_per_stage_descriptor_samplers >= num_samplers
-                    && properties.max_descriptor_set_storage_images >= num_storage_images
-                    && properties.max_per_stage_descriptor_storage_images >= num_storage_images
-                    && properties.max_descriptor_set_uniform_buffers >= num_uniforms
-                    && properties.max_per_stage_descriptor_uniform_buffers >= num_uniforms
-                    && properties.max_per_set_descriptors.unwrap_or(u32::MAX)
-                        >= num_samplers + num_storage_images
-                    && properties.max_per_stage_resources
-                        >= 2 * num_samplers + num_storage_images + num_uniforms
-                    && properties.max_sampler_allocation_count >= num_samplers
-            }),
+            other_device_requirements: Box::new(Self::minimal_device_requirements),
             ..VulkanConfig::default()
         }
         .setup()?;
 
-        // Load the compute shader + check shader assumptions
+        // Load the compute shader + check shader code assumptions
         assert_eq!(
             std::mem::size_of::<Precision>(),
             4,
@@ -150,8 +138,7 @@ impl SimulateBase for Simulation {
             },
             params.as_std140(),
         )?;
-        let params_layout =
-            pipeline.layout().set_layouts()[usize::try_from(PARAMS_SET).unwrap()].clone();
+        let params_layout = pipeline.layout().set_layouts()[PARAMS_SET as usize].clone();
         let params = PersistentDescriptorSet::new(
             &context.descriptor_allocator,
             params_layout,
@@ -167,19 +154,7 @@ impl SimulateBase for Simulation {
     }
 
     fn make_species(&self, shape: [usize; 2]) -> Result<Species> {
-        // This simple shader can't accomodate a shape that is not a multiple
-        // of the work group size
-        assert!(
-            Self::shape_to_global_size(shape)
-                .iter()
-                .zip(WORK_GROUP_SIZE.iter())
-                .all(|(&sh, &wg)| sh % usize::try_from(wg).unwrap() == 0),
-            "Shader is not compatible with this grid shape"
-        );
-        // TODO: Also test that device can handle this problem size. Properties
-        //       to be checked include max_buffer_size,
-        //       max_compute_work_group_count, max_image_dimension2_d,
-        //       max_memory_allocation_size, max_uniform_buffer_range
+        self.check_shape_requirements(shape)?;
         Ok(Species::new(
             ImageContext::new(
                 self.context.memory_allocator.clone(),
@@ -315,6 +290,95 @@ impl Simulation {
     fn shape_to_global_size([rows, cols]: [usize; 2]) -> [usize; 3] {
         [cols, rows, 1]
     }
+
+    /// Check minimal device requirements
+    fn minimal_device_requirements(device: &PhysicalDevice) -> bool {
+        let properties = device.properties();
+        let Ok(format_properties) = device.format_properties(ImageConcentration::format()) else {
+            return false
+        };
+
+        let num_samplers = 2;
+        let num_storage_images = 2;
+        let num_uniforms = 1;
+
+        properties.max_bound_descriptor_sets >= 2
+            && properties.max_compute_work_group_invocations
+                >= WORK_GROUP_SIZE.into_iter().product::<u32>()
+            && properties
+                .max_compute_work_group_size
+                .into_iter()
+                .zip(WORK_GROUP_SIZE.into_iter())
+                .all(|(max, req)| max >= req)
+            && properties.max_descriptor_set_samplers >= num_samplers
+            && properties.max_per_stage_descriptor_samplers >= num_samplers
+            && properties.max_descriptor_set_storage_images >= num_storage_images
+            && properties.max_per_stage_descriptor_storage_images >= num_storage_images
+            && properties.max_descriptor_set_uniform_buffers >= num_uniforms
+            && properties.max_per_stage_descriptor_uniform_buffers >= num_uniforms
+            && properties.max_per_set_descriptors.unwrap_or(u32::MAX)
+                >= num_samplers + num_storage_images
+            && properties.max_per_stage_resources
+                >= 2 * num_samplers + num_storage_images + num_uniforms
+            && properties.max_sampler_allocation_count >= num_samplers
+            && properties.max_uniform_buffer_range
+                >= u32::try_from(std::mem::size_of::<Parameters>())
+                    .expect("Parameters can't fit on any Vulkan device!")
+            && format_properties.optimal_tiling_features.contains(
+                FormatFeatures::SAMPLED_IMAGE
+                    | FormatFeatures::STORAGE_IMAGE
+                    | ImageConcentration::required_image_format_features(),
+            )
+            && format_properties
+                .buffer_features
+                .contains(ImageConcentration::required_buffer_format_features())
+    }
+
+    /// Check requirements on the problem size
+    fn check_shape_requirements(&self, shape: [usize; 2]) -> Result<()> {
+        // The simple shader can't accomodate a problem size that is not a
+        // multiple of the work group size
+        let global_size = Self::shape_to_global_size(shape);
+        if global_size
+            .into_iter()
+            .zip(WORK_GROUP_SIZE.into_iter())
+            .any(|(sh, wg)| sh % wg as usize != 0)
+        {
+            return Err(Error::UnsupportedShape);
+        }
+        let dispatch_size: [usize; 3] =
+            std::array::from_fn(|i| global_size[i] / WORK_GROUP_SIZE[i] as usize);
+
+        // Check device properties
+        let num_texels = shape.into_iter().product::<usize>();
+        let image_size = num_texels * std::mem::size_of::<Precision>();
+        let device = self.context.device.physical_device();
+        let properties = device.properties();
+        if properties
+            .max_compute_work_group_count
+            .into_iter()
+            .zip(dispatch_size.into_iter())
+            .any(|(max, req)| (max as usize) < req)
+            || (properties.max_image_dimension2_d as usize) < shape.into_iter().max().unwrap()
+            || properties.max_memory_allocation_size.unwrap_or(u64::MAX) < image_size as u64
+            || properties.max_buffer_size.unwrap_or(u64::MAX) < image_size as u64
+        {
+            return Err(Error::UnsupportedShape);
+        }
+
+        // Check image format properties
+        let Some(image_format_properties) =
+            device.image_format_properties(ImageConcentration::image_format_info())? else {
+                return Err(Error::UnsupportedShape);
+            };
+        if (image_format_properties.max_extent[0] as usize) < shape[1]
+            || (image_format_properties.max_extent[1] as usize) < shape[0]
+            || image_format_properties.max_resource_size < image_size as u64
+        {
+            return Err(Error::UnsupportedShape);
+        }
+        Ok(())
+    }
 }
 
 mod shader {
@@ -380,6 +444,14 @@ pub enum Error {
     /// Errors while flushing commands to the GPU
     #[error("failed to flush the queue to the GPU")]
     Flush(#[from] FlushError),
+
+    /// Shader does not support the requested grid shape
+    #[error("device or shader does not support this grid shape")]
+    UnsupportedShape,
+
+    /// Failed to interrogate the physical device
+    #[error("failed to query physical device")]
+    PhysicalDevice(#[from] PhysicalDeviceError),
 }
 //
 type Result<T> = std::result::Result<T, Error>;

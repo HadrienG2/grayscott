@@ -21,8 +21,11 @@ use vulkano::{
         CopyError, CopyImageToBufferInfo, PrimaryAutoCommandBuffer,
     },
     device::Queue,
-    format::Format,
-    image::{ImageAccess, ImageCreateFlags, ImageDimensions, ImageError, ImageUsage, StorageImage},
+    format::{Format, FormatFeatures},
+    image::{
+        ImageAccess, ImageCreateFlags, ImageDimensions, ImageError, ImageFormatInfo, ImageTiling,
+        ImageType, ImageUsage, ImageViewType, StorageImage,
+    },
     memory::allocator::{
         AllocationCreateInfo, MemoryAllocatePreference, MemoryUsage, StandardMemoryAllocator,
     },
@@ -121,17 +124,44 @@ impl Concentration for ImageConcentration {
 
     fn make_scalar_view(&mut self, context: &mut ImageContext) -> Result<Self::ScalarView<'_>> {
         context.download(self.gpu_image.clone(), self.cpu_buffer.clone())?;
-        Ok(ScalarViewBuilder {
-            buffer: self.cpu_buffer.read()?,
-            view_builder: |buffer| {
-                ArrayView2::from_shape(self.shape(), &buffer).expect("The shape should be right")
-            },
-        }
-        .build())
+        Ok(ScalarView::new(self.cpu_buffer.read()?, |buffer| {
+            ArrayView2::from_shape(self.shape(), &buffer).expect("The shape should be right")
+        }))
     }
 }
 //
 impl ImageConcentration {
+    /// Image format used by this concentration type
+    pub fn format() -> Format {
+        Self::image_format_info().format.unwrap()
+    }
+
+    /// Required image format features
+    pub fn required_image_format_features() -> FormatFeatures {
+        FormatFeatures::TRANSFER_SRC | FormatFeatures::TRANSFER_DST
+    }
+
+    /// Required buffer format features
+    pub fn required_buffer_format_features() -> FormatFeatures {
+        FormatFeatures::TRANSFER_SRC | FormatFeatures::TRANSFER_DST
+    }
+
+    /// Image configuration
+    pub fn image_format_info() -> ImageFormatInfo {
+        ImageFormatInfo {
+            flags: ImageCreateFlags::empty(),
+            format: Some(Format::R32_SFLOAT),
+            image_type: ImageType::Dim2d,
+            tiling: ImageTiling::Optimal,
+            usage: ImageUsage::TRANSFER_SRC
+                | ImageUsage::TRANSFER_DST
+                | ImageUsage::SAMPLED
+                | ImageUsage::STORAGE,
+            image_view_type: Some(ImageViewType::Dim2d),
+            ..Default::default()
+        }
+    }
+
     /// Set up an image of a certain shape, with certain initial contents
     ///
     /// The first 3 parameters of `make_buffer` have the same semantics as those
@@ -152,6 +182,7 @@ impl ImageConcentration {
         let texel_size = std::mem::size_of::<Precision>();
         assert_eq!(texel_size, 4, "Must adjust image format");
 
+        let image_format_info = Self::image_format_info();
         let gpu_image = StorageImage::with_usage(
             context.memory_allocator(),
             ImageDimensions::Dim2d {
@@ -159,12 +190,9 @@ impl ImageConcentration {
                 height: rows.try_into().unwrap(),
                 array_layers: 1,
             },
-            Format::R32_SFLOAT,
-            ImageUsage::TRANSFER_SRC
-                | ImageUsage::TRANSFER_DST
-                | ImageUsage::SAMPLED
-                | ImageUsage::STORAGE,
-            ImageCreateFlags::empty(),
+            Self::format(),
+            image_format_info.usage,
+            image_format_info.flags,
             context.queue_family_indices(),
         )?;
 
