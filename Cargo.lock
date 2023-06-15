@@ -279,7 +279,6 @@ version = "0.1.0"
 dependencies = [
  "cfg-if",
  "compute",
- "criterion",
  "data",
  "slipstream",
 ]
@@ -290,7 +289,6 @@ version = "0.1.0"
 dependencies = [
  "compute",
  "compute_autovec",
- "criterion",
  "data",
  "hwlocality",
  "thiserror",
@@ -314,7 +312,6 @@ dependencies = [
  "compute",
  "compute_gpu",
  "crevice",
- "criterion",
  "data",
  "thiserror",
  "vulkano",
@@ -327,7 +324,6 @@ version = "0.1.0"
 dependencies = [
  "cfg-if",
  "compute",
- "criterion",
  "data",
  "safe_arch",
 ]
@@ -337,7 +333,6 @@ name = "compute_naive"
 version = "0.1.0"
 dependencies = [
  "compute",
- "criterion",
  "data",
  "ndarray",
 ]
@@ -349,7 +344,6 @@ dependencies = [
  "compute",
  "compute_autovec",
  "compute_block",
- "criterion",
  "data",
  "hwlocality",
  "rayon",
@@ -360,7 +354,6 @@ name = "compute_regular"
 version = "0.1.0"
 dependencies = [
  "compute",
- "criterion",
  "data",
  "ndarray",
 ]
