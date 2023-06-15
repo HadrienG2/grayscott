@@ -13,21 +13,20 @@ use std::{path::PathBuf, time::Duration};
 struct Args {
     /// Path to the input HDF5 file
     #[arg(short, long)]
-    input: PathBuf,
+    input: Option<PathBuf>,
 
     /// Directory where output images will be saved
     #[arg(short, long)]
-    output_dir: Option<PathBuf>,
+    output_dir: PathBuf,
 }
 
 fn main() {
     // Parse CLI arguments
     let args = Args::parse();
-    let output_dir = args.output_dir.unwrap_or_else(|| "./".into());
 
     // Open the HDF5 dataset
     let reader = Reader::open(Config {
-        file_name: args.input,
+        file_name: args.input.unwrap_or_else(|| "output.h5".into()),
         ..Default::default()
     })
     .expect("Failed to open input file");
@@ -61,7 +60,7 @@ fn main() {
 
         // Save image
         image
-            .save(output_dir.join(format!("{idx}.png")))
+            .save(args.output_dir.join(format!("{idx}.png")))
             .expect("Failed to save image");
     }
 }
