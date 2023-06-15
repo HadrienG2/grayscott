@@ -9,3 +9,5 @@ colorous.workspace = true
 data.workspace = true
 image.workspace = true
 indicatif.workspace = true
+ndarray.workspace = true
+rayon.workspace = true

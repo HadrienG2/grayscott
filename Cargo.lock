@@ -554,6 +554,8 @@ dependencies = [
  "data",
  "image",
  "indicatif",
+ "ndarray",
+ "rayon",
 ]
 
 [[package]]
