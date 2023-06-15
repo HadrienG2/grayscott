@@ -329,9 +329,6 @@ impl Simulation {
                     | FormatFeatures::STORAGE_IMAGE
                     | ImageConcentration::required_image_format_features(),
             )
-            && format_properties
-                .buffer_features
-                .contains(ImageConcentration::required_buffer_format_features())
     }
 
     /// Check requirements on the problem size

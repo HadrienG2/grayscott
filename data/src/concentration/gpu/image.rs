@@ -24,7 +24,7 @@ use vulkano::{
     format::{Format, FormatFeatures},
     image::{
         ImageAccess, ImageCreateFlags, ImageDimensions, ImageError, ImageFormatInfo, ImageTiling,
-        ImageType, ImageUsage, ImageViewType, StorageImage,
+        ImageType, ImageUsage, StorageImage,
     },
     memory::allocator::{
         AllocationCreateInfo, MemoryAllocatePreference, MemoryUsage, StandardMemoryAllocator,
@@ -157,7 +157,6 @@ impl ImageConcentration {
                 | ImageUsage::TRANSFER_DST
                 | ImageUsage::SAMPLED
                 | ImageUsage::STORAGE,
-            image_view_type: Some(ImageViewType::Dim2d),
             ..Default::default()
         }
     }
