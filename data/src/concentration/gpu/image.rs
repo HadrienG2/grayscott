@@ -355,19 +355,21 @@ impl ImageContext {
 
     /// Update the GPU view of all modified image
     fn upload_all(&mut self) -> Result<()> {
-        let mut builder = CommandBufferBuilder::primary(
-            &self.command_allocator,
-            self.upload_queue.queue_family_index(),
-            CommandBufferUsage::OneTimeSubmit,
-        )?;
-        for (src, dst) in self.pending_uploads.drain() {
-            builder.copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(src, dst))?;
+        if !self.pending_uploads.is_empty() {
+            let mut builder = CommandBufferBuilder::primary(
+                &self.command_allocator,
+                self.upload_queue.queue_family_index(),
+                CommandBufferUsage::OneTimeSubmit,
+            )?;
+            for (src, dst) in self.pending_uploads.drain() {
+                builder.copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(src, dst))?;
+            }
+            let commands = builder.build()?;
+            vulkano::sync::now(self.upload_queue.device().clone())
+                .then_execute(self.upload_queue.clone(), commands)?
+                .then_signal_fence_and_flush()?
+                .wait(None)?;
         }
-        let commands = builder.build()?;
-        vulkano::sync::now(self.upload_queue.device().clone())
-            .then_execute(self.upload_queue.clone(), commands)?
-            .then_signal_fence_and_flush()?
-            .wait(None)?;
         Ok(())
     }
 
