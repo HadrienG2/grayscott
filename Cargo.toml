@@ -47,7 +47,7 @@ directories = "5.0"
 env_logger = "0.10"
 
 # Used when saving raw data to files
-hdf5 = "0.8"
+hdf5 = { version = "0.8", features = ["lzf"] }
 
 # Used for cache locality optimizations
 # FIXME: Switch to a fixed release once they are available
