@@ -4,15 +4,15 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-gpu = ["bytemuck", "crevice", "ouroboros", "thiserror", "vulkano"]
+gpu = ["bytemuck", "crevice", "self_cell", "thiserror", "vulkano"]
 
 [dependencies]
 bytemuck = { workspace = true, optional = true }
 cfg-if.workspace = true
 crevice = { workspace = true, optional = true }
 hdf5.workspace = true
-ouroboros = { workspace = true, optional = true }
 safe_arch = { workspace = true, optional = true }
+self_cell = { workspace = true, optional = true }
 slipstream = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 ndarray.workspace = true

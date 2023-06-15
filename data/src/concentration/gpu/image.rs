@@ -229,21 +229,21 @@ impl ImageConcentration {
     }
 }
 
-/// Scalar CPU-side view of an ImageConcentration
-#[ouroboros::self_referencing]
-pub struct ScalarView<'concentration> {
-    /// Read lock on the CPU-side data
-    buffer: BufferReadGuard<'concentration, [Precision]>,
+self_cell::self_cell!(
+    /// Scalar CPU-side view of an ImageConcentration
+    pub struct ScalarView<'concentration> {
+        owner: BufferReadGuard<'concentration, [Precision]>,
 
-    /// 2D array view that gets actually exposed to the user
-    #[borrows(buffer)]
-    #[not_covariant]
-    view: ArrayView2<'this, Precision>,
-}
+        #[not_covariant]
+        dependent: Dependent,
+    }
+);
+//
+type Dependent<'owner> = ArrayView2<'owner, Precision>;
 //
 impl AsScalars for ScalarView<'_> {
     fn as_scalars(&self) -> ArrayView2<Precision> {
-        self.with_view(|view| view.reborrow())
+        self.with_dependent(|_owner, dependent| dependent.reborrow())
     }
 }
 
