@@ -217,9 +217,9 @@ pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name
 
     let sim = Simulation::new(black_box(Parameters::default())).unwrap();
     let mut group = c.benchmark_group(format!("{backend_name}::steps"));
-    for num_steps_pow2 in 0..=5 {
+    for num_steps_pow2 in 0..=8 {
         let num_steps = 2u64.pow(num_steps_pow2);
-        for size_pow2 in 3..=10 {
+        for size_pow2 in 3..=11 {
             let size = 2usize.pow(size_pow2);
             let shape = [size, 2 * size];
             let num_elems = (shape[0] * shape[1]) as u64;
