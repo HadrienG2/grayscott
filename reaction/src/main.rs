@@ -1,13 +1,14 @@
 use clap::Parser;
 use compute::{Simulate, SimulateBase};
 use data::{
+    concentration::{AsScalars, ScalarConcentration},
     hdf5::{self, Writer},
     parameters::Parameters,
     Precision,
 };
-use indicatif::{ProgressBar, ProgressFinish, ProgressIterator, ProgressStyle};
+use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
 use log::LevelFilter;
-use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
+use std::{num::NonZeroUsize, path::PathBuf, sync::mpsc, time::Duration};
 use syslog::Facility;
 
 /// Perform Gray-Scott simulation
@@ -45,6 +46,14 @@ struct Args {
     /// Path to the results output file
     #[arg(short, long)]
     output: Option<PathBuf>,
+
+    /// Size of the image buffer between the compute and I/O thread
+    ///
+    /// A larger buffer enables better performance, at the cost of higher RAM
+    /// utilization. 2 is the minimum to fully decouple compute and I/O, higher
+    /// values may be beneficial if the I/O backend works in a batched fashion.
+    #[arg(long, default_value_t = NonZeroUsize::new(2).unwrap())]
+    io_buffer: NonZeroUsize,
 }
 
 // Use the best compute backend allowed by enabled crate features
@@ -67,7 +76,7 @@ cfg_if::cfg_if! {
     } else {
         // If no backend was specified, use a backend skeleton that throws a
         // minimal number of compiler errors.
-        use data::concentration::{ScalarConcentration, Species};
+        use data::concentration::{Species};
         use std::convert::Infallible;
         //
         struct Simulation;
@@ -152,22 +161,39 @@ fn main() {
         .with_finish(ProgressFinish::AndClear);
     progress.enable_steady_tick(Duration::from_millis(100));
 
-    // Run the simulation
-    for _ in (0..args.nbimage).progress_with(progress) {
-        // Move the simulation forward
-        simulation
-            .perform_steps(&mut species, steps_per_image)
-            .expect("Failed to compute simulation steps");
+    // Set up the HDF5 writer thread
+    std::thread::scope(|s| {
+        // Start the writer thread
+        let (sender, receiver) = mpsc::sync_channel::<ScalarConcentration>(args.io_buffer.into());
+        let writer = &mut writer;
+        s.spawn(move || {
+            for result in receiver {
+                writer
+                    .write(result.view())
+                    .expect("Failed to write down results");
+                progress.inc(1);
+            }
+        });
 
-        // Write a new image
-        writer
-            .write(
-                species
-                    .make_result_view()
-                    .expect("Failed to extract result"),
-            )
-            .expect("Failed to write down results");
-    }
+        // Run the simulation on the main thread
+        for _ in 0..args.nbimage {
+            // Move the simulation forward
+            simulation
+                .perform_steps(&mut species, steps_per_image)
+                .expect("Failed to compute simulation steps");
+
+            // Schedule writing the image
+            sender
+                .send(
+                    species
+                        .make_result_view()
+                        .expect("Failed to extract result")
+                        .as_scalars()
+                        .to_owned(),
+                )
+                .expect("I/O thread has died");
+        }
+    });
 
     // Make sure output data is written correctly
     writer.close().expect("Failed to close output file");
