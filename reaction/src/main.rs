@@ -24,19 +24,19 @@ struct Args {
     feedrate: Option<Precision>,
 
     /// Number of images to be created
-    #[arg(short, long, default_value_t = 100)]
+    #[arg(short, long, default_value_t = 1000)]
     nbimage: usize,
 
     /// Number of steps to be computed between images
-    #[arg(short = 'e', long, default_value_t = NonZeroUsize::new(1).unwrap())]
+    #[arg(short = 'e', long, default_value_t = NonZeroUsize::new(34).unwrap())]
     nbextrastep: NonZeroUsize,
 
     /// Number of rows of the images to be created
-    #[arg(short = 'r', long, default_value_t = 100)]
+    #[arg(short = 'r', long, default_value_t = 1080)]
     nbrow: usize,
 
     /// Number of columns of the images to be created
-    #[arg(short = 'c', long, default_value_t = 200)]
+    #[arg(short = 'c', long, default_value_t = 1920)]
     nbcol: usize,
 
     /// Time interval between two computations
@@ -53,7 +53,7 @@ struct Args {
     /// utilization. 2 is the minimum to fully decouple compute and I/O, higher
     /// values may be beneficial if the I/O backend works in a batched fashion.
     #[arg(long, default_value_t = NonZeroUsize::new(2).unwrap())]
-    io_buffer: NonZeroUsize,
+    output_buffer: NonZeroUsize,
 }
 
 // Use the best compute backend allowed by enabled crate features
@@ -164,7 +164,8 @@ fn main() {
     // Set up the HDF5 writer thread
     std::thread::scope(|s| {
         // Start the writer thread
-        let (sender, receiver) = mpsc::sync_channel::<ScalarConcentration>(args.io_buffer.into());
+        let (sender, receiver) =
+            mpsc::sync_channel::<ScalarConcentration>(args.output_buffer.into());
         let writer = &mut writer;
         s.spawn(move || {
             for result in receiver {
