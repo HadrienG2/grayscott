@@ -368,8 +368,11 @@ impl Simulation {
             device.image_format_properties(ImageConcentration::image_format_info())? else {
                 return Err(Error::UnsupportedShape);
             };
-        if (image_format_properties.max_extent[0] as usize) < shape[1]
-            || (image_format_properties.max_extent[1] as usize) < shape[0]
+        if image_format_properties
+            .max_extent
+            .into_iter()
+            .zip(global_size.into_iter())
+            .any(|(max, req)| (max as usize) < req)
             || image_format_properties.max_resource_size < image_size as u64
         {
             return Err(Error::UnsupportedShape);
