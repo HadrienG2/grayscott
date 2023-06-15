@@ -81,7 +81,8 @@ fn main() {
         });
 
         // Output thread writes down image data, then sends images back to the
-        // main thread for recycling
+        // main thread for recycling.
+        // TODO: Parallelize image export, put plurals in above comment
         let (image_send, image_recv) = mpsc::sync_channel::<RgbImage>(args.output_buffer.into());
         let (image_recycle_send, image_recycle_recv) = mpsc::channel();
         s.spawn(move || {
@@ -104,28 +105,26 @@ fn main() {
             };
 
             // Generate image using multiple processing threads
-            {
-                rayon::iter::split(
-                    (input.view(), image_view(&mut image)),
-                    |(subinput, subimage)| {
-                        let num_rows = subinput.nrows();
-                        if num_rows > 1 {
-                            let midpoint = num_rows / 2;
-                            let (input1, input2) = subinput.split_at(Axis(0), midpoint);
-                            let [image1, image2] = vsplit_image(subimage, midpoint);
-                            ((input1, image1), Some((input2, image2)))
-                        } else {
-                            ((subinput, subimage), None)
-                        }
-                    },
-                )
-                .for_each(|(subinput, mut subimage)| {
-                    for (value, pixel) in subinput.iter().zip(subimage.pixels_mut()) {
-                        let color = gradient.eval_continuous((norm * value).into());
-                        *pixel = Rgb([color.r, color.g, color.b]);
+            rayon::iter::split(
+                (input.view(), image_view(&mut image)),
+                |(subinput, subimage)| {
+                    let num_rows = subinput.nrows();
+                    if num_rows > 1 {
+                        let midpoint = num_rows / 2;
+                        let (input1, input2) = subinput.split_at(Axis(0), midpoint);
+                        let [image1, image2] = vsplit_image(subimage, midpoint);
+                        ((input1, image1), Some((input2, image2)))
+                    } else {
+                        ((subinput, subimage), None)
                     }
-                });
-            }
+                },
+            )
+            .for_each(|(subinput, mut subimage)| {
+                for (value, pixel) in subinput.iter().zip(subimage.pixels_mut()) {
+                    let color = gradient.eval_continuous((norm * value).into());
+                    *pixel = Rgb([color.r, color.g, color.b]);
+                }
+            });
 
             // Send it to the output thread so it's written down
             image_send.send(image).expect("Output thread has crashed");
