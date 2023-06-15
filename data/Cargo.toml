@@ -7,13 +7,17 @@ edition.workspace = true
 gpu = ["bytemuck", "crevice", "self_cell", "thiserror", "vulkano"]
 
 [dependencies]
-bytemuck = { workspace = true, optional = true }
 cfg-if.workspace = true
-crevice = { workspace = true, optional = true }
 hdf5.workspace = true
-safe_arch = { workspace = true, optional = true }
-self_cell = { workspace = true, optional = true }
-slipstream = { workspace = true, optional = true }
-thiserror = { workspace = true, optional = true }
 ndarray.workspace = true
+
+# SIMD backends
+safe_arch = { workspace = true, optional = true }
+slipstream = { workspace = true, optional = true }
+
+# GPU backend dependencies
+bytemuck = { workspace = true, optional = true }
+crevice = { workspace = true, optional = true }
+self_cell = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
 vulkano = { workspace = true, optional = true }

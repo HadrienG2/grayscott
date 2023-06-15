@@ -6,8 +6,8 @@ edition.workspace = true
 [dependencies]
 directories.workspace = true
 log.workspace = true
-vulkano.workspace = true
 thiserror.workspace = true
+vulkano.workspace = true
 
 [dev-dependencies]
 env_logger.workspace = true

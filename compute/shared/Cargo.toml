@@ -7,7 +7,9 @@ edition.workspace = true
 criterion = ["dep:criterion", "env_logger"]
 
 [dependencies]
-criterion = { workspace = true, optional = true }
-env_logger = { workspace = true, optional = true }
 data.workspace = true
 ndarray.workspace = true
+
+# Benchmarking deps
+criterion = { workspace = true, optional = true }
+env_logger = { workspace = true, optional = true }

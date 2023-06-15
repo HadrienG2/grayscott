@@ -11,7 +11,6 @@ safe_arch.workspace = true
 
 [dev-dependencies]
 compute = { workspace = true, features = ["criterion"] }
-criterion.workspace = true
 
 [[bench]]
 name = "benchmark"

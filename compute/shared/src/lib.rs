@@ -189,16 +189,20 @@ impl<T: SimulateCpu> SimulateStep for T {
     }
 }
 
+/// Re-export criterion for the criterion_benchmark macro
+#[cfg(feature = "criterion")]
+pub use criterion;
+
 /// Macro that generates a complete criterion benchmark harness for you
 #[macro_export]
 #[cfg(feature = "criterion")]
 macro_rules! criterion_benchmark {
     ($backend:ident) => {
-        fn criterion_benchmark(c: &mut criterion::Criterion) {
+        fn criterion_benchmark(c: &mut $crate::criterion::Criterion) {
             $crate::criterion_benchmark::<$backend::Simulation>(c, stringify!($backend))
         }
-        criterion::criterion_group!(benches, criterion_benchmark);
-        criterion::criterion_main!(benches);
+        $crate::criterion::criterion_group!(benches, criterion_benchmark);
+        $crate::criterion::criterion_main!(benches);
     };
 }
 
