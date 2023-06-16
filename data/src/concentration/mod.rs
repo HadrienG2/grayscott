@@ -18,10 +18,10 @@ pub struct Species<C: Concentration> {
     context: C::Context,
 
     /// Concentration of species U
-    pub u: Evolving<C>,
+    u: Evolving<C>,
 
     /// Concentration of species V
-    pub v: Evolving<C>,
+    v: Evolving<C>,
 }
 //
 impl<C: Concentration> Species<C> {
@@ -57,6 +57,15 @@ impl<C: Concentration> Species<C> {
         Ok(result)
     }
 
+    /// Check out the concentration context
+    ///
+    /// More advanced concentration types like ImageConcentration provide a way
+    /// to cache quantities which are specific to this species concentration
+    /// storage, but do not belong to individual concentration tables.
+    pub fn context(&mut self) -> &mut C::Context {
+        &mut self.context
+    }
+
     /// Check out the shape of the concentration matrices
     pub fn shape(&self) -> [usize; 2] {
         self.u.shape()
@@ -65,6 +74,13 @@ impl<C: Concentration> Species<C> {
     /// Check out the raw shape of the concentration matrices
     pub fn raw_shape(&self) -> [usize; 2] {
         self.u.raw_shape()
+    }
+
+    /// Access the concentration matrices in (in_u, in_v, out_u, out_v) order
+    pub fn in_out(&mut self) -> (&C, &C, &mut C, &mut C) {
+        let (in_u, out_u) = self.u.in_out();
+        let (in_v, out_v) = self.v.in_out();
+        (in_u, in_v, out_u, out_v)
     }
 
     /// Make the output concentrations become the input ones and vice versa

@@ -11,10 +11,7 @@ use data::{
     parameters::{Parameters, STENCIL_SHAPE},
     Precision,
 };
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    sync::Arc,
-};
+use std::{collections::hash_map::Entry, sync::Arc};
 use thiserror::Error;
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferError, BufferUsage},
@@ -195,68 +192,64 @@ impl Simulate for Simulation {
             u32::try_from(shape / work_group_size).unwrap()
         });
 
-        // Prepare to cache the image descriptor sets
-        let mut images = HashMap::<[Arc<StorageImage>; 4], Arc<PersistentDescriptorSet>>::new();
-
         // Run the simulation steps
         for _ in 0..steps {
             // Acquire access to the input and output images
-            let (in_u, out_u) = species.u.in_out();
-            let (in_v, out_v) = species.v.in_out();
-            let in_u = in_u.access_image();
-            let in_v = in_v.access_image();
-            let out_u = out_u.access_image();
-            let out_v = out_v.access_image();
+            let (in_u, in_v, out_u, out_v) = species.in_out();
+            let [in_u, in_v, out_u, out_v] =
+                [in_u, in_v, out_u, out_v].map(|i| i.access_image().clone());
 
             // Have we seen this input + outpt images configuration before?
-            let images =
-                match images.entry([in_u.clone(), in_v.clone(), out_u.clone(), out_v.clone()]) {
-                    // If so, reuse previously configured descriptor set
-                    Entry::Occupied(occupied) => occupied.get().clone(),
+            let images = match species.context().descriptor_sets.entry([
+                in_u.clone(),
+                in_v.clone(),
+                out_u.clone(),
+                out_v.clone(),
+            ]) {
+                // If so, reuse previously configured descriptor set
+                Entry::Occupied(occupied) => occupied.get().clone(),
 
-                    // Otherwise, make a new descriptor set
-                    Entry::Vacant(vacant) => {
-                        let view = |image: &Arc<StorageImage>, usage| {
-                            ImageView::new(
-                                image.clone(),
-                                ImageViewCreateInfo {
-                                    usage,
-                                    ..ImageViewCreateInfo::from_image(image)
-                                },
-                            )
-                        };
-                        let input_binding = |binding,
-                                             image,
-                                             sampler: &Arc<Sampler>|
-                         -> Result<WriteDescriptorSet> {
+                // Otherwise, make a new descriptor set
+                Entry::Vacant(vacant) => {
+                    let view = |image: Arc<StorageImage>, usage| {
+                        ImageView::new(
+                            image.clone(),
+                            ImageViewCreateInfo {
+                                usage,
+                                ..ImageViewCreateInfo::from_image(&image)
+                            },
+                        )
+                    };
+                    let input_binding =
+                        |binding, image, sampler: &Arc<Sampler>| -> Result<WriteDescriptorSet> {
                             Ok(WriteDescriptorSet::image_view_sampler(
                                 binding,
                                 view(image, ImageUsage::SAMPLED)?,
                                 sampler.clone(),
                             ))
                         };
-                        let output_binding = |binding, image| -> Result<WriteDescriptorSet> {
-                            Ok(WriteDescriptorSet::image_view(
-                                binding,
-                                view(image, ImageUsage::STORAGE)?,
-                            ))
-                        };
-                        let layout = self.pipeline.layout().set_layouts()
-                            [usize::try_from(IMAGES_SET).unwrap()]
-                        .clone();
-                        let set = PersistentDescriptorSet::new(
-                            &self.context.descriptor_allocator,
-                            layout,
-                            [
-                                input_binding(0, in_u, &self.input_samplers[0])?,
-                                input_binding(1, in_v, &self.input_samplers[1])?,
-                                output_binding(2, out_u)?,
-                                output_binding(3, out_v)?,
-                            ],
-                        )?;
-                        vacant.insert(set).clone()
-                    }
-                };
+                    let output_binding = |binding, image| -> Result<WriteDescriptorSet> {
+                        Ok(WriteDescriptorSet::image_view(
+                            binding,
+                            view(image, ImageUsage::STORAGE)?,
+                        ))
+                    };
+                    let layout = self.pipeline.layout().set_layouts()
+                        [usize::try_from(IMAGES_SET).unwrap()]
+                    .clone();
+                    let set = PersistentDescriptorSet::new(
+                        &self.context.descriptor_allocator,
+                        layout,
+                        [
+                            input_binding(0, in_u, &self.input_samplers[0])?,
+                            input_binding(1, in_v, &self.input_samplers[1])?,
+                            output_binding(2, out_u)?,
+                            output_binding(3, out_v)?,
+                        ],
+                    )?;
+                    vacant.insert(set).clone()
+                }
+            };
 
             // Attach the images and run the simulation
             builder

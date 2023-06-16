@@ -20,6 +20,7 @@ use vulkano::{
         CommandBufferBeginError, CommandBufferExecError, CommandBufferUsage, CopyBufferToImageInfo,
         CopyError, CopyImageToBufferInfo, PrimaryAutoCommandBuffer,
     },
+    descriptor_set::PersistentDescriptorSet,
     device::Queue,
     format::{Format, FormatFeatures},
     image::{
@@ -283,6 +284,21 @@ pub enum Owner {
 
 /// External state needed to manipulate ImageConcentrations
 pub struct ImageContext {
+    /// Descriptor set cache
+    ///
+    /// This member is not used by ImageContext methods and purely provided for
+    /// the benefit of the compute backend using these ImageConcentrations.
+    ///
+    /// Vulkan implementors recommend caching the DescriptorSets that are used
+    /// to attach resources to shaders. In our case, one particular descriptor
+    /// set to cache is the one used to bind quadruplets of images (input and
+    /// output U and V) to compute shaders.
+    ///
+    /// We do not handle the creation of that descriptor set as the specifics
+    /// depend on how the shader accesses the image (sampled or not, etc), which
+    /// is where our line for compute backend specific code is drawn.
+    pub descriptor_sets: HashMap<[Arc<StorageImage>; 4], Arc<PersistentDescriptorSet>>,
+
     /// Buffer/image allocator
     memory_allocator: Arc<MemAlloc>,
 
@@ -318,6 +334,7 @@ impl ImageContext {
         .collect();
 
         Ok(Self {
+            descriptor_sets: HashMap::new(),
             memory_allocator,
             queue_family_indices,
             command_allocator,

@@ -38,8 +38,7 @@ impl SimulateStep for Simulation {
     fn perform_step(&self, species: &mut Species) -> Result<(), Infallible> {
         // Access species concentration matrices
         let shape = species.shape();
-        let (in_u, out_u) = species.u.in_out();
-        let (in_v, out_v) = species.v.in_out();
+        let (in_u, in_v, out_u, out_v) = species.in_out();
 
         // Determine stencil offsets
         let stencil_offset = stencil_offset();

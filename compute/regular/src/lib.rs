@@ -60,8 +60,7 @@ impl Simulation {
     /// Compute pixels in the center of the image, where the full stencil is always used
     fn step_center(&self, species: &mut Species, center_range: [Range<usize>; 2]) {
         // Access species concentration matrices
-        let (in_u, out_u) = species.u.in_out();
-        let (in_v, out_v) = species.v.in_out();
+        let (in_u, in_v, out_u, out_v) = species.in_out();
 
         // Determine offset from the top-left corner of the stencil to its center
         let stencil_offset = stencil_offset();
@@ -85,8 +84,7 @@ impl Simulation {
     fn step_edge(&self, species: &mut Species, center_range: [Range<usize>; 2]) {
         // Access species concentration matrices
         let shape = species.shape();
-        let (in_u, out_u) = species.u.in_out();
-        let (in_v, out_v) = species.v.in_out();
+        let (in_u, in_v, out_u, out_v) = species.in_out();
 
         // Determine offset from the top-left corner of the stencil to its center
         let stencil_offset = stencil_offset();
