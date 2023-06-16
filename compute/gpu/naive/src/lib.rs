@@ -116,7 +116,7 @@ impl SimulateBase for Simulation {
             Sampler::new(
                 context.device.clone(),
                 SamplerCreateInfo {
-                    address_mode: [SamplerAddressMode::ClampToEdge; 3],
+                    address_mode: [SamplerAddressMode::ClampToBorder; 3],
                     border_color: BorderColor::FloatOpaqueBlack,
                     unnormalized_coordinates: true,
                     ..Default::default()
