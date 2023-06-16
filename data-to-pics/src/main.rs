@@ -41,6 +41,20 @@ struct Args {
     /// values may be beneficial if the I/O backend works in a batched fashion.
     #[arg(long, default_value_t = NonZeroUsize::new(2).unwrap())]
     output_buffer: NonZeroUsize,
+
+    /// Number of image I/O threads
+    ///
+    /// Adding more output threads can improve performance when all of the
+    /// following is true:
+    ///
+    /// - The program is not processing images faster than HDF5 can read them.
+    /// - The benefits of having more CPU time for PNG compression are not
+    ///   compensated by the cost of oversubscribing the CPU, which slows
+    ///   image rendering down.
+    /// - Output storage has enough capacity to accomodate the extra workload
+    ///   (seeks, writes) associated with writing more images in parallel.
+    #[arg(long, default_value_t = NonZeroUsize::new(3).unwrap())]
+    output_threads: NonZeroUsize,
 }
 
 fn main() {
@@ -80,23 +94,32 @@ fn main() {
             }
         });
 
-        // Output thread writes down image data, then sends images back to the
-        // main thread for recycling.
-        // TODO: Parallelize image export, put plurals in above comment
-        let (image_send, image_recv) = mpsc::sync_channel::<RgbImage>(args.output_buffer.into());
-        let (image_recycle_send, image_recycle_recv) = mpsc::channel();
-        s.spawn(move || {
-            for (idx, image) in image_recv.into_iter().enumerate() {
-                image
-                    .save(args.output_dir.join(format!("{idx}.png")))
-                    .expect("Failed to save image");
-                let _ = image_recycle_send.send(image);
-                progress.inc(1);
+        // Output threads write down image data, then send image containers
+        // back to the main thread for recycling
+        let (image_send, image_recycle_recv) = {
+            let (image_send, image_recv) =
+                crossbeam_channel::bounded::<(usize, RgbImage)>(args.output_buffer.into());
+            let (image_recycle_send, image_recycle_recv) = mpsc::channel();
+            let output_dir = &args.output_dir;
+            let progress = &progress;
+            for _ in 0..args.output_threads.into() {
+                let image_recv = image_recv.clone();
+                let image_recycle_send = image_recycle_send.clone();
+                s.spawn(move || {
+                    for (idx, image) in image_recv {
+                        image
+                            .save(output_dir.join(format!("{idx}.png")))
+                            .expect("Failed to save image");
+                        let _ = image_recycle_send.send(image);
+                        progress.inc(1);
+                    }
+                });
             }
-        });
+            (image_send, image_recycle_recv)
+        };
 
         // Main thread converts HDF5 tables to images
-        for input in hdf5_recv {
+        for (idx, input) in hdf5_recv.into_iter().enumerate() {
             // Try to reuse a previously created image
             let mut image = match image_recycle_recv.try_recv() {
                 Ok(image) => image,
@@ -127,7 +150,9 @@ fn main() {
             });
 
             // Send it to the output thread so it's written down
-            image_send.send(image).expect("Output thread has crashed");
+            image_send
+                .send((idx, image))
+                .expect("Output thread has crashed");
         }
     });
 }

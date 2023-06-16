@@ -40,6 +40,9 @@ crevice = "0.13"
 # Used for microbenchmarking
 criterion = { version = "0.5", default-features = false }
 
+# Used for scheduling work over multiple threads
+crossbeam-channel = "0.5"
+
 # Standard OS directories (used for GPU pipeline cache storage)
 directories = "5.0"
 
