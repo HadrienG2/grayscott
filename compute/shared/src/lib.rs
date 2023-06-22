@@ -216,7 +216,7 @@ pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name
     env_logger::init();
 
     let sim = Simulation::new(black_box(Parameters::default())).unwrap();
-    let mut group = c.benchmark_group(format!("{backend_name}::steps"));
+    let mut group = c.benchmark_group(format!("{backend_name}"));
     for num_steps_pow2 in 0..=8 {
         let num_steps = 2u64.pow(num_steps_pow2);
         for size_pow2 in 3..=11 {
