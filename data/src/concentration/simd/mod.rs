@@ -39,14 +39,14 @@ use std::{
 /// ```
 ///
 /// In a nutshell...
-/// - The left and the right edge of the array are padded with stencil_offset[1]
+/// - The left and right edges of the array are padded with `stencil_offset[1]`
 ///   vectors of zeroes in order to regularize the computation and avoid 4K
-///   aliasing in the common case where the central region width is a power of 2.
+///   aliasing in the common case where the central width is a power of 2.
 /// - Every column of the matrix is sliced into W sub-columns of length N, which
 ///   are distributed across the lanes of the vectors in the center region (the
 ///   first vector contains the first element of the first sub-column, the
 ///   first element of the second sub-column, and so on).
-/// - The top and the bottom of the matrix is padded with stencil_offset[0]
+/// - The top and the bottom of the matrix is padded with `stencil_offset[0]`
 ///   elements that respectively replicate the end of the previous sub-column
 ///   and the beginning of the next sub-column.
 ///

@@ -112,7 +112,8 @@ pub enum Error<BackendError: std::error::Error, ConcentrationError: std::error::
     ///
     /// In an ideal world, this error kind wouldn't be needed, as Backend can
     /// cover this case. But Rust is not yet smart enough to treat From as
-    /// a transitive operation (if T: From<U> and U: From<V>, then T: From<V>).
+    /// a transitive operation (if `T: From<U>` and `U: From<V>`, we do not yet
+    /// get `T: From<V>` for free).
     #[doc(hidden)]
     #[error(transparent)]
     Concentration(#[from] ConcentrationError),
