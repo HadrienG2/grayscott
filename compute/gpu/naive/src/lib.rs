@@ -99,6 +99,7 @@ impl SimulateBase for Simulation {
         .setup()?;
 
         // Load the compute shader + check shader code assumptions
+        // when we can (not all data is available)
         assert_eq!(
             std::mem::size_of::<Precision>(),
             4,
