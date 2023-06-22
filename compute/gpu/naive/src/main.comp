@@ -18,11 +18,12 @@ layout(set = 1, binding = 0) uniform Parameters {
           time_step;
 } params;
 
-// Diffusion stencil properties
-const ivec2 stencil_shape = ivec2(3, 3);
-const ivec2 stencil_offset = ivec2((stencil_shape - 1) / 2);
-
 // === GPU-side code ===
+
+// Diffusion stencil properties
+const ivec2 stencil_shape = ivec2(params.weights.length(),
+                                  params.weights[0].length());
+const ivec2 stencil_offset = ivec2((stencil_shape - 1) / 2);
 
 // What each shader invocation does
 void main() {
