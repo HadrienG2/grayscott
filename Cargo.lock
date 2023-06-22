@@ -319,6 +319,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "compute_gpu_specialized"
+version = "0.1.0"
+dependencies = [
+ "compute",
+ "compute_gpu",
+ "compute_gpu_naive",
+ "data",
+ "vulkano",
+ "vulkano-shaders",
+]
+
+[[package]]
 name = "compute_manualvec"
 version = "0.1.0"
 dependencies = [
@@ -1302,6 +1314,7 @@ dependencies = [
  "compute_autovec",
  "compute_block",
  "compute_gpu_naive",
+ "compute_gpu_specialized",
  "compute_manualvec",
  "compute_naive",
  "compute_parallel",

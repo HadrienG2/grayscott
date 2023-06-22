@@ -1,0 +1,19 @@
+[package]
+name = "compute_gpu_specialized"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+compute.workspace = true
+compute_gpu.workspace = true
+compute_gpu_naive.workspace = true
+data = { workspace = true, features = ["gpu"] }
+vulkano.workspace = true
+vulkano-shaders.workspace = true
+
+[dev-dependencies]
+compute = { workspace = true, features = ["criterion"] }
+
+[[bench]]
+name = "benchmark"
+harness = false

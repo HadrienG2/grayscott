@@ -1,7 +1,9 @@
 //! Naive implementation of GPU-based Gray-Scott simulation
 //!
-//! This version follows the logic of the naive_propagation.cpp example from the
-//! C++ tutorial, and is slow for the same reason.
+//! This version uses GPU images in a straightforward way to perform Gray-Scott
+//! simulation. It illustrates the challenge of keeping CPU and GPU code in sync
+//! in the split-source model that Vulkan-based Rust code must sadly use until
+//! rust-gpu is mature enough.
 
 use compute::{Simulate, SimulateBase};
 use compute_gpu::{VulkanConfig, VulkanContext};
@@ -25,7 +27,7 @@ use vulkano::{
     },
     device::{
         physical::{PhysicalDevice, PhysicalDeviceError},
-        Queue,
+        Device, Queue,
     },
     format::FormatFeatures,
     image::{
@@ -42,10 +44,10 @@ use vulkano::{
 };
 
 /// Chosen concentration type
-type Species = data::concentration::Species<ImageConcentration>;
+pub type Species = data::concentration::Species<ImageConcentration>;
 
 /// Shader descriptor set to which input and output images are bound
-const IMAGES_SET: u32 = 0;
+pub const IMAGES_SET: u32 = 0;
 
 /// Descriptor within `IMAGES_SET` for sampling of input U concentration
 const IN_U: u32 = 0;
@@ -62,7 +64,7 @@ const OUT_V: u32 = 3;
 /// Shader descriptor set to which simulation parameters are bound
 const PARAMS_SET: u32 = 1;
 
-/// Work-group size used by the shader
+/// Work-group size used by the shader (must be keep in sync with shader!)
 const WORK_GROUP_SIZE: [u32; 3] = [8, 8, 1];
 
 /// Gray-Scott reaction simulation
@@ -84,12 +86,7 @@ impl SimulateBase for Simulation {
 
     fn new(params: Parameters) -> Result<Self> {
         // Check that ImageConcentration supports what we need
-        assert!(
-            ImageConcentration::image_format_info()
-                .usage
-                .contains(ImageUsage::SAMPLED | ImageUsage::STORAGE),
-            "ImageConcentration does not enable all required usage flags"
-        );
+        check_image_concentration();
 
         // Set up Vulkan
         let context = VulkanConfig {
@@ -112,34 +109,13 @@ impl SimulateBase for Simulation {
         );
         let shader = shader::load(context.device.clone())?;
 
-        // Set up input image sampling
-        let input_sampler = Sampler::new(
-            context.device.clone(),
-            SamplerCreateInfo {
-                address_mode: [SamplerAddressMode::ClampToBorder; 3],
-                border_color: BorderColor::FloatOpaqueBlack,
-                unnormalized_coordinates: true,
-                ..Default::default()
-            },
-        )?;
-
         // Set up the compute pipeline
         let pipeline = ComputePipeline::new(
             context.device.clone(),
             shader.entry_point("main").expect("Should be present"),
             &(),
             Some(context.pipeline_cache.clone()),
-            move |descriptor_sets| {
-                fn binding(
-                    set: &mut DescriptorSetLayoutCreateInfo,
-                    idx: u32,
-                ) -> &mut DescriptorSetLayoutBinding {
-                    set.bindings.get_mut(&idx).unwrap()
-                }
-                let images_set = &mut descriptor_sets[IMAGES_SET as usize];
-                binding(images_set, IN_U).immutable_samplers = vec![input_sampler.clone()];
-                binding(images_set, IN_V).immutable_samplers = vec![input_sampler];
-            },
+            sampler_setup_callback(context.device.clone())?,
         )?;
 
         // Move parameters to GPU-accessible memory
@@ -170,7 +146,7 @@ impl SimulateBase for Simulation {
     }
 
     fn make_species(&self, shape: [usize; 2]) -> Result<Species> {
-        self.check_shape_requirements(shape)?;
+        check_image_shape_requirements(self.context.device.physical_device(), shape)?;
         Ok(Species::new(
             ImageContext::new(
                 self.context.memory_allocator.clone(),
@@ -203,63 +179,12 @@ impl Simulate for Simulation {
             );
 
         // Determine the GPU dispatch size
-        let global_size = Self::shape_to_global_size(species.shape());
-        let dispatch_size = std::array::from_fn(|i| {
-            let shape = global_size[i];
-            let work_group_size = usize::try_from(WORK_GROUP_SIZE[i]).unwrap();
-            debug_assert_eq!(shape % work_group_size, 0, "Checked by make_species");
-            u32::try_from(shape / work_group_size).unwrap()
-        });
+        let dispatch_size = dispatch_size(species.shape(), WORK_GROUP_SIZE);
 
-        // Run the simulation steps
+        // Record the simulation steps
         for _ in 0..steps {
-            // Acquire access to the input and output images
-            let (in_u, in_v, out_u, out_v) = species.in_out();
-            let images = [in_u, in_v, out_u, out_v].map(|i| i.access_image().clone());
-
-            // Have we seen this input + outpt images configuration before?
-            let images = match species.context().descriptor_sets.entry(images) {
-                // If so, reuse previously configured descriptor set
-                Entry::Occupied(occupied) => occupied.get().clone(),
-
-                // Otherwise, make a new descriptor set
-                Entry::Vacant(vacant) => {
-                    let [in_u, in_v, out_u, out_v] = vacant.key();
-                    let binding =
-                        |binding, image: &Arc<StorageImage>, usage| -> Result<WriteDescriptorSet> {
-                            Ok(WriteDescriptorSet::image_view(
-                                binding,
-                                ImageView::new(
-                                    image.clone(),
-                                    ImageViewCreateInfo {
-                                        usage,
-                                        ..ImageViewCreateInfo::from_image(&image)
-                                    },
-                                )?,
-                            ))
-                        };
-                    let input_binding = |idx, image| -> Result<WriteDescriptorSet> {
-                        binding(idx, image, ImageUsage::SAMPLED)
-                    };
-                    let output_binding = |idx, image| -> Result<WriteDescriptorSet> {
-                        binding(idx, image, ImageUsage::STORAGE)
-                    };
-                    let layout = self.pipeline.layout().set_layouts()
-                        [usize::try_from(IMAGES_SET).unwrap()]
-                    .clone();
-                    let set = PersistentDescriptorSet::new(
-                        &self.context.descriptor_allocator,
-                        layout,
-                        [
-                            input_binding(IN_U, in_u)?,
-                            input_binding(IN_V, in_v)?,
-                            output_binding(OUT_U, out_u)?,
-                            output_binding(OUT_V, out_v)?,
-                        ],
-                    )?;
-                    vacant.insert(set).clone()
-                }
-            };
+            // Set up a descriptor set for the input and output images
+            let images = images_descriptor_set(&self.context, &self.pipeline, species)?;
 
             // Attach the images and run the simulation
             builder
@@ -274,6 +199,8 @@ impl Simulate for Simulation {
             // Flip to the other set of images and start over
             species.flip()?;
         }
+
+        // Synchronously execute the simulation steps
         let commands = builder.build()?;
         vulkano::sync::now(self.context.device.clone())
             .then_execute(self.queue().clone(), commands)?
@@ -289,101 +216,28 @@ impl Simulation {
         &self.context.queues[0]
     }
 
-    /// Convert a Concentration shape into a global device work size
-    fn shape_to_global_size([rows, cols]: [usize; 2]) -> [usize; 3] {
-        [cols, rows, 1]
-    }
-
-    /// Check minimal device requirements
+    /// Check minimal device requirements for this backend
     fn minimal_device_requirements(device: &PhysicalDevice) -> bool {
         let properties = device.properties();
-        let Ok(format_properties) = device.format_properties(ImageConcentration::format()) else {
-            return false
-        };
 
         let num_samplers = 2;
         let num_storage_images = 2;
         let num_uniforms = 1;
 
-        properties.max_bound_descriptor_sets >= 2
-            && properties.max_compute_work_group_invocations
-                >= WORK_GROUP_SIZE.into_iter().product::<u32>()
-            && properties
-                .max_compute_work_group_size
-                .into_iter()
-                .zip(WORK_GROUP_SIZE.into_iter())
-                .all(|(max, req)| max >= req)
-            && properties.max_descriptor_set_samplers >= num_samplers
-            && properties.max_per_stage_descriptor_samplers >= num_samplers
-            && properties.max_descriptor_set_storage_images >= num_storage_images
-            && properties.max_per_stage_descriptor_storage_images >= num_storage_images
+        image_device_requirements(device, WORK_GROUP_SIZE)
+            && properties.max_bound_descriptor_sets >= 2
             && properties.max_descriptor_set_uniform_buffers >= num_uniforms
             && properties.max_per_stage_descriptor_uniform_buffers >= num_uniforms
-            && properties.max_per_set_descriptors.unwrap_or(u32::MAX)
-                >= num_samplers + num_storage_images
+            && properties.max_per_set_descriptors.unwrap_or(u32::MAX) >= 1
             && properties.max_per_stage_resources
                 >= 2 * num_samplers + num_storage_images + num_uniforms
-            && properties.max_sampler_allocation_count >= num_samplers
             && properties.max_uniform_buffer_range
                 >= u32::try_from(std::mem::size_of::<Parameters>())
                     .expect("Parameters can't fit on any Vulkan device!")
-            && format_properties.optimal_tiling_features.contains(
-                FormatFeatures::SAMPLED_IMAGE
-                    | FormatFeatures::STORAGE_IMAGE
-                    | ImageConcentration::required_image_format_features(),
-            )
-    }
-
-    /// Check requirements on the problem size
-    fn check_shape_requirements(&self, shape: [usize; 2]) -> Result<()> {
-        // The simple shader can't accomodate a problem size that is not a
-        // multiple of the work group size
-        let global_size = Self::shape_to_global_size(shape);
-        if global_size
-            .into_iter()
-            .zip(WORK_GROUP_SIZE.into_iter())
-            .any(|(sh, wg)| sh % wg as usize != 0)
-        {
-            return Err(Error::UnsupportedShape);
-        }
-        let dispatch_size: [usize; 3] =
-            std::array::from_fn(|i| global_size[i] / WORK_GROUP_SIZE[i] as usize);
-
-        // Check device properties
-        let num_texels = shape.into_iter().product::<usize>();
-        let image_size = num_texels * std::mem::size_of::<Precision>();
-        let device = self.context.device.physical_device();
-        let properties = device.properties();
-        if properties
-            .max_compute_work_group_count
-            .into_iter()
-            .zip(dispatch_size.into_iter())
-            .any(|(max, req)| (max as usize) < req)
-            || (properties.max_image_dimension2_d as usize) < shape.into_iter().max().unwrap()
-            || properties.max_memory_allocation_size.unwrap_or(u64::MAX) < image_size as u64
-            || properties.max_buffer_size.unwrap_or(u64::MAX) < image_size as u64
-        {
-            return Err(Error::UnsupportedShape);
-        }
-
-        // Check image format properties
-        let Some(image_format_properties) =
-            device.image_format_properties(ImageConcentration::image_format_info())? else {
-                return Err(Error::UnsupportedShape);
-            };
-        if image_format_properties
-            .max_extent
-            .into_iter()
-            .zip(global_size.into_iter())
-            .any(|(max, req)| (max as usize) < req)
-            || image_format_properties.max_resource_size < image_size as u64
-        {
-            return Err(Error::UnsupportedShape);
-        }
-        Ok(())
     }
 }
 
+/// GPU compute shader for this backend
 mod shader {
     vulkano_shaders::shader! {
         ty: "compute",
@@ -391,6 +245,197 @@ mod shader {
         spirv_version: "1.0",
         path: "src/main.comp",
     }
+}
+
+/// Generate the callback to configure image sampling during GPU compute
+/// pipeline construction
+pub fn sampler_setup_callback(
+    device: Arc<Device>,
+) -> Result<impl FnOnce(&mut [DescriptorSetLayoutCreateInfo])> {
+    let input_sampler = Sampler::new(
+        device.clone(),
+        SamplerCreateInfo {
+            address_mode: [SamplerAddressMode::ClampToBorder; 3],
+            border_color: BorderColor::FloatOpaqueBlack,
+            unnormalized_coordinates: true,
+            ..Default::default()
+        },
+    )?;
+    Ok(
+        move |descriptor_sets: &mut [DescriptorSetLayoutCreateInfo]| {
+            fn binding(
+                set: &mut DescriptorSetLayoutCreateInfo,
+                idx: u32,
+            ) -> &mut DescriptorSetLayoutBinding {
+                set.bindings.get_mut(&idx).unwrap()
+            }
+            let images_set = &mut descriptor_sets[IMAGES_SET as usize];
+            binding(images_set, IN_U).immutable_samplers = vec![input_sampler.clone()];
+            binding(images_set, IN_V).immutable_samplers = vec![input_sampler];
+        },
+    )
+}
+
+/// Acquire a descriptor set to bind the proper images
+pub fn images_descriptor_set(
+    context: &VulkanContext,
+    pipeline: &ComputePipeline,
+    species: &mut Species,
+) -> Result<Arc<PersistentDescriptorSet>> {
+    // Acquire access to the input and output images
+    let (in_u, in_v, out_u, out_v) = species.in_out();
+    let images = [in_u, in_v, out_u, out_v].map(|i| i.access_image().clone());
+
+    // Have we seen this input + outpt images configuration before?
+    match species.context().descriptor_sets.entry(images) {
+        // If so, reuse previously configured descriptor set
+        Entry::Occupied(occupied) => Ok(occupied.get().clone()),
+
+        // Otherwise, make a new descriptor set
+        Entry::Vacant(vacant) => {
+            let [in_u, in_v, out_u, out_v] = vacant.key();
+            let binding =
+                |binding, image: &Arc<StorageImage>, usage| -> Result<WriteDescriptorSet> {
+                    Ok(WriteDescriptorSet::image_view(
+                        binding,
+                        ImageView::new(
+                            image.clone(),
+                            ImageViewCreateInfo {
+                                usage,
+                                ..ImageViewCreateInfo::from_image(&image)
+                            },
+                        )?,
+                    ))
+                };
+            let input_binding = |idx, image| -> Result<WriteDescriptorSet> {
+                binding(idx, image, ImageUsage::SAMPLED)
+            };
+            let output_binding = |idx, image| -> Result<WriteDescriptorSet> {
+                binding(idx, image, ImageUsage::STORAGE)
+            };
+            let layout =
+                pipeline.layout().set_layouts()[usize::try_from(IMAGES_SET).unwrap()].clone();
+            let set = PersistentDescriptorSet::new(
+                &context.descriptor_allocator,
+                layout,
+                [
+                    input_binding(IN_U, in_u)?,
+                    input_binding(IN_V, in_v)?,
+                    output_binding(OUT_U, out_u)?,
+                    output_binding(OUT_V, out_v)?,
+                ],
+            )?;
+            Ok(vacant.insert(set).clone())
+        }
+    }
+}
+
+/// Convert an ImageConcentration shape into a global workload size
+pub fn shape_to_global_size([rows, cols]: [usize; 2]) -> [usize; 3] {
+    [cols, rows, 1]
+}
+
+/// Convert an ImageConcentration shape into a compute dispatch size
+pub fn dispatch_size(shape: [usize; 2], work_group_size: [u32; 3]) -> [u32; 3] {
+    let global_size = shape_to_global_size(shape);
+    std::array::from_fn(|i| {
+        let shape = global_size[i];
+        let work_group_size = usize::try_from(work_group_size[i]).unwrap();
+        debug_assert_eq!(shape % work_group_size, 0, "Checked by make_species");
+        u32::try_from(shape / work_group_size).unwrap()
+    })
+}
+
+/// Check that ImageConcentration is correctly configured
+pub fn check_image_concentration() {
+    assert!(
+        ImageConcentration::image_format_info()
+            .usage
+            .contains(ImageUsage::SAMPLED | ImageUsage::STORAGE),
+        "ImageConcentration does not enable all required usage flags"
+    );
+}
+
+/// Subset of minimal_device_requirements that will be true for any backend
+/// that uses an image-based logic.
+pub fn image_device_requirements(device: &PhysicalDevice, work_group_size: [u32; 3]) -> bool {
+    let properties = device.properties();
+    let Ok(format_properties) = device.format_properties(ImageConcentration::format()) else {
+        return false
+    };
+
+    let num_samplers = 2;
+    let num_storage_images = 2;
+
+    properties.max_bound_descriptor_sets >= 1
+        && properties.max_compute_work_group_invocations
+            >= work_group_size.into_iter().product::<u32>()
+        && properties
+            .max_compute_work_group_size
+            .into_iter()
+            .zip(work_group_size.into_iter())
+            .all(|(max, req)| max >= req)
+        && properties.max_descriptor_set_samplers >= num_samplers
+        && properties.max_per_stage_descriptor_samplers >= num_samplers
+        && properties.max_descriptor_set_storage_images >= num_storage_images
+        && properties.max_per_stage_descriptor_storage_images >= num_storage_images
+        && properties.max_per_set_descriptors.unwrap_or(u32::MAX)
+            >= num_samplers + num_storage_images
+        && properties.max_per_stage_resources >= 2 * num_samplers + num_storage_images
+        && properties.max_sampler_allocation_count >= num_samplers
+        && format_properties.optimal_tiling_features.contains(
+            FormatFeatures::SAMPLED_IMAGE
+                | FormatFeatures::STORAGE_IMAGE
+                | ImageConcentration::required_image_format_features(),
+        )
+}
+
+/// Requirements on the problem size that are true of any image-based backend
+pub fn check_image_shape_requirements(device: &PhysicalDevice, shape: [usize; 2]) -> Result<()> {
+    // The simple shader can't accomodate a problem size that is not a
+    // multiple of the work group size
+    let global_size = shape_to_global_size(shape);
+    if global_size
+        .into_iter()
+        .zip(WORK_GROUP_SIZE.into_iter())
+        .any(|(sh, wg)| sh % wg as usize != 0)
+    {
+        return Err(Error::UnsupportedShape);
+    }
+    let dispatch_size: [usize; 3] =
+        std::array::from_fn(|i| global_size[i] / WORK_GROUP_SIZE[i] as usize);
+
+    // Check device properties
+    let num_texels = shape.into_iter().product::<usize>();
+    let image_size = num_texels * std::mem::size_of::<Precision>();
+    let properties = device.properties();
+    if properties
+        .max_compute_work_group_count
+        .into_iter()
+        .zip(dispatch_size.into_iter())
+        .any(|(max, req)| (max as usize) < req)
+        || (properties.max_image_dimension2_d as usize) < shape.into_iter().max().unwrap()
+        || properties.max_memory_allocation_size.unwrap_or(u64::MAX) < image_size as u64
+        || properties.max_buffer_size.unwrap_or(u64::MAX) < image_size as u64
+    {
+        return Err(Error::UnsupportedShape);
+    }
+
+    // Check image format properties
+    let Some(image_format_properties) =
+        device.image_format_properties(ImageConcentration::image_format_info())? else {
+            return Err(Error::UnsupportedShape);
+        };
+    if image_format_properties
+        .max_extent
+        .into_iter()
+        .zip(global_size.into_iter())
+        .any(|(max, req)| (max as usize) < req)
+        || image_format_properties.max_resource_size < image_size as u64
+    {
+        return Err(Error::UnsupportedShape);
+    }
+    Ok(())
 }
 
 /// Errors that can occur during this computation
@@ -457,4 +502,4 @@ pub enum Error {
     PhysicalDevice(#[from] PhysicalDeviceError),
 }
 //
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;

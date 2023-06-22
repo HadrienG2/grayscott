@@ -1,0 +1,77 @@
+#version 460
+
+#include "../../naive/src/image.glsl"
+
+// === CPU/GPU interface ===
+//
+// Any modification to the following declarations may call for matching
+// modifications to the CPU-side code!
+
+// Workgroup dimensions
+layout(local_size_x_id = 0, local_size_y_id = 1) in;
+
+// Computation parameters
+// Changes in the stencil 
+layout(constant_id = 2) const float weight00 = 1.0;
+layout(constant_id = 3) const float weight01 = 1.0;
+layout(constant_id = 4) const float weight02 = 1.0;
+layout(constant_id = 5) const float weight10 = 1.0;
+layout(constant_id = 6) const float weight11 = 1.0;
+layout(constant_id = 7) const float weight12 = 1.0;
+layout(constant_id = 8) const float weight20 = 1.0;
+layout(constant_id = 9) const float weight21 = 1.0;
+layout(constant_id = 10) const float weight22 = 1.0;
+mat3 weights() {
+    return mat3(weight00, weight01, weight02,
+                weight10, weight11, weight12,
+                weight20, weight21, weight22);
+}
+//
+layout(constant_id = 11) const float diffusion_rate_u = 0.1;
+layout(constant_id = 12) const float diffusion_rate_v = 0.05;
+layout(constant_id = 13) const float feed_rate = 0.014;
+layout(constant_id = 14) const float kill_rate = 0.054;
+layout(constant_id = 15) const float time_step = 1.0;
+
+// === GPU-side code ===
+
+// Diffusion rate
+const vec2 diffusion_rate_uv = vec2(diffusion_rate_u, diffusion_rate_v);
+
+// What each shader invocation does
+void main() {
+    // Stencil weights
+    const mat3 weights = weights();
+    const ivec2 stencil_shape = ivec2(weights.length(), weights[0].length());
+    const ivec2 stencil_offset = ivec2((stencil_shape - 1) / 2);
+
+    // Determine which central input and output location we act on
+    const ivec2 center_idx = ivec2(gl_GlobalInvocationID.xy);
+
+    // Read the center value of the concentration
+    const vec2 uv = read_uv(center_idx);
+
+    // Compute diffusion term for U and V
+    vec2 full_uv = vec2(0.);
+    const ivec2 top_left = center_idx - stencil_offset;
+    for (int x = 0; x < stencil_shape.x; ++x) {
+        for (int y = 0; y < stencil_shape.y; ++y) {
+            const vec2 stencil_uv = read_uv(top_left + ivec2(x, y));
+            full_uv += weights[x][y] * (stencil_uv - uv);
+        }
+    }
+    const vec2 diffusion = diffusion_rate_uv * full_uv;
+
+    // Deduce rate of change in u and v
+    const float u = uv.x;
+    const float diffusion_u = diffusion.x;
+    const float v = uv.y;
+    const float diffusion_v = diffusion.y;
+    //
+    const float uv_square = u * v * v;
+    const float du = diffusion_u - uv_square + feed_rate * (1.0 - u);
+    const float dv = diffusion_v + uv_square - (feed_rate + kill_rate) * v;
+
+    // Update u and v accordingly
+    write_uv(center_idx, uv + vec2(du, dv) * time_step);
+}

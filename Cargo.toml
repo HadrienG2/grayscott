@@ -2,8 +2,9 @@
 members = [
     "compute/autovec",
     "compute/block",
-    "compute/gpu/shared",
     "compute/gpu/naive",
+    "compute/gpu/shared",
+    "compute/gpu/specialized",
     "compute/manualvec",
     "compute/naive",
     "compute/parallel",
@@ -95,6 +96,7 @@ compute.path = "compute/shared"
 compute_autovec.path = "compute/autovec"
 compute_gpu.path = "compute/gpu/shared"
 compute_gpu_naive.path = "compute/gpu/naive"
+compute_gpu_specialized.path = "compute/gpu/specialized"
 compute_block.path = "compute/block"
 compute_manualvec.path = "compute/manualvec"
 compute_naive.path = "compute/naive"

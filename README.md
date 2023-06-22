@@ -67,8 +67,11 @@ In the same spirit as the C++ version, the code is sliced into several crates:
       [rayon](https://docs.rs/rayon).
     * The `gpu_xyz` backends implement GPU-based computations using the Vulkan
       API.
-        * The `gpu_naive` backend starts simple with image-based concentrations
+        * The `naive` backend starts simple with image-based concentrations
           and a straightforward algorithm.
+        * The `specialized` backend uses specialization constants in order to
+          reduce code duplication between shader code and host code and provide
+          the GPU compiler with more infos (which it may use to optimize).
         * TODO: Add more backends here as they are implemented.
 - `reaction` is a binary that runs the simulation. It uses the same CLI argument
   syntax as the `xyz_gray_scott` binaries from the C++ version, but the
