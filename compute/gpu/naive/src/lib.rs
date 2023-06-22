@@ -19,7 +19,10 @@ use vulkano::{
         AutoCommandBufferBuilder, BuildError, CommandBufferBeginError, CommandBufferExecError,
         CommandBufferUsage, PipelineExecutionError,
     },
-    descriptor_set::{DescriptorSetCreationError, PersistentDescriptorSet, WriteDescriptorSet},
+    descriptor_set::{
+        layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo},
+        DescriptorSetCreationError, PersistentDescriptorSet, WriteDescriptorSet,
+    },
     device::{
         physical::{PhysicalDevice, PhysicalDeviceError},
         Queue,
@@ -44,6 +47,18 @@ type Species = data::concentration::Species<ImageConcentration>;
 /// Shader descriptor set to which input and output images are bound
 const IMAGES_SET: u32 = 0;
 
+/// Descriptor within `IMAGES_SET` for sampling of input U concentration
+const IN_U: u32 = 0;
+
+/// Descriptor within `IMAGES_SET` for sampling of input V concentration
+const IN_V: u32 = 1;
+
+/// Descriptor within `IMAGES_SET` for writing to output U concentration
+const OUT_U: u32 = 2;
+
+/// Descriptor within `IMAGES_SET` for writing to output V concentration
+const OUT_V: u32 = 3;
+
 /// Shader descriptor set to which simulation parameters are bound
 const PARAMS_SET: u32 = 1;
 
@@ -57,9 +72,6 @@ pub struct Simulation {
 
     /// Compute pipeline
     pipeline: Arc<ComputePipeline>,
-
-    /// Input image samplers
-    input_samplers: [Arc<Sampler>; 2],
 
     /// Simulation parameters descriptor set
     params: Arc<PersistentDescriptorSet>,
@@ -99,28 +111,35 @@ impl SimulateBase for Simulation {
         );
         let shader = shader::load(context.device.clone())?;
 
+        // Set up input image sampling
+        let input_sampler = Sampler::new(
+            context.device.clone(),
+            SamplerCreateInfo {
+                address_mode: [SamplerAddressMode::ClampToBorder; 3],
+                border_color: BorderColor::FloatOpaqueBlack,
+                unnormalized_coordinates: true,
+                ..Default::default()
+            },
+        )?;
+
         // Set up the compute pipeline
         let pipeline = ComputePipeline::new(
             context.device.clone(),
             shader.entry_point("main").expect("Should be present"),
             &(),
             Some(context.pipeline_cache.clone()),
-            |_| (),
+            move |descriptor_sets| {
+                fn binding(
+                    set: &mut DescriptorSetLayoutCreateInfo,
+                    idx: u32,
+                ) -> &mut DescriptorSetLayoutBinding {
+                    set.bindings.get_mut(&idx).unwrap()
+                }
+                let images_set = &mut descriptor_sets[IMAGES_SET as usize];
+                binding(images_set, IN_U).immutable_samplers = vec![input_sampler.clone()];
+                binding(images_set, IN_V).immutable_samplers = vec![input_sampler];
+            },
         )?;
-
-        // Set up input image sampling
-        let input_sampler = || {
-            Sampler::new(
-                context.device.clone(),
-                SamplerCreateInfo {
-                    address_mode: [SamplerAddressMode::ClampToBorder; 3],
-                    border_color: BorderColor::FloatOpaqueBlack,
-                    unnormalized_coordinates: true,
-                    ..Default::default()
-                },
-            )
-        };
-        let input_samplers = [input_sampler()?, input_sampler()?];
 
         // Move parameters to GPU-accessible memory
         let params = Buffer::from_data(
@@ -145,7 +164,6 @@ impl SimulateBase for Simulation {
         Ok(Self {
             context,
             pipeline,
-            input_samplers,
             params,
         })
     }
@@ -196,43 +214,34 @@ impl Simulate for Simulation {
         for _ in 0..steps {
             // Acquire access to the input and output images
             let (in_u, in_v, out_u, out_v) = species.in_out();
-            let [in_u, in_v, out_u, out_v] =
-                [in_u, in_v, out_u, out_v].map(|i| i.access_image().clone());
+            let images = [in_u, in_v, out_u, out_v].map(|i| i.access_image().clone());
 
             // Have we seen this input + outpt images configuration before?
-            let images = match species.context().descriptor_sets.entry([
-                in_u.clone(),
-                in_v.clone(),
-                out_u.clone(),
-                out_v.clone(),
-            ]) {
+            let images = match species.context().descriptor_sets.entry(images) {
                 // If so, reuse previously configured descriptor set
                 Entry::Occupied(occupied) => occupied.get().clone(),
 
                 // Otherwise, make a new descriptor set
                 Entry::Vacant(vacant) => {
-                    let view = |image: Arc<StorageImage>, usage| {
-                        ImageView::new(
-                            image.clone(),
-                            ImageViewCreateInfo {
-                                usage,
-                                ..ImageViewCreateInfo::from_image(&image)
-                            },
-                        )
-                    };
-                    let input_binding =
-                        |binding, image, sampler: &Arc<Sampler>| -> Result<WriteDescriptorSet> {
-                            Ok(WriteDescriptorSet::image_view_sampler(
+                    let [in_u, in_v, out_u, out_v] = vacant.key();
+                    let binding =
+                        |binding, image: &Arc<StorageImage>, usage| -> Result<WriteDescriptorSet> {
+                            Ok(WriteDescriptorSet::image_view(
                                 binding,
-                                view(image, ImageUsage::SAMPLED)?,
-                                sampler.clone(),
+                                ImageView::new(
+                                    image.clone(),
+                                    ImageViewCreateInfo {
+                                        usage,
+                                        ..ImageViewCreateInfo::from_image(&image)
+                                    },
+                                )?,
                             ))
                         };
-                    let output_binding = |binding, image| -> Result<WriteDescriptorSet> {
-                        Ok(WriteDescriptorSet::image_view(
-                            binding,
-                            view(image, ImageUsage::STORAGE)?,
-                        ))
+                    let input_binding = |idx, image| -> Result<WriteDescriptorSet> {
+                        binding(idx, image, ImageUsage::SAMPLED)
+                    };
+                    let output_binding = |idx, image| -> Result<WriteDescriptorSet> {
+                        binding(idx, image, ImageUsage::STORAGE)
                     };
                     let layout = self.pipeline.layout().set_layouts()
                         [usize::try_from(IMAGES_SET).unwrap()]
@@ -241,10 +250,10 @@ impl Simulate for Simulation {
                         &self.context.descriptor_allocator,
                         layout,
                         [
-                            input_binding(0, in_u, &self.input_samplers[0])?,
-                            input_binding(1, in_v, &self.input_samplers[1])?,
-                            output_binding(2, out_u)?,
-                            output_binding(3, out_v)?,
+                            input_binding(IN_U, in_u)?,
+                            input_binding(IN_V, in_v)?,
+                            output_binding(OUT_U, out_u)?,
+                            output_binding(OUT_V, out_v)?,
                         ],
                     )?;
                     vacant.insert(set).clone()
