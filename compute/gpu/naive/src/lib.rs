@@ -388,7 +388,7 @@ mod shader {
         ty: "compute",
         vulkan_version: "1.0",
         spirv_version: "1.0",
-        path: "src/shader.comp",
+        path: "src/main.comp",
     }
 }
 
