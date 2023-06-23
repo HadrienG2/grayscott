@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+clap = { workspace = true, features = ["env"] }
 compute.workspace = true
 compute_autovec.workspace = true
 data.workspace = true

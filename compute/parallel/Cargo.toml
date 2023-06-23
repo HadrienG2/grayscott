@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+clap = { workspace = true, features = ["env"] }
 compute.workspace = true
 # TODO: Remove direct dependency on autovec once blocking fully works
 compute_autovec.workspace = true
@@ -11,6 +12,7 @@ compute_block.workspace = true
 data = { workspace = true, features = ["slipstream"] }
 hwlocality.workspace = true
 rayon.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 compute = { workspace = true, features = ["criterion"] }

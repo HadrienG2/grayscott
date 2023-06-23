@@ -3,19 +3,34 @@
 //! This crates implements a parallel version of the Gray-Scott simulation based
 //! on domain decomposition and fork-join parallelism.
 
+use clap::Args;
 use compute::{CpuGrid, SimulateBase, SimulateCpu};
 use compute_block::{BlockSizeSelector, SingleCore};
 use data::{
     concentration::{Concentration, Species},
     parameters::Parameters,
 };
-use hwlocality::Topology;
-use rayon::prelude::*;
+use hwlocality::{errors::RawHwlocError, Topology};
+use rayon::{prelude::*, ThreadPoolBuildError, ThreadPoolBuilder};
+use std::num::NonZeroUsize;
+use thiserror::Error;
 
 /// Gray-Scott reaction simulation
 // TODO: Add cache blocking with MultiCore outer granularity and SingleCore
 //       inner granularity, study its effect
 pub type Simulation = ParallelSimulation<compute_autovec::Simulation>;
+
+/// Number of threads is tunable via CLI args and environment variables
+#[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
+pub struct CliArgs<BackendArgs: Args> {
+    /// Block size in bytes
+    #[arg(short = 'j', long, env)]
+    num_threads: Option<NonZeroUsize>,
+
+    /// Expose backend arguments too
+    #[command(flatten)]
+    backend: BackendArgs,
+}
 
 /// Gray-Scott simulation wrapper that enforces parallel iteration
 pub struct ParallelSimulation<Backend: SimulateCpu + Sync>
@@ -34,18 +49,28 @@ impl<Backend: SimulateCpu + Sync> SimulateBase for ParallelSimulation<Backend>
 where
     Backend::Values: Send + Sync,
 {
+    type CliArgs = CliArgs<Backend::CliArgs>;
+
     type Concentration = <Backend as SimulateBase>::Concentration;
 
     type Error =
         Error<<Backend as SimulateBase>::Error, <Self::Concentration as Concentration>::Error>;
 
-    fn new(params: Parameters) -> Result<Self, Self::Error> {
+    fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error> {
+        if let Some(num_threads) = args.num_threads {
+            ThreadPoolBuilder::new()
+                .num_threads(num_threads.into())
+                .build_global()
+                .map_err(Error::Rayon)?;
+        }
+
         let topology = Topology::new().map_err(Error::Hwloc)?;
         let sequential_len_threshold =
             SingleCore::block_size(&topology) / std::mem::size_of::<Backend::Values>();
+
         Ok(Self {
             sequential_len_threshold,
-            backend: Backend::new(params).map_err(Error::Backend)?,
+            backend: Backend::new(params, args.backend).map_err(Error::Backend)?,
         })
     }
 
@@ -96,5 +121,27 @@ impl BlockSizeSelector for MultiCore {
 }
 
 /// Things that can go wrong when performing parallel simulation
-pub type Error<BackendError, ConcentrationError> =
-    compute_block::Error<BackendError, ConcentrationError>;
+#[derive(Debug, Error)]
+pub enum Error<BackendError: std::error::Error, ConcentrationError: std::error::Error> {
+    /// Error from the backend
+    #[error(transparent)]
+    Backend(BackendError),
+
+    /// Error from hwloc
+    #[error("failed to query hardware topology")]
+    Hwloc(RawHwlocError),
+
+    /// Error from rayon (failed to configure thread pool)
+    #[error("failed to configure thread pool")]
+    Rayon(ThreadPoolBuildError),
+
+    /// Error from the Concentration implementation
+    ///
+    /// In an ideal world, this error kind wouldn't be needed, as Backend can
+    /// cover this case. But Rust is not yet smart enough to treat From as
+    /// a transitive operation (if `T: From<U>` and `U: From<V>`, we do not yet
+    /// get `T: From<V>` for free).
+    #[doc(hidden)]
+    #[error(transparent)]
+    Concentration(#[from] ConcentrationError),
+}

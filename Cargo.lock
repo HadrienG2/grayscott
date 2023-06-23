@@ -267,6 +267,7 @@ checksum = "39efe0bc2ad58cbee0bea3109d15b5390fef75e810f28608a6e48ff3e3fbe24b"
 name = "compute"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "criterion",
  "data",
  "env_logger",
@@ -287,6 +288,7 @@ dependencies = [
 name = "compute_block"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "compute",
  "compute_autovec",
  "data",
@@ -322,6 +324,7 @@ dependencies = [
 name = "compute_gpu_specialized"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "compute",
  "compute_gpu",
  "compute_gpu_naive",
@@ -353,12 +356,14 @@ dependencies = [
 name = "compute_parallel"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "compute",
  "compute_autovec",
  "compute_block",
  "data",
  "hwlocality",
  "rayon",
+ "thiserror",
 ]
 
 [[package]]

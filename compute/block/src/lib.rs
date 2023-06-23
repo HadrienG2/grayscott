@@ -4,17 +4,30 @@
 //! memory bound. This version uses cache blocking techniques to improve the CPU
 //! cache hit rate, getting us back into compute-bound territory.
 
+use clap::Args;
 use compute::{CpuGrid, SimulateBase, SimulateCpu};
 use data::{
     concentration::{Concentration, Species},
     parameters::Parameters,
 };
 use hwlocality::{errors::RawHwlocError, Topology};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, num::NonZeroUsize};
 use thiserror::Error;
 
 /// Gray-Scott reaction simulation
 pub type Simulation = BlockWiseSimulation<compute_autovec::Simulation, SingleCore>;
+
+/// Block size is tunable via CLI args and environment variables
+#[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
+pub struct CliArgs<BackendArgs: Args> {
+    /// Block size in bytes
+    #[arg(long, env)]
+    block_size: Option<NonZeroUsize>,
+
+    /// Expose backend arguments too
+    #[command(flatten)]
+    backend: BackendArgs,
+}
 
 /// Gray-Scott simulation wrapper that enforces block-wise iteration
 pub struct BlockWiseSimulation<Backend: SimulateCpu, BlockSize: BlockSizeSelector> {
@@ -32,20 +45,27 @@ pub struct BlockWiseSimulation<Backend: SimulateCpu, BlockSize: BlockSizeSelecto
 impl<Backend: SimulateCpu, BlockSize: BlockSizeSelector> SimulateBase
     for BlockWiseSimulation<Backend, BlockSize>
 {
+    type CliArgs = CliArgs<Backend::CliArgs>;
+
     type Concentration = <Backend as SimulateBase>::Concentration;
 
     type Error =
         Error<<Backend as SimulateBase>::Error, <Self::Concentration as Concentration>::Error>;
 
-    fn new(params: Parameters) -> Result<Self, Self::Error> {
+    fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error> {
         // Determine the desired block size in bytes
-        let topology = Topology::new().map_err(Error::Hwloc)?;
-        let max_bytes_per_block = BlockSize::block_size(&topology);
+        let max_bytes_per_block = args
+            .block_size
+            .map(|bs| Ok::<_, Self::Error>(usize::from(bs)))
+            .unwrap_or_else(|| {
+                let topology = Topology::new().map_err(Error::Hwloc)?;
+                Ok(BlockSize::block_size(&topology))
+            })?;
 
         // Translate that into a number of SIMD vectors
         Ok(Self {
             max_values_per_block: max_bytes_per_block / std::mem::size_of::<Backend::Values>(),
-            backend: Backend::new(params).map_err(Error::Backend)?,
+            backend: Backend::new(params, args.backend).map_err(Error::Backend)?,
             block_size: PhantomData,
         })
     }

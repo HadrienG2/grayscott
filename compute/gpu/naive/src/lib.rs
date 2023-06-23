@@ -5,7 +5,7 @@
 //! in the split-source model that Vulkan-based Rust code must sadly use until
 //! rust-gpu is mature enough.
 
-use compute::{Simulate, SimulateBase};
+use compute::{NoArgs, Simulate, SimulateBase};
 use compute_gpu::{VulkanConfig, VulkanContext};
 use crevice::std140::AsStd140;
 use data::{
@@ -80,11 +80,13 @@ pub struct Simulation {
 }
 //
 impl SimulateBase for Simulation {
+    type CliArgs = NoArgs;
+
     type Concentration = ImageConcentration;
 
     type Error = Error;
 
-    fn new(params: Parameters) -> Result<Self> {
+    fn new(params: Parameters, _args: NoArgs) -> Result<Self> {
         // Check that ImageConcentration supports what we need
         check_image_concentration();
 

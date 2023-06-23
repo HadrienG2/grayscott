@@ -5,6 +5,7 @@
 //! allows the GPU compiler to optimize code specifically for the simulation
 //! parameters, and also makes it a lot easier to keep CPU and GPU code in sync.
 
+use clap::Args;
 use compute::{Simulate, SimulateBase};
 use compute_gpu::{VulkanConfig, VulkanContext};
 use compute_gpu_naive::{Error, Result, Species, IMAGES_SET};
@@ -12,7 +13,7 @@ use data::{
     concentration::gpu::image::{ImageConcentration, ImageContext},
     parameters::{Parameters, StencilWeights},
 };
-use std::sync::Arc;
+use std::{num::NonZeroU32, sync::Arc};
 use vulkano::{
     command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage},
     device::Queue,
@@ -20,9 +21,17 @@ use vulkano::{
     sync::GpuFuture,
 };
 
-/// Work-group size used by the shader
-// FIXME: Make configurable via CLI options
-const WORK_GROUP_SIZE: [u32; 3] = [8, 8, 1];
+/// Kernel work-group size is tunable via CLI args and environment variables
+#[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
+pub struct CliArgs {
+    /// Number of rows to be processed by each GPU work group
+    #[arg(long, env, default_value_t = NonZeroU32::new(8).unwrap())]
+    work_group_rows: NonZeroU32,
+
+    /// Number of columns to be processed by each GPU work group
+    #[arg(long, env, default_value_t = NonZeroU32::new(8).unwrap())]
+    work_group_cols: NonZeroU32,
+}
 
 /// Gray-Scott reaction simulation
 pub struct Simulation {
@@ -31,21 +40,29 @@ pub struct Simulation {
 
     /// Compute pipeline
     pipeline: Arc<ComputePipeline>,
+
+    /// Work-group size
+    work_group_size: [u32; 3],
 }
 //
 impl SimulateBase for Simulation {
+    type CliArgs = CliArgs;
+
     type Concentration = ImageConcentration;
 
     type Error = Error;
 
-    fn new(params: Parameters) -> Result<Self> {
+    fn new(params: Parameters, args: CliArgs) -> Result<Self> {
         // Check that ImageConcentration supports what we need
         compute_gpu_naive::check_image_concentration();
 
+        // Pick work-group size
+        let work_group_size = [args.work_group_cols.into(), args.work_group_rows.into(), 1];
+
         // Set up Vulkan
         let context = VulkanConfig {
-            other_device_requirements: Box::new(|device| {
-                compute_gpu_naive::image_device_requirements(device, WORK_GROUP_SIZE)
+            other_device_requirements: Box::new(move |device| {
+                compute_gpu_naive::image_device_requirements(device, work_group_size)
             }),
             ..VulkanConfig::default()
         }
@@ -90,14 +107,18 @@ impl SimulateBase for Simulation {
                 feed_rate,
                 kill_rate,
                 time_step,
-                constant_0: WORK_GROUP_SIZE[0],
-                constant_1: WORK_GROUP_SIZE[1],
+                constant_0: work_group_size[0],
+                constant_1: work_group_size[1],
             },
             Some(context.pipeline_cache.clone()),
             compute_gpu_naive::sampler_setup_callback(context.device.clone())?,
         )?;
 
-        Ok(Self { context, pipeline })
+        Ok(Self {
+            context,
+            pipeline,
+            work_group_size,
+        })
     }
 
     fn make_species(&self, shape: [usize; 2]) -> Result<Species> {
@@ -130,7 +151,7 @@ impl Simulate for Simulation {
         builder.bind_pipeline_compute(self.pipeline.clone());
 
         // Determine the GPU dispatch size
-        let dispatch_size = compute_gpu_naive::dispatch_size(species.shape(), WORK_GROUP_SIZE);
+        let dispatch_size = compute_gpu_naive::dispatch_size(species.shape(), self.work_group_size);
 
         // Record the simulation steps
         for _ in 0..steps {

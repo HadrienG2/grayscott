@@ -69,9 +69,12 @@ In the same spirit as the C++ version, the code is sliced into several crates:
       API.
         * The `naive` backend starts simple with image-based concentrations
           and a straightforward algorithm.
-        * The `specialized` backend uses specialization constants in order to
-          reduce code duplication between shader code and host code and provide
-          the GPU compiler with more infos (which it may use to optimize).
+        * The `specialized` backend uses specialization constants in order to...
+          1. Reduce dangerous information duplication between GPU and CPU code
+          2. Make the GPU work-group size tunable via CLI or environment
+          3. Let the shader compiler know about simulation parameters at
+             compile time (this allows for more optimized shader code, though
+             here the simulation is so memory-bound it doesn't matter).
         * TODO: Add more backends here as they are implemented.
 - `reaction` is a binary that runs the simulation. It uses the same CLI argument
   syntax as the `xyz_gray_scott` binaries from the C++ version, but the

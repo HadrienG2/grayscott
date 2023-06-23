@@ -54,6 +54,10 @@ struct Args {
     /// values may be beneficial if the I/O backend works in a batched fashion.
     #[arg(long, default_value_t = NonZeroUsize::new(2).unwrap())]
     output_buffer: NonZeroUsize,
+
+    /// Backend-specific CLI arguments
+    #[command(flatten)]
+    backend: <Simulation as SimulateBase>::CliArgs,
 }
 
 // Use the best compute backend allowed by enabled crate features
@@ -78,17 +82,20 @@ cfg_if::cfg_if! {
     } else {
         // If no backend was specified, use a backend skeleton that throws a
         // minimal number of compiler errors.
-        use data::concentration::{Species};
+        use compute::NoArgs;
+        use data::concentration::Species;
         use std::convert::Infallible;
         //
         struct Simulation;
         //
         impl SimulateBase for Simulation {
+            type CliArgs = NoArgs;
+
             type Concentration = ScalarConcentration;
 
             type Error = Infallible;
 
-            fn new(_params: Parameters) -> Result<Self, Infallible> {
+            fn new(_params: Parameters, _args: NoArgs) -> Result<Self, Infallible> {
                 std::compile_error!("Please enable at least one compute backend via crate features")
             }
 
@@ -131,12 +138,15 @@ fn main() {
     let steps_per_image = usize::from(args.nbextrastep);
 
     // Set up the simulation
-    let simulation = Simulation::new(Parameters {
-        kill_rate,
-        feed_rate,
-        time_step,
-        ..Default::default()
-    })
+    let simulation = Simulation::new(
+        Parameters {
+            kill_rate,
+            feed_rate,
+            time_step,
+            ..Default::default()
+        },
+        args.backend,
+    )
     .expect("Failed to create simulation");
 
     // Set up chemical species concentration storage

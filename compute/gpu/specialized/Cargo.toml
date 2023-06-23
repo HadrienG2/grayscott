@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+clap = { workspace = true, features = ["env"] }
 compute.workspace = true
 compute_gpu.workspace = true
 compute_gpu_naive.workspace = true

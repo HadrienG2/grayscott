@@ -2,12 +2,20 @@
 
 #[cfg(feature = "criterion")]
 use criterion::{BenchmarkId, Criterion, Throughput};
+use clap::Args;
 use data::{concentration::{Species, Concentration}, parameters::Parameters};
 use ndarray::{Axis, ArrayView2, ArrayViewMut2};
-use std::error::Error;
+use std::{error::Error, fmt::Debug};
 
 /// Commonalities between the two Simulate interfaces
 pub trait SimulateBase: Sized {
+    /// Supplementary CLI arguments allowing fine-tuning of this backend
+    ///
+    /// To honor the principle of least surprise and make criterion
+    /// microbenchmarks work smoothly, any argument you add must have a default
+    /// value and should also be configurable through environment variables.
+    type CliArgs: Args + Debug;
+
     /// Concentration type
     type Concentration: Concentration;
 
@@ -15,7 +23,7 @@ pub trait SimulateBase: Sized {
     type Error: Error + From<<Self::Concentration as Concentration>::Error> + Send + Sync;
 
     /// Set up the simulation
-    fn new(params: Parameters) -> Result<Self, Self::Error>;
+    fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error>;
 
     /// Set up a species concentration grid
     fn make_species(
@@ -23,6 +31,10 @@ pub trait SimulateBase: Sized {
         shape: [usize; 2],
     ) -> Result<Species<Self::Concentration>, Self::Error>;
 }
+
+/// No CLI parameters
+#[derive(Args, Copy, Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub struct NoArgs;
 
 /// Simulation compute backend interface expected by the "reaction" CLI program
 pub trait Simulate: SimulateBase {
@@ -212,10 +224,17 @@ macro_rules! criterion_benchmark {
 #[cfg(feature = "criterion")]
 pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name: &str) {
     use std::hint::black_box;
+    use clap::{FromArgMatches, Command};
 
     env_logger::init();
 
-    let sim = Simulation::new(black_box(Parameters::default())).unwrap();
+    let args = Simulation::CliArgs::from_arg_matches(
+        &Simulation::CliArgs::augment_args(Command::default().no_binary_name(true))
+            .get_matches_from(None::<&str>),
+    )
+    .expect("Failed to parse arguments from defaults & environment");
+
+    let sim = Simulation::new(black_box(Parameters::default()), black_box(args)).unwrap();
     let mut group = c.benchmark_group(format!("{backend_name}"));
     for num_steps_pow2 in 0..=8 {
         let num_steps = 2u64.pow(num_steps_pow2);
