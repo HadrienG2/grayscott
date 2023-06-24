@@ -12,8 +12,8 @@ layout(set = 0, binding = 0) uniform sampler2D us;
 layout(set = 0, binding = 1) uniform sampler2D vs;
 
 // Final concentrations of species U and V
-layout(set = 0, binding = 2) uniform writeonly image2D nextUs;
-layout(set = 0, binding = 3) uniform writeonly image2D nextVs;
+layout(set = 0, binding = 2) uniform restrict writeonly image2D nextUs;
+layout(set = 0, binding = 3) uniform restrict writeonly image2D nextVs;
 
 // === GPU-side code ===
 
