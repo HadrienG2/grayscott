@@ -5,7 +5,7 @@
 
 use clap::Args;
 use compute::{CpuGrid, SimulateBase, SimulateCpu};
-use compute_block::{BlockSizeSelector, BlockWiseSimulation, SingleCore};
+use compute_block::{BlockWiseSimulation, DefaultBlockSize, SingleCore};
 use data::{
     concentration::{Concentration, Species},
     parameters::Parameters,
@@ -19,19 +19,26 @@ use thiserror::Error;
 pub type Simulation =
     BlockWiseSimulation<ParallelSimulation<compute_autovec::Simulation>, MultiCore>;
 
-/// Number of threads is tunable via CLI args and environment variables
+/// Parameters are tunable via CLI args and environment variables
 #[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CliArgs<BackendArgs: Args> {
     /// Number of processing threads
     #[arg(short = 'j', long, env)]
     num_threads: Option<NonZeroUsize>,
 
-    /// Number of processed bytes below which parallelism is not used
+    /// Number of processed bytes per parallel task
     ///
     /// This should be tuned somewhere between half the L1 cache size
-    /// (default for optimal cache locality in HT regime) and the L3 per-core
+    /// (default for optimal cache locality in the HT regime) and the L3 per-core
     /// cache size (will reduce work distribution overhead if the backend can
     /// live with the reduced bandwidth and increased latency of the L3 cache).
+    ///
+    /// You should also consider tuning the `block_size` parameter from the
+    /// `BlockWiseSimulation` layer. By default, it ensures that the simulation
+    /// working set fits in the L3 cache, at the cost of increasing thread
+    /// synchronization overhead. Larger blocks will reduce the frequency of
+    /// synchronization, which will be a net benefit on CPUs with a smaller
+    /// amount of L3 cache and larger synchronization overheads.
     #[arg(long, env)]
     seq_block_size: Option<NonZeroUsize>,
 
@@ -123,7 +130,7 @@ where
 /// the last-level caches of all cores, and that's what this policy enforces.
 pub struct MultiCore;
 //
-impl BlockSizeSelector for MultiCore {
+impl DefaultBlockSize for MultiCore {
     fn block_size(topology: &Topology) -> usize {
         *topology
             .cpu_cache_stats()

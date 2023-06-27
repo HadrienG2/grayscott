@@ -1,8 +1,7 @@
 //! Cache blocking implementation of Gray-Scott simulation
 //!
-//! The `autovec` and `manualvec` versions are actually not compute bound but
-//! memory bound. This version uses cache blocking techniques to improve the CPU
-//! cache hit rate, getting us back into compute-bound territory.
+//! This demonstrates how the simulation grid can be sliced into blocks in order
+//! to improve cache locality.
 
 use clap::Args;
 use compute::{CpuGrid, SimulateBase, SimulateCpu};
@@ -17,7 +16,7 @@ use thiserror::Error;
 /// Gray-Scott reaction simulation
 pub type Simulation = BlockWiseSimulation<compute_autovec::Simulation, SingleCore>;
 
-/// Block size is tunable via CLI args and environment variables
+/// Parameters are tunable via CLI args and environment variables
 #[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CliArgs<BackendArgs: Args> {
     /// Block size in bytes
@@ -30,7 +29,7 @@ pub struct CliArgs<BackendArgs: Args> {
 }
 
 /// Gray-Scott simulation wrapper that enforces block-wise iteration
-pub struct BlockWiseSimulation<Backend: SimulateCpu, BlockSize: BlockSizeSelector> {
+pub struct BlockWiseSimulation<Backend: SimulateCpu, BlockSize: DefaultBlockSize> {
     /// Maximal number of grid elements (scalars or SIMD blocks) to be
     /// manipulated in one processing batch for optimal cache locality
     max_values_per_block: usize,
@@ -42,7 +41,7 @@ pub struct BlockWiseSimulation<Backend: SimulateCpu, BlockSize: BlockSizeSelecto
     block_size: PhantomData<BlockSize>,
 }
 //
-impl<Backend: SimulateCpu, BlockSize: BlockSizeSelector> SimulateBase
+impl<Backend: SimulateCpu, BlockSize: DefaultBlockSize> SimulateBase
     for BlockWiseSimulation<Backend, BlockSize>
 {
     type CliArgs = CliArgs<Backend::CliArgs>;
@@ -75,7 +74,7 @@ impl<Backend: SimulateCpu, BlockSize: BlockSizeSelector> SimulateBase
     }
 }
 //
-impl<Backend: SimulateCpu, BlockSize: BlockSizeSelector> SimulateCpu
+impl<Backend: SimulateCpu, BlockSize: DefaultBlockSize> SimulateCpu
     for BlockWiseSimulation<Backend, BlockSize>
 {
     type Values = Backend::Values;
@@ -98,8 +97,8 @@ impl<Backend: SimulateCpu, BlockSize: BlockSizeSelector> SimulateCpu
     }
 }
 
-/// Block size selection policy
-pub trait BlockSizeSelector {
+/// Default block size selection policy, in absence of explicit user setting
+pub trait DefaultBlockSize {
     /// Knowing the hardware topology, pick a good block size for the
     /// computation of interest (results are in bytes)
     fn block_size(topology: &Topology) -> usize;
@@ -111,7 +110,7 @@ pub trait BlockSizeSelector {
 /// cache of any single core, and that's what this policy enforces.
 pub struct SingleCore;
 //
-impl BlockSizeSelector for SingleCore {
+impl DefaultBlockSize for SingleCore {
     fn block_size(topology: &Topology) -> usize {
         topology.cpu_cache_stats().smallest_data_cache_sizes()[0] as usize
     }

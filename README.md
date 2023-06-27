@@ -61,10 +61,11 @@ In the same spirit as the C++ version, the code is sliced into several crates:
         * Since this backend shows that manual vectorization is not worthwhile
           for this problem, the following backends in this list go back to
           autovectorization for simplicity.
-    * The `block` backend uses a blocked iteration technique to improve the CPU
-      cache hit rate, as the `_link_block` C++ version does.
+    * The `block` backend demonstrates how to use a blocked iteration technique
+      to improve CPU cache locality, as the `_link_block` C++ version does.
     * The `parallel` backend implements multi-threaded iteration using
-      [rayon](https://docs.rs/rayon).
+      [rayon](https://docs.rs/rayon), via a fork/join recursive splitting
+      technique.
     * The `gpu_xyz` backends implement GPU-based computations using the Vulkan
       API.
         * The `naive` backend starts simple with image-based concentrations
