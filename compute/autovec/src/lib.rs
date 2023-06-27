@@ -14,6 +14,7 @@ use data::{
     parameters::{stencil_offset, Parameters},
     Precision,
 };
+use ndarray::ArrayView2;
 use slipstream::{vector::align, Vector};
 use std::convert::Infallible;
 
@@ -73,18 +74,23 @@ impl SimulateCpu for Simulation {
             let v = win_v[stencil_offset];
 
             // Compute diffusion gradient
-            let [full_u, full_v] = (win_u.iter())
-                .zip(win_v.iter())
-                .zip(
-                    self.params
-                        .weights
-                        .0
-                        .into_iter()
-                        .flat_map(|row| row.into_iter()),
-                )
+            let [full_u, full_v] = self
+                .params
+                .weights
+                .0
+                .into_iter()
+                .enumerate()
+                .flat_map(|(row, data)| {
+                    data.into_iter()
+                        .enumerate()
+                        .map(move |(col, weight)| ((row, col), weight))
+                })
                 .fold(
                     [Values::splat(0.); 2],
-                    |[acc_u, acc_v], ((&stencil_u, &stencil_v), weight)| {
+                    |[acc_u, acc_v], ((row, col), weight)| {
+                        let input = |win: &ArrayView2<Values>| unsafe { *win.uget([row, col]) };
+                        let stencil_u = input(&win_u);
+                        let stencil_v = input(&win_v);
                         let weight = Values::splat(weight);
                         [
                             mul_add(weight, stencil_u - u, acc_u),
