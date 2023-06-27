@@ -14,7 +14,6 @@ use data::{
     parameters::{stencil_offset, Parameters},
     Precision,
 };
-use ndarray::ArrayView2;
 use slipstream::{vector::align, Vector};
 use std::convert::Infallible;
 
@@ -68,29 +67,28 @@ impl SimulateCpu for Simulation {
         let ones = Values::splat(1.0);
 
         // Iterate over center pixels of the species concentration matrices
+        // TODO: Try removing fast_grid_iter once I'm done with optimizations below
         for (out_u, out_v, win_u, win_v) in compute::fast_grid_iter(grid) {
             // Access center value of u
             let u = win_u[stencil_offset];
             let v = win_v[stencil_offset];
 
             // Compute diffusion gradient
-            let [full_u, full_v] = self
-                .params
-                .weights
-                .0
+            let [full_u, full_v] = win_u
+                .rows()
                 .into_iter()
-                .enumerate()
-                .flat_map(|(row, data)| {
-                    data.into_iter()
-                        .enumerate()
-                        .map(move |(col, weight)| ((row, col), weight))
+                .zip(win_v.rows().into_iter())
+                .zip(self.params.weights.0.into_iter())
+                .flat_map(|((u_row, v_row), weights_row)| {
+                    u_row
+                        .into_iter()
+                        .copied()
+                        .zip(v_row.into_iter().copied())
+                        .zip(weights_row.into_iter())
                 })
                 .fold(
                     [Values::splat(0.); 2],
-                    |[acc_u, acc_v], ((row, col), weight)| {
-                        let input = |win: &ArrayView2<Values>| unsafe { *win.uget([row, col]) };
-                        let stencil_u = input(&win_u);
-                        let stencil_v = input(&win_v);
+                    |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
                         let weight = Values::splat(weight);
                         [
                             mul_add(weight, stencil_u - u, acc_u),
