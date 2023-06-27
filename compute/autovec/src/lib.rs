@@ -8,10 +8,10 @@
 //! revolving around picking the right vector width.
 
 use cfg_if::cfg_if;
-use compute::{CpuGrid, NoArgs, SimulateBase, SimulateCpu};
+use compute::{CpuGrid, InputWindow, NoArgs, SimulateBase, SimulateCpu};
 use data::{
     concentration::simd::SIMDConcentration,
-    parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
+    parameters::{stencil_offset, Parameters},
     Precision,
 };
 use slipstream::{vector::align, Vector};
@@ -54,10 +54,7 @@ impl SimulateCpu for Simulation {
         )
     }
 
-    fn unchecked_step_impl(
-        &self,
-        ([in_u, in_v], [mut out_u_center, mut out_v_center]): CpuGrid<Values>,
-    ) {
+    fn unchecked_step_impl(&self, grid: CpuGrid<Values>) {
         // Determine offset from the top-left corner of the stencil to its center
         let stencil_offset = stencil_offset();
 
@@ -70,28 +67,23 @@ impl SimulateCpu for Simulation {
         let ones = Values::splat(1.0);
 
         // Iterate over center pixels of the species concentration matrices
-        for (((out_u, out_v), win_u), win_v) in (out_u_center.iter_mut())
-            .zip(out_v_center.iter_mut())
-            .zip(in_u.windows(STENCIL_SHAPE))
-            .zip(in_v.windows(STENCIL_SHAPE))
-        {
+        for (out_u, out_v, win_u, win_v) in compute::fast_grid_iter(grid) {
             // Access center value of u
-            let u = win_u[stencil_offset];
-            let v = win_v[stencil_offset];
+            let center =
+                |window: &InputWindow<Values>| window[stencil_offset[0]][stencil_offset[1]];
+            let u = center(&win_u);
+            let v = center(&win_v);
 
             // Compute diffusion gradient
-            let [full_u, full_v] = (win_u.iter())
-                .zip(win_v.iter())
-                .zip(
-                    self.params
-                        .weights
-                        .0
-                        .into_iter()
-                        .flat_map(|row| row.into_iter()),
-                )
+            fn flat_iter<T>(array: InputWindow<T>) -> impl Iterator<Item = T> {
+                array.into_iter().flat_map(|row| row.into_iter())
+            }
+            let [full_u, full_v] = flat_iter(win_u)
+                .zip(flat_iter(win_v))
+                .zip(flat_iter(self.params.weights.0))
                 .fold(
                     [Values::splat(0.); 2],
-                    |[acc_u, acc_v], ((&stencil_u, &stencil_v), weight)| {
+                    |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
                         let weight = Values::splat(weight);
                         [
                             mul_add(weight, stencil_u - u, acc_u),
