@@ -11,7 +11,7 @@ use cfg_if::cfg_if;
 use compute::{CpuGrid, NoArgs, SimulateBase, SimulateCpu};
 use data::{
     concentration::simd::SIMDConcentration,
-    parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
+    parameters::{stencil_offset, Parameters},
     Precision,
 };
 use std::convert::Infallible;
@@ -53,10 +53,7 @@ impl SimulateCpu for Simulation {
             [out_u.simd_center_mut(), out_v.simd_center_mut()],
         )
     }
-    fn unchecked_step_impl(
-        &self,
-        ([in_u, in_v], [mut out_u_center, mut out_v_center]): CpuGrid<Self::Values>,
-    ) {
+    fn unchecked_step_impl(&self, grid: CpuGrid<Self::Values>) {
         // Determine offset from the top-left corner of the stencil to its center
         let stencil_offset = stencil_offset();
 
@@ -69,28 +66,23 @@ impl SimulateCpu for Simulation {
         let ones = Values::splat(1.0);
 
         // Iterate over center pixels of the species concentration matrices
-        for (((out_u, out_v), win_u), win_v) in (out_u_center.iter_mut())
-            .zip(out_v_center.iter_mut())
-            .zip(in_u.windows(STENCIL_SHAPE))
-            .zip(in_v.windows(STENCIL_SHAPE))
-        {
+        for (out_u, out_v, win_u, win_v) in compute::fast_grid_iter(grid) {
             // Access center value of u
             let u = win_u[stencil_offset];
             let v = win_v[stencil_offset];
 
             // Compute diffusion gradient
-            let [full_u, full_v] = (win_u.iter())
-                .zip(win_v.iter())
-                .zip(
-                    self.params
-                        .weights
-                        .0
-                        .into_iter()
-                        .flat_map(|row| row.into_iter()),
-                )
+            let [full_u, full_v] = (win_u.rows().into_iter())
+                .zip(win_v.rows().into_iter())
+                .zip(self.params.weights.0.into_iter())
+                .flat_map(|((u_row, v_row), weights_row)| {
+                    (u_row.into_iter().copied())
+                        .zip(v_row.into_iter().copied())
+                        .zip(weights_row.into_iter())
+                })
                 .fold(
                     [Values::splat(0.); 2],
-                    |[acc_u, acc_v], ((&stencil_u, &stencil_v), weight)| {
+                    |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
                         let weight = Values::splat(weight);
                         [
                             weight.mul_add(stencil_u.sub(u), acc_u),

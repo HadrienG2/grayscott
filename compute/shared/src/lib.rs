@@ -265,15 +265,14 @@ pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name
 /// In an ideal world, this would be just...
 ///
 /// ```
-/// out_u.iter_mut()
-///     .zip(out_v.iter_mut())
+/// (out_u_center.iter_mut())
+///     .zip(out_v_center.iter_mut())
 ///     .zip(in_u.windows(STENCIL_SHAPE))
 ///     .zip(in_v.windows(STENCIL_SHAPE))
 /// ```
 ///
 /// But at present time, rustc/LLVM cannot optimize the zipped iterator as well
-/// as a specialized explicit joint iterator.
-///
+/// as a specialized explicit joint iterator...
 #[inline(always)]
 pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     ([in_u, in_v], [mut out_u_center, mut out_v_center]): CpuGrid<'input, 'output, Values>,
@@ -308,7 +307,7 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     let in_row_stride = checked_row_stride([&in_u, &in_v]);
     assert_eq!(in_row_stride, out_row_stride);
 
-    // Prepare a way to access an input window by output position
+    // Prepare a way to access input windows and output refs by output position
     let window_shape = (STENCIL_SHAPE[0], STENCIL_SHAPE[1]).strides((in_row_stride, 1));
     let offset = |position: [usize; 2], row_stride: usize| -> usize {
         position[0] * row_stride + position[1]
