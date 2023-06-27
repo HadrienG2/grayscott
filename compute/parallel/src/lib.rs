@@ -5,7 +5,7 @@
 
 use clap::Args;
 use compute::{CpuGrid, SimulateBase, SimulateCpu};
-use compute_block::{BlockSizeSelector, SingleCore};
+use compute_block::{BlockSizeSelector, BlockWiseSimulation, SingleCore};
 use data::{
     concentration::{Concentration, Species},
     parameters::Parameters,
@@ -16,16 +16,24 @@ use std::num::NonZeroUsize;
 use thiserror::Error;
 
 /// Gray-Scott reaction simulation
-// TODO: Add cache blocking with MultiCore outer granularity and SingleCore
-//       inner granularity, study its effect
-pub type Simulation = ParallelSimulation<compute_autovec::Simulation>;
+pub type Simulation =
+    BlockWiseSimulation<ParallelSimulation<compute_autovec::Simulation>, MultiCore>;
 
 /// Number of threads is tunable via CLI args and environment variables
 #[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CliArgs<BackendArgs: Args> {
-    /// Block size in bytes
+    /// Number of processing threads
     #[arg(short = 'j', long, env)]
     num_threads: Option<NonZeroUsize>,
+
+    /// Number of processed bytes below which parallelism is not used
+    ///
+    /// This should be tuned somewhere between half the L1 cache size
+    /// (default for optimal cache locality in HT regime) and the L3 per-core
+    /// cache size (will reduce work distribution overhead if the backend can
+    /// live with the reduced bandwidth and increased latency of the L3 cache).
+    #[arg(long, env)]
+    seq_block_size: Option<NonZeroUsize>,
 
     /// Expose backend arguments too
     #[command(flatten)]
@@ -64,9 +72,14 @@ where
                 .map_err(Error::Rayon)?;
         }
 
-        let topology = Topology::new().map_err(Error::Hwloc)?;
-        let sequential_len_threshold =
-            SingleCore::block_size(&topology) / std::mem::size_of::<Backend::Values>();
+        let seq_block_size = args
+            .seq_block_size
+            .map(|bs| Ok::<_, Self::Error>(usize::from(bs)))
+            .unwrap_or_else(|| {
+                let topology = Topology::new().map_err(Error::Hwloc)?;
+                Ok(SingleCore::block_size(&topology) / 2)
+            })?;
+        let sequential_len_threshold = seq_block_size / std::mem::size_of::<Backend::Values>();
 
         Ok(Self {
             sequential_len_threshold,
