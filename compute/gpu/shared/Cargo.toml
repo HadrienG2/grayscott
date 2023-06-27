@@ -11,3 +11,7 @@ vulkano.workspace = true
 
 [dev-dependencies]
 env_logger.workspace = true
+
+# Criterion workaround for lack of stable benchmark harness
+[lib]
+bench = false

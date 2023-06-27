@@ -21,3 +21,7 @@ crevice = { workspace = true, optional = true }
 self_cell = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 vulkano = { workspace = true, optional = true }
+
+# Criterion workaround for lack of stable benchmark harness
+[lib]
+bench = false

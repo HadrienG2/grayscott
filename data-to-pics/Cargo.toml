@@ -12,3 +12,9 @@ image.workspace = true
 indicatif.workspace = true
 ndarray.workspace = true
 rayon.workspace = true
+
+# Criterion workaround for lack of stable benchmark harness
+[[bin]]
+name = "data-to-pics"
+path = "src/main.rs"
+bench = false

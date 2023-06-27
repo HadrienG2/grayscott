@@ -14,3 +14,7 @@ ndarray.workspace = true
 # Benchmarking deps
 criterion = { workspace = true, optional = true }
 env_logger = { workspace = true, optional = true }
+
+# Criterion workaround for lack of stable benchmark harness
+[lib]
+bench = false
