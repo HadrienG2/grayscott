@@ -8,7 +8,7 @@ use data::{
     concentration::{Concentration, Species},
     parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
 };
-use ndarray::{ArrayBase, ArrayView2, ArrayViewMut2, Axis, Dimension, RawData};
+use ndarray::{ArrayBase, ArrayView2, ArrayViewMut2, Axis, Dimension, RawData, ShapeBuilder};
 use std::{assert_eq, error::Error, fmt::Debug};
 
 /// Commonalities between the two Simulate interfaces
@@ -30,10 +30,7 @@ pub trait SimulateBase: Sized {
     fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error>;
 
     /// Set up a species concentration grid
-    fn make_species(
-        &self,
-        shape: [usize; 2],
-    ) -> Result<Species<Self::Concentration>, Self::Error>;
+    fn make_species(&self, shape: [usize; 2]) -> Result<Species<Self::Concentration>, Self::Error>;
 }
 
 /// No CLI parameters
@@ -49,7 +46,7 @@ pub trait Simulate: SimulateBase {
     fn perform_steps(
         &self,
         species: &mut Species<Self::Concentration>,
-        steps: usize
+        steps: usize,
     ) -> Result<(), Self::Error>;
 }
 
@@ -278,14 +275,14 @@ pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name
 /// as a specialized explicit joint iterator.
 ///
 #[inline(always)]
-pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values: Copy>(
+pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     ([in_u, in_v], [mut out_u_center, mut out_v_center]): CpuGrid<'input, 'output, Values>,
 ) -> impl Iterator<
     Item = (
         &'output mut Values,
         &'output mut Values,
-        InputWindow<Values>,
-        InputWindow<Values>,
+        ArrayView2<'input, Values>,
+        ArrayView2<'input, Values>,
     ),
 > {
     // Assert that the sub-grids have the expected shape
@@ -312,6 +309,7 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values: Copy>(
     assert_eq!(in_row_stride, out_row_stride);
 
     // Prepare a way to access an input window by output position
+    let window_shape = (STENCIL_SHAPE[0], STENCIL_SHAPE[1]).strides((in_row_stride, 1));
     let offset = |position: [usize; 2], row_stride: usize| -> usize {
         position[0] * row_stride + position[1]
     };
@@ -320,10 +318,7 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values: Copy>(
     };
     let unchecked_input_window = move |in_ptr: *const Values, out_pos| unsafe {
         let win_ptr = in_ptr.add(offset(out_pos, in_row_stride));
-        std::array::from_fn(|row| {
-            let row_ptr = win_ptr.add(row * in_row_stride);
-            std::array::from_fn(|col| *row_ptr.add(col))
-        })
+        ArrayView2::from_shape_ptr(window_shape, win_ptr)
     };
 
     // Start iteration
@@ -355,5 +350,3 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values: Copy>(
         Some((out_u, out_v, win_u, win_v))
     })
 }
-//
-pub type InputWindow<Values> = [[Values; STENCIL_SHAPE[1]]; STENCIL_SHAPE[0]];

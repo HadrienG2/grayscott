@@ -8,7 +8,7 @@
 //! revolving around picking the right vector width.
 
 use cfg_if::cfg_if;
-use compute::{CpuGrid, InputWindow, NoArgs, SimulateBase, SimulateCpu};
+use compute::{CpuGrid, NoArgs, SimulateBase, SimulateCpu};
 use data::{
     concentration::simd::SIMDConcentration,
     parameters::{stencil_offset, Parameters},
@@ -69,21 +69,22 @@ impl SimulateCpu for Simulation {
         // Iterate over center pixels of the species concentration matrices
         for (out_u, out_v, win_u, win_v) in compute::fast_grid_iter(grid) {
             // Access center value of u
-            let center =
-                |window: &InputWindow<Values>| window[stencil_offset[0]][stencil_offset[1]];
-            let u = center(&win_u);
-            let v = center(&win_v);
+            let u = win_u[stencil_offset];
+            let v = win_v[stencil_offset];
 
             // Compute diffusion gradient
-            fn flat_iter<T>(array: InputWindow<T>) -> impl Iterator<Item = T> {
-                array.into_iter().flat_map(|row| row.into_iter())
-            }
-            let [full_u, full_v] = flat_iter(win_u)
-                .zip(flat_iter(win_v))
-                .zip(flat_iter(self.params.weights.0))
+            let [full_u, full_v] = (win_u.iter())
+                .zip(win_v.iter())
+                .zip(
+                    self.params
+                        .weights
+                        .0
+                        .into_iter()
+                        .flat_map(|row| row.into_iter()),
+                )
                 .fold(
                     [Values::splat(0.); 2],
-                    |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
+                    |[acc_u, acc_v], ((&stencil_u, &stencil_v), weight)| {
                         let weight = Values::splat(weight);
                         [
                             mul_add(weight, stencil_u - u, acc_u),
