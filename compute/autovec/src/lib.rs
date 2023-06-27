@@ -11,7 +11,7 @@ use cfg_if::cfg_if;
 use compute::{CpuGrid, NoArgs, SimulateBase, SimulateCpu};
 use data::{
     concentration::simd::SIMDConcentration,
-    parameters::{stencil_offset, Parameters},
+    parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
     Precision,
 };
 use slipstream::{vector::align, Vector};
@@ -54,7 +54,10 @@ impl SimulateCpu for Simulation {
         )
     }
 
-    fn unchecked_step_impl(&self, grid: CpuGrid<Values>) {
+    fn unchecked_step_impl(
+        &self,
+        ([in_u, in_v], [mut out_u_center, mut out_v_center]): CpuGrid<Values>,
+    ) {
         // Determine offset from the top-left corner of the stencil to its center
         let stencil_offset = stencil_offset();
 
@@ -67,22 +70,21 @@ impl SimulateCpu for Simulation {
         let ones = Values::splat(1.0);
 
         // Iterate over center pixels of the species concentration matrices
-        // TODO: Try removing fast_grid_iter once I'm done with optimizations below
-        for (out_u, out_v, win_u, win_v) in compute::fast_grid_iter(grid) {
+        for (((out_u, out_v), win_u), win_v) in (out_u_center.iter_mut())
+            .zip(out_v_center.iter_mut())
+            .zip(in_u.windows(STENCIL_SHAPE))
+            .zip(in_v.windows(STENCIL_SHAPE))
+        {
             // Access center value of u
             let u = win_u[stencil_offset];
             let v = win_v[stencil_offset];
 
             // Compute diffusion gradient
-            let [full_u, full_v] = win_u
-                .rows()
-                .into_iter()
+            let [full_u, full_v] = (win_u.rows().into_iter())
                 .zip(win_v.rows().into_iter())
                 .zip(self.params.weights.0.into_iter())
                 .flat_map(|((u_row, v_row), weights_row)| {
-                    u_row
-                        .into_iter()
-                        .copied()
+                    (u_row.into_iter().copied())
                         .zip(v_row.into_iter().copied())
                         .zip(weights_row.into_iter())
                 })
