@@ -305,7 +305,6 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     }
     let out_row_stride = checked_row_stride([&out_u_center, &out_v_center]);
     let in_row_stride = checked_row_stride([&in_u, &in_v]);
-    assert_eq!(in_row_stride, out_row_stride);
 
     // Prepare a way to access input windows and output refs by output position
     let window_shape = (STENCIL_SHAPE[0], STENCIL_SHAPE[1]).strides((in_row_stride, 1));
