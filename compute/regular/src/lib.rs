@@ -68,12 +68,12 @@ impl Simulation {
         let stencil_offset = stencil_offset();
 
         // Iterate over center pixels of the species concentration matrices
+        // and corresponding windows of input data
         let center_slice = s![center_range[0].clone(), center_range[1].clone()];
-        for (((out_u, out_v), win_u), win_v) in (out_u.slice_mut(center_slice).iter_mut())
-            .zip(out_v.slice_mut(center_slice).iter_mut())
-            .zip(in_u.windows(STENCIL_SHAPE))
-            .zip(in_v.windows(STENCIL_SHAPE))
-        {
+        for (out_u, out_v, win_u, win_v) in compute::fast_grid_iter((
+            [in_u.view(), in_v.view()],
+            [out_u.slice_mut(center_slice), out_v.slice_mut(center_slice)],
+        )) {
             // Compute pixel
             let (new_u, new_v) = self.compute_pixel(win_u, win_v, STENCIL_SHAPE, stencil_offset);
             *out_u = new_u;
@@ -163,20 +163,22 @@ impl Simulation {
         let params = &self.params;
 
         // Compute diffusion gradient
-        let [full_u, full_v] = (win_u.iter())
-            .zip(win_v.iter())
-            .zip(
-                // NOTE: Right now, this matches the computation performed by the
-                //       C++ version. Which is dubious, since the stencil should
-                //       arguably stay centered on the target pixel. Then again,
-                //       it's just going to result in a few bad edge pixels...
-                params.weights.0[..stencil_shape[0]]
-                    .iter()
-                    .flat_map(|row| row[..stencil_shape[1]].iter()),
-            )
+        // NOTE: Right now, this matches the computation performed by the
+        //       C++ version, where no matter what happens, we start from the
+        //       top-left edge of the stencil. But this is dubious, since the
+        //       stencil should arguably stay centered on the target pixel. Then
+        //       again, it's just going to result in a few weird edge pixels...
+        let [full_u, full_v] = (win_u.rows().into_iter())
+            .zip(win_v.rows().into_iter())
+            .zip(self.params.weights.0.into_iter())
+            .flat_map(|((u_row, v_row), weights_row)| {
+                (u_row.into_iter().copied())
+                    .zip(v_row.into_iter().copied())
+                    .zip(weights_row.into_iter())
+            })
             .fold(
                 [0.; 2],
-                |[acc_u, acc_v], ((&stencil_u, &stencil_v), &weight)| {
+                |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
                     [
                         acc_u + weight * (stencil_u - u),
                         acc_v + weight * (stencil_v - v),

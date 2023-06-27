@@ -1,11 +1,15 @@
 //! Common facilities shared by all compute backends
 
+use clap::Args;
 #[cfg(feature = "criterion")]
 use criterion::{BenchmarkId, Criterion, Throughput};
-use clap::Args;
-use data::{concentration::{Species, Concentration}, parameters::Parameters};
-use ndarray::{Axis, ArrayView2, ArrayViewMut2};
-use std::{error::Error, fmt::Debug};
+use data::{
+    array2,
+    concentration::{Concentration, Species},
+    parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
+};
+use ndarray::{ArrayBase, ArrayView2, ArrayViewMut2, Axis, Dimension, RawData, ShapeBuilder};
+use std::{assert_eq, error::Error, fmt::Debug};
 
 /// Commonalities between the two Simulate interfaces
 pub trait SimulateBase: Sized {
@@ -26,10 +30,7 @@ pub trait SimulateBase: Sized {
     fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error>;
 
     /// Set up a species concentration grid
-    fn make_species(
-        &self,
-        shape: [usize; 2],
-    ) -> Result<Species<Self::Concentration>, Self::Error>;
+    fn make_species(&self, shape: [usize; 2]) -> Result<Species<Self::Concentration>, Self::Error>;
 }
 
 /// No CLI parameters
@@ -45,7 +46,7 @@ pub trait Simulate: SimulateBase {
     fn perform_steps(
         &self,
         species: &mut Species<Self::Concentration>,
-        steps: usize
+        steps: usize,
     ) -> Result<(), Self::Error>;
 }
 
@@ -63,17 +64,14 @@ pub trait SimulateStep: SimulateBase {
     /// At the end of the simulation, the output concentrations of `species`
     /// will contain the final simulation results. It is the job of the caller
     /// to flip the concentrations if they want the result to be their input.
-    fn perform_step(
-        &self,
-        species: &mut Species<Self::Concentration>
-    ) -> Result<(), Self::Error>;
+    fn perform_step(&self, species: &mut Species<Self::Concentration>) -> Result<(), Self::Error>;
 }
 //
 impl<T: SimulateStep> Simulate for T {
     fn perform_steps(
         &self,
         species: &mut Species<Self::Concentration>,
-        steps: usize
+        steps: usize,
     ) -> Result<(), Self::Error> {
         for _ in 0..steps {
             self.perform_step(species)?;
@@ -100,9 +98,7 @@ pub trait SimulateCpu: Simulate {
     type Values;
 
     /// Extract a view of the full grid from the concentrations array
-    fn extract_grid(
-        species: &mut Species<Self::Concentration>,
-    ) -> CpuGrid<Self::Values>;
+    fn extract_grid(species: &mut Species<Self::Concentration>) -> CpuGrid<Self::Values>;
 
     /// Perform one simulation time step on the full grid or a subset thereof
     ///
@@ -159,7 +155,11 @@ pub trait SimulateCpu: Simulate {
 
         // Split across the longest grid axis
         let out_shape = out_u_center.shape();
-        let (axis_idx, out_length) = out_shape.iter().enumerate().max_by_key(|(_idx, length)| *length).unwrap();
+        let (axis_idx, out_length) = out_shape
+            .iter()
+            .enumerate()
+            .max_by_key(|(_idx, length)| *length)
+            .unwrap();
         let axis = Axis(axis_idx);
         let stencil_offset = data::parameters::stencil_offset()[axis_idx];
 
@@ -193,10 +193,7 @@ pub trait SimulateCpu: Simulate {
 pub type CpuGrid<'input, 'output, Values> = ([ArrayView2<'input, Values>; 2], [ArrayViewMut2<'output, Values>; 2]);
 //
 impl<T: SimulateCpu> SimulateStep for T {
-    fn perform_step(
-        &self,
-        species: &mut Species<Self::Concentration>,
-    ) -> Result<(), Self::Error> {
+    fn perform_step(&self, species: &mut Species<Self::Concentration>) -> Result<(), Self::Error> {
         Ok(self.step_impl(Self::extract_grid(species)))
     }
 }
@@ -223,8 +220,8 @@ macro_rules! criterion_benchmark {
 #[doc(hidden)]
 #[cfg(feature = "criterion")]
 pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name: &str) {
+    use clap::{Command, FromArgMatches};
     use std::hint::black_box;
-    use clap::{FromArgMatches, Command};
 
     env_logger::init();
 
@@ -247,17 +244,107 @@ pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name
 
             group.throughput(Throughput::Elements(num_elems * num_steps));
             group.bench_function(
-                BenchmarkId::from_parameter(
-                    format!("{}x{}elems,{}steps", shape[1], shape[0], num_steps)
-                ),
+                BenchmarkId::from_parameter(format!(
+                    "{}x{}elems,{}steps",
+                    shape[1], shape[0], num_steps
+                )),
                 |b| {
                     b.iter(|| {
                         sim.perform_steps(&mut species, num_steps as usize).unwrap();
                         species.make_result_view().unwrap();
                     });
-                }
+                },
             );
         }
     }
     group.finish();
+}
+
+/// Optimized iteration over (a regular chunk of) the simulation grid
+///
+/// In an ideal world, this would be just...
+///
+/// ```
+/// (out_u_center.iter_mut())
+///     .zip(out_v_center.iter_mut())
+///     .zip(in_u.windows(STENCIL_SHAPE))
+///     .zip(in_v.windows(STENCIL_SHAPE))
+/// ```
+///
+/// But at present time, rustc/LLVM cannot optimize the zipped iterator as well
+/// as a specialized explicit joint iterator...
+#[inline(always)]
+pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
+    ([in_u, in_v], [mut out_u_center, mut out_v_center]): CpuGrid<'input, 'output, Values>,
+) -> impl Iterator<
+    Item = (
+        &'output mut Values,
+        &'output mut Values,
+        ArrayView2<'input, Values>,
+        ArrayView2<'input, Values>,
+    ),
+> {
+    // Assert that the sub-grids have the expected shape
+    let stencil_offset = stencil_offset();
+    let out_shape = [out_u_center.nrows(), out_u_center.ncols()];
+    assert_eq!(out_v_center.shape(), &out_shape[..]);
+    let in_shape = array2(|i| out_shape[i] + 2 * stencil_offset[i]);
+    assert_eq!(in_u.shape(), &in_shape[..]);
+    assert_eq!(in_v.shape(), &in_shape[..]);
+
+    // Assert that the sub-grids have the expected strides
+    fn checked_row_stride<A, S, D>(arrays: [&ArrayBase<S, D>; 2]) -> usize
+    where
+        S: RawData<Elem = A>,
+        D: Dimension,
+    {
+        let strides = arrays[0].strides();
+        assert_eq!(strides, arrays[1].strides());
+        let &[row_stride, 1] = strides else { unreachable!() };
+        row_stride as usize
+    }
+    let out_row_stride = checked_row_stride([&out_u_center, &out_v_center]);
+    let in_row_stride = checked_row_stride([&in_u, &in_v]);
+
+    // Prepare a way to access input windows and output refs by output position
+    let window_shape = (STENCIL_SHAPE[0], STENCIL_SHAPE[1]).strides((in_row_stride, 1));
+    let offset = |position: [usize; 2], row_stride: usize| -> usize {
+        position[0] * row_stride + position[1]
+    };
+    let unchecked_output = move |out_ptr: *mut Values, out_pos| unsafe {
+        &mut *out_ptr.add(offset(out_pos, out_row_stride))
+    };
+    let unchecked_input_window = move |in_ptr: *const Values, out_pos| unsafe {
+        let win_ptr = in_ptr.add(offset(out_pos, in_row_stride));
+        ArrayView2::from_shape_ptr(window_shape, win_ptr)
+    };
+
+    // Start iteration
+    let in_u_ptr = in_u.as_ptr();
+    let in_v_ptr = in_v.as_ptr();
+    let out_u_ptr = out_u_center.as_mut_ptr();
+    let out_v_ptr = out_v_center.as_mut_ptr();
+    let mut out_pos = [0, 0];
+    std::iter::from_fn(move || {
+        // Handle end of iteration
+        if out_pos[0] == out_shape[0] {
+            return None;
+        }
+
+        // Produce current result
+        let out_u = unchecked_output(out_u_ptr, out_pos);
+        let out_v = unchecked_output(out_v_ptr, out_pos);
+        let win_u = unchecked_input_window(in_u_ptr, out_pos);
+        let win_v = unchecked_input_window(in_v_ptr, out_pos);
+
+        // Advance iterator
+        out_pos[1] += 1;
+        if out_pos[1] == out_shape[1] {
+            out_pos[0] += 1;
+            out_pos[1] = 0;
+        }
+
+        // Emit result
+        Some((out_u, out_v, win_u, win_v))
+    })
 }
