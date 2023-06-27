@@ -134,7 +134,9 @@ impl Concentration for ImageConcentration {
 impl ImageConcentration {
     /// Image format used by this concentration type
     pub fn format() -> Format {
-        Self::image_format_info().format.unwrap()
+        Self::image_format_info(ImageUsage::default())
+            .format
+            .unwrap()
     }
 
     /// Required image format features
@@ -148,16 +150,13 @@ impl ImageConcentration {
     }
 
     /// Image configuration
-    pub fn image_format_info() -> ImageFormatInfo {
+    pub fn image_format_info(client_usage: ImageUsage) -> ImageFormatInfo {
         ImageFormatInfo {
             flags: ImageCreateFlags::empty(),
             format: Some(Format::R32_SFLOAT),
             image_type: ImageType::Dim2d,
             tiling: ImageTiling::Optimal,
-            usage: ImageUsage::TRANSFER_SRC
-                | ImageUsage::TRANSFER_DST
-                | ImageUsage::SAMPLED
-                | ImageUsage::STORAGE,
+            usage: ImageUsage::TRANSFER_SRC | ImageUsage::TRANSFER_DST | client_usage,
             ..Default::default()
         }
     }
@@ -182,7 +181,7 @@ impl ImageConcentration {
         let texel_size = std::mem::size_of::<Precision>();
         assert_eq!(texel_size, 4, "Must adjust image format");
 
-        let image_format_info = Self::image_format_info();
+        let image_format_info = Self::image_format_info(context.client_image_usage);
         let gpu_image = StorageImage::with_usage(
             context.memory_allocator(),
             ImageDimensions::Dim2d {
@@ -196,15 +195,14 @@ impl ImageConcentration {
             context.queue_family_indices(),
         )?;
 
-        let sharing = if context.queue_family_indices().count() > 1 {
-            Sharing::Concurrent(context.queue_family_indices().collect())
-        } else {
-            Sharing::Exclusive
-        };
         let cpu_buffer = make_buffer(
             context.memory_allocator(),
             BufferCreateInfo {
-                sharing,
+                sharing: if context.queue_family_indices().count() > 1 {
+                    Sharing::Concurrent(context.queue_family_indices().collect())
+                } else {
+                    Sharing::Exclusive
+                },
                 usage: BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST,
                 ..Default::default()
             },
@@ -302,6 +300,9 @@ pub struct ImageContext {
     /// Buffer/image allocator
     memory_allocator: Arc<MemAlloc>,
 
+    /// Client-requested image usage
+    client_image_usage: ImageUsage,
+
     /// Queue family indices of the upload and download queues
     queue_family_indices: HashSet<u32>,
 
@@ -325,6 +326,7 @@ impl ImageContext {
         command_allocator: Arc<CommAlloc>,
         upload_queue: Arc<Queue>,
         download_queue: Arc<Queue>,
+        client_image_usage: ImageUsage,
     ) -> Result<Self> {
         let queue_family_indices = [
             upload_queue.queue_family_index(),
@@ -336,6 +338,7 @@ impl ImageContext {
         Ok(Self {
             descriptor_sets: HashMap::new(),
             memory_allocator,
+            client_image_usage,
             queue_family_indices,
             command_allocator,
             pending_uploads: HashMap::new(),

@@ -87,9 +87,6 @@ impl SimulateBase for Simulation {
     type Error = Error;
 
     fn new(params: Parameters, _args: NoArgs) -> Result<Self> {
-        // Check that ImageConcentration supports what we need
-        check_image_concentration();
-
         // Set up Vulkan
         let context = VulkanConfig {
             other_device_requirements: Box::new(Self::minimal_device_requirements),
@@ -155,6 +152,7 @@ impl SimulateBase for Simulation {
                 self.context.command_allocator.clone(),
                 self.queue().clone(),
                 self.queue().clone(),
+                image_usage(),
             )?,
             shape,
         )?)
@@ -348,16 +346,6 @@ pub fn dispatch_size(shape: [usize; 2], work_group_size: [u32; 3]) -> [u32; 3] {
     })
 }
 
-/// Check that ImageConcentration is correctly configured
-pub fn check_image_concentration() {
-    assert!(
-        ImageConcentration::image_format_info()
-            .usage
-            .contains(ImageUsage::SAMPLED | ImageUsage::STORAGE),
-        "ImageConcentration does not enable all required usage flags"
-    );
-}
-
 /// Subset of minimal_device_requirements that will be true for any backend
 /// that uses an image-based logic.
 pub fn image_device_requirements(device: &PhysicalDevice, work_group_size: [u32; 3]) -> bool {
@@ -392,6 +380,11 @@ pub fn image_device_requirements(device: &PhysicalDevice, work_group_size: [u32;
         )
 }
 
+/// Way in which we use images
+fn image_usage() -> ImageUsage {
+    ImageUsage::SAMPLED | ImageUsage::STORAGE
+}
+
 /// Requirements on the problem size that are true of any image-based backend
 pub fn check_image_shape_requirements(device: &PhysicalDevice, shape: [usize; 2]) -> Result<()> {
     // The simple shader can't accomodate a problem size that is not a
@@ -424,8 +417,9 @@ pub fn check_image_shape_requirements(device: &PhysicalDevice, shape: [usize; 2]
     }
 
     // Check image format properties
+    let image_format_info = ImageConcentration::image_format_info(image_usage());
     let Some(image_format_properties) =
-        device.image_format_properties(ImageConcentration::image_format_info())? else {
+        device.image_format_properties(image_format_info)? else {
             return Err(Error::UnsupportedShape);
         };
     if image_format_properties

@@ -17,6 +17,7 @@ use std::{num::NonZeroU32, sync::Arc};
 use vulkano::{
     command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage},
     device::Queue,
+    image::ImageUsage,
     pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
     sync::GpuFuture,
 };
@@ -53,9 +54,6 @@ impl SimulateBase for Simulation {
     type Error = Error;
 
     fn new(params: Parameters, args: CliArgs) -> Result<Self> {
-        // Check that ImageConcentration supports what we need
-        compute_gpu_naive::check_image_concentration();
-
         // Pick work-group size
         let work_group_size = [args.work_group_cols.into(), args.work_group_rows.into(), 1];
 
@@ -132,6 +130,7 @@ impl SimulateBase for Simulation {
                 self.context.command_allocator.clone(),
                 self.queue().clone(),
                 self.queue().clone(),
+                ImageUsage::SAMPLED | ImageUsage::STORAGE,
             )?,
             shape,
         )?)
