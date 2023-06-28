@@ -34,7 +34,7 @@ use vulkano::{
     },
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
     pipeline::cache::PipelineCache,
-    sync::{FlushError, GpuFuture},
+    sync::{future::NowFuture, FlushError, GpuFuture},
     ExtensionProperties, LoadingError, OomError, VulkanError, VulkanLibrary,
 };
 
@@ -77,8 +77,13 @@ where
     /// Access the Vulkan context used by the simulation
     fn context(&self) -> &VulkanContext;
 
+    /// Quick access to `vulkano::now()` on our device
+    fn now(&self) -> NowFuture {
+        vulkano::sync::now(self.context().device.clone())
+    }
+
     /// GpuFuture returned by `prepare_steps`
-    type PrepareStepsFuture<After: GpuFuture>: GpuFuture + 'static;
+    type PrepareStepsFuture<After: GpuFuture + 'static>: GpuFuture + 'static;
 
     /// Prepare to perform `steps` simulation steps
     ///

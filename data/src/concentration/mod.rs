@@ -90,6 +90,14 @@ impl<C: Concentration> Species<C> {
         Ok(())
     }
 
+    /// Access V's current input concentration
+    ///
+    /// The concentration of the V species is the effective result of the
+    /// simulation (what gets stored to HDF5, etc).
+    pub fn access_result<R>(&mut self, f: impl FnOnce(&mut C, &mut C::Context) -> R) -> R {
+        f(&mut self.v.0[0], &mut self.context)
+    }
+
     /// Access a scalar view of V's current input concentration
     ///
     /// The concentration of the V species is the effective result of the

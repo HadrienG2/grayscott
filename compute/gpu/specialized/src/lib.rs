@@ -145,7 +145,7 @@ impl SimulateGpu for Simulation {
         &self.context
     }
 
-    type PrepareStepsFuture<After: GpuFuture> = CommandBufferExecFuture<After>;
+    type PrepareStepsFuture<After: GpuFuture + 'static> = CommandBufferExecFuture<After>;
 
     fn prepare_steps<After: GpuFuture>(
         &self,

@@ -1,5 +1,9 @@
 use clap::Parser;
-use compute::{Simulate, SimulateBase, SimulateCreate};
+#[cfg(feature = "async-gpu")]
+use compute::gpu::SimulateGpu;
+#[allow(unused)]
+use compute::Simulate;
+use compute::{SimulateBase, SimulateCreate};
 use data::{
     concentration::{AsScalars, ScalarConcentration},
     hdf5::{self, Writer},
@@ -192,21 +196,38 @@ fn main() {
 
         // Run the simulation on the main thread
         for _ in 0..args.nbimage {
-            // Move the simulation forward
-            simulation
-                .perform_steps(&mut species, steps_per_image)
-                .expect("Failed to compute simulation steps");
+            // Move the simulation forward and collect image
+            let image = {
+                // If gpu-specific asynchronous commands are available, use them
+                #[cfg(feature = "async-gpu")]
+                {
+                    let steps = simulation
+                        .prepare_steps(simulation.now(), &mut species, steps_per_image)
+                        .expect("Failed to prepare simulation steps");
+                    species.access_result(|v, context| {
+                        v.make_scalar_view_after(steps, context)
+                            .expect("Failed to run simulation and collect results")
+                            .as_scalars()
+                            .to_owned()
+                    })
+                }
 
-            // Schedule writing the image
-            sender
-                .send(
+                // Otherwise, use synchronous commands
+                #[cfg(not(feature = "async-gpu"))]
+                {
+                    simulation
+                        .perform_steps(&mut species, steps_per_image)
+                        .expect("Failed to compute simulation steps");
                     species
                         .make_result_view()
                         .expect("Failed to extract result")
                         .as_scalars()
-                        .to_owned(),
-                )
-                .expect("I/O thread has died");
+                        .to_owned()
+                }
+            };
+
+            // Schedule writing the image
+            sender.send(image).expect("I/O thread has died");
         }
     });
 

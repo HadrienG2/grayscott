@@ -3,6 +3,16 @@ name = "simulate"
 version.workspace = true
 edition.workspace = true
 
+[features]
+# Leverage the GPU's asynchronous scheduling capabilities
+#
+# This feature can only be used with one of the _gpu backends, and use of these
+# backends enable it automatically. Once Rust gets specialization, we'll use it
+# as a cleaner alternative to this cargo features trick.
+async-gpu = []
+compute_gpu_naive = ["dep:compute_gpu_naive", "async-gpu"]
+compute_gpu_specialized = ["dep:compute_gpu_specialized", "async-gpu"]
+
 [dependencies]
 cfg-if.workspace = true
 clap.workspace = true
