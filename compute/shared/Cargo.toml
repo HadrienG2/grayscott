@@ -5,7 +5,7 @@ edition.workspace = true
 
 [features]
 criterion = ["dep:criterion", "env_logger"]
-gpu = ["directories", "log", "thiserror", "vulkano"]
+gpu = ["data/gpu", "directories", "log", "thiserror", "vulkano"]
 
 [dependencies]
 clap.workspace = true

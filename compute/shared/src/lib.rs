@@ -1,11 +1,12 @@
 //! Common facilities shared by all compute backends
 
+#[cfg(feature = "criterion")]
+#[doc(hidden)]
+pub mod benchmark;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 
 use clap::Args;
-#[cfg(feature = "criterion")]
-use criterion::{BenchmarkId, Criterion, Throughput};
 use data::{
     array2,
     concentration::{Concentration, Species},
@@ -204,68 +205,6 @@ impl<T: SimulateCpu> SimulateStep for T {
     }
 }
 
-/// Re-export criterion for the criterion_benchmark macro
-#[cfg(feature = "criterion")]
-pub use criterion;
-
-/// Macro that generates a complete criterion benchmark harness for you
-#[macro_export]
-#[cfg(feature = "criterion")]
-macro_rules! criterion_benchmark {
-    ($backend:ident) => {
-        fn criterion_benchmark(c: &mut $crate::criterion::Criterion) {
-            $crate::criterion_benchmark::<$backend::Simulation>(c, stringify!($backend))
-        }
-        $crate::criterion::criterion_group!(benches, criterion_benchmark);
-        $crate::criterion::criterion_main!(benches);
-    };
-}
-
-/// Common criterion benchmark for all Gray-Scott reaction computations
-/// Use via the criterion_benchmark macro
-#[doc(hidden)]
-#[cfg(feature = "criterion")]
-pub fn criterion_benchmark<Simulation: Simulate>(c: &mut Criterion, backend_name: &str) {
-    use clap::{Command, FromArgMatches};
-    use std::hint::black_box;
-
-    env_logger::init();
-
-    let args = Simulation::CliArgs::from_arg_matches(
-        &Simulation::CliArgs::augment_args(Command::default().no_binary_name(true))
-            .get_matches_from(None::<&str>),
-    )
-    .expect("Failed to parse arguments from defaults & environment");
-
-    let sim = Simulation::new(black_box(Parameters::default()), black_box(args)).unwrap();
-    let mut group = c.benchmark_group(format!("{backend_name}"));
-    for num_steps_pow2 in 0..=8 {
-        let num_steps = 2u64.pow(num_steps_pow2);
-        for size_pow2 in 3..=11 {
-            let size = 2usize.pow(size_pow2);
-            let shape = [size, 2 * size];
-            let num_elems = (shape[0] * shape[1]) as u64;
-
-            let mut species = sim.make_species(black_box(shape)).unwrap();
-
-            group.throughput(Throughput::Elements(num_elems * num_steps));
-            group.bench_function(
-                BenchmarkId::from_parameter(format!(
-                    "{}x{}elems,{}steps",
-                    shape[1], shape[0], num_steps
-                )),
-                |b| {
-                    b.iter(|| {
-                        sim.perform_steps(&mut species, num_steps as usize).unwrap();
-                        species.make_result_view().unwrap();
-                    });
-                },
-            );
-        }
-    }
-    group.finish();
-}
-
 /// Optimized iteration over (a regular chunk of) the simulation grid
 ///
 /// In an ideal world, this would be just...
@@ -353,4 +292,54 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
         // Emit result
         Some((out_u, out_v, win_u, win_v))
     })
+}
+
+/// Macro that generates a complete criterion benchmark harness for you
+/// Consider using the higher-level cpu_benchmark and gpu_benchmark macros below
+#[doc(hidden)]
+#[macro_export]
+#[cfg(feature = "criterion")]
+macro_rules! criterion_benchmark {
+    ($backend:ident, $($workload:ident => $workload_name:expr),*) => {
+        $(
+            fn $workload(c: &mut $crate::benchmark::criterion::Criterion) {
+                $crate::benchmark::criterion_benchmark::<$backend::Simulation>(
+                    c,
+                    stringify!($backend),
+                    $crate::benchmark::$workload,
+                    $workload_name,
+                )
+            }
+        )*
+        $crate::benchmark::criterion::criterion_group!(
+            benches,
+            $($workload),*
+        );
+        $crate::benchmark::criterion::criterion_main!(benches);
+    };
+}
+
+/// Macro that generates a CPU criterion benchmark harness for you
+#[macro_export]
+#[cfg(feature = "criterion")]
+macro_rules! cpu_benchmark {
+    ($backend:ident) => {
+        $crate::criterion_benchmark!(
+            $backend,
+            sync_workload => ""
+        );
+    };
+}
+
+/// Macro that generates a GPU criterion benchmark harness for you
+#[macro_export]
+#[cfg(feature = "criterion")]
+macro_rules! gpu_benchmark {
+    ($backend:ident) => {
+        $crate::criterion_benchmark!(
+            $backend,
+            sync_workload => "sync",
+            gpu_future_workload => "future"
+        );
+    };
 }

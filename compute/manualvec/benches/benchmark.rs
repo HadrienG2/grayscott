@@ -1,1 +1,1 @@
-compute::criterion_benchmark!(compute_manualvec);
+compute::cpu_benchmark!(compute_manualvec);

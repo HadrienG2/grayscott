@@ -1,1 +1,1 @@
-compute::criterion_benchmark!(compute_gpu_naive);
+compute::gpu_benchmark!(compute_gpu_naive);
