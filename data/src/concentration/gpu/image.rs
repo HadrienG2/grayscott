@@ -21,7 +21,7 @@ use vulkano::{
         CopyError, CopyImageToBufferInfo, PrimaryAutoCommandBuffer,
     },
     descriptor_set::PersistentDescriptorSet,
-    device::Queue,
+    device::{DeviceOwned, Queue},
     format::{Format, FormatFeatures},
     image::{
         ImageAccess, ImageCreateFlags, ImageDimensions, ImageError, ImageFormatInfo, ImageTiling,
@@ -30,7 +30,7 @@ use vulkano::{
     memory::allocator::{
         AllocationCreateInfo, MemoryAllocatePreference, MemoryUsage, StandardMemoryAllocator,
     },
-    sync::{FlushError, GpuFuture, Sharing},
+    sync::{future::NowFuture, FlushError, GpuFuture, Sharing},
     DeviceSize,
 };
 
@@ -96,7 +96,7 @@ impl Concentration for ImageConcentration {
     ) -> Result<()> {
         // If the image has already been used on GPU, download the new version
         if self.owner == Owner::Gpu {
-            context.download(self.gpu_image.clone(), self.cpu_buffer.clone())?;
+            context.download_after(self.now(), self.gpu_image.clone(), self.cpu_buffer.clone())?;
             self.owner = Owner::Cpu;
         }
 
@@ -123,11 +123,8 @@ impl Concentration for ImageConcentration {
 
     type ScalarView<'a> = ScalarView<'a>;
 
-    fn make_scalar_view(&mut self, context: &mut ImageContext) -> Result<Self::ScalarView<'_>> {
-        context.download(self.gpu_image.clone(), self.cpu_buffer.clone())?;
-        Ok(ScalarView::new(self.cpu_buffer.read()?, |buffer| {
-            ArrayView2::from_shape(self.shape(), &buffer).expect("The shape should be right")
-        }))
+    fn make_scalar_view(&mut self, context: &mut ImageContext) -> Result<ScalarView> {
+        self.make_scalar_view_after(self.now(), context)
     }
 }
 //
@@ -252,6 +249,24 @@ impl ImageConcentration {
             Did you call finalize() after your last CPU-side modification?"
         );
         &self.gpu_image
+    }
+
+    /// Shortcut to `vulkano::sync::now()` on our device
+    fn now(&self) -> NowFuture {
+        vulkano::sync::now(self.gpu_image.device().clone())
+    }
+
+    /// Version of `Concentration::make_scalar_view()` that can take place right
+    /// after simulation in a single GPU submission
+    pub fn make_scalar_view_after(
+        &mut self,
+        after: impl GpuFuture + 'static,
+        context: &mut ImageContext,
+    ) -> Result<ScalarView> {
+        context.download_after(after, self.gpu_image.clone(), self.cpu_buffer.clone())?;
+        Ok(ScalarView::new(self.cpu_buffer.read()?, |buffer| {
+            ArrayView2::from_shape(self.shape(), &buffer).expect("The shape should be right")
+        }))
     }
 }
 
@@ -398,12 +413,26 @@ impl ImageContext {
     /// Unlike uploads, downloads are eager because we usually only need a
     /// single image on the CPU, so batching is a pessimization. Furthermore, it
     /// is hard to track when GPU images are modified, or even accessed.
-    fn download(&mut self, gpu: Arc<StorageImage>, cpu: CpuBuffer) -> Result<()> {
+    fn download_after(
+        &mut self,
+        after: impl GpuFuture + 'static,
+        gpu: Arc<StorageImage>,
+        cpu: CpuBuffer,
+    ) -> Result<()> {
         assert!(
             !self.pending_uploads.contains_key(&cpu),
             "Attempting to download a stale image from the GPU. \
             Did you call finalize() after your last CPU-side modification?"
         );
+
+        // Need a semaphore if the input future does not map to the same queue
+        let after_queue = after.queue().unwrap_or(self.download_queue.clone());
+        let after = if after_queue != self.download_queue {
+            after.then_signal_semaphore_and_flush()?.boxed()
+        } else {
+            after.boxed()
+        };
+
         let mut builder = CommandBufferBuilder::primary(
             &self.command_allocator,
             self.download_queue.queue_family_index(),
@@ -411,10 +440,12 @@ impl ImageContext {
         )?;
         builder.copy_image_to_buffer(CopyImageToBufferInfo::image_buffer(gpu, cpu))?;
         let commands = builder.build()?;
-        vulkano::sync::now(self.download_queue.device().clone())
+
+        after
             .then_execute(self.download_queue.clone(), commands)?
             .then_signal_fence_and_flush()?
             .wait(None)?;
+
         Ok(())
     }
 }
