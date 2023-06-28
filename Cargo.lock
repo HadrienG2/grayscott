@@ -1310,27 +1310,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "reaction"
-version = "0.1.0"
-dependencies = [
- "cfg-if",
- "clap",
- "compute",
- "compute_autovec",
- "compute_block",
- "compute_gpu_naive",
- "compute_gpu_specialized",
- "compute_manualvec",
- "compute_naive",
- "compute_parallel",
- "compute_regular",
- "data",
- "indicatif",
- "log",
- "syslog",
-]
-
-[[package]]
 name = "redox_syscall"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1504,6 +1483,27 @@ name = "simd-adler32"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "238abfbb77c1915110ad968465608b68e869e0772622c9656714e73e5a1a522f"
+
+[[package]]
+name = "simulate"
+version = "0.1.0"
+dependencies = [
+ "cfg-if",
+ "clap",
+ "compute",
+ "compute_autovec",
+ "compute_block",
+ "compute_gpu_naive",
+ "compute_gpu_specialized",
+ "compute_manualvec",
+ "compute_naive",
+ "compute_parallel",
+ "compute_regular",
+ "data",
+ "indicatif",
+ "log",
+ "syslog",
+]
 
 [[package]]
 name = "slipstream"

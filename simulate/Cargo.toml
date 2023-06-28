@@ -1,5 +1,5 @@
 [package]
-name = "reaction"
+name = "simulate"
 version.workspace = true
 edition.workspace = true
 
@@ -27,6 +27,6 @@ compute_naive.workspace = true
 
 # Criterion workaround for lack of stable benchmark harness
 [[bin]]
-name = "reaction"
+name = "simulate"
 path = "src/main.rs"
 bench = false

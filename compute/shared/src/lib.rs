@@ -37,7 +37,7 @@ pub trait SimulateBase: Sized {
 #[derive(Args, Copy, Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub struct NoArgs;
 
-/// Simulation compute backend interface expected by the "reaction" CLI program
+/// Simulation compute backend interface expected by the binaries
 pub trait Simulate: SimulateBase {
     /// Perform `steps` simulation time steps on the specified grid
     ///

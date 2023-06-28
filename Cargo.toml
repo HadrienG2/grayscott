@@ -12,7 +12,7 @@ members = [
     "compute/shared",
     "data",
     "data-to-pics",
-    "reaction"
+    "simulate"
 ]
 
 [workspace.package]
