@@ -207,8 +207,6 @@ fn main() {
                     species.access_result(|v, context| {
                         v.make_scalar_view_after(steps, context)
                             .expect("Failed to run simulation and collect results")
-                            .as_scalars()
-                            .to_owned()
                     })
                 }
 
@@ -221,13 +219,13 @@ fn main() {
                     species
                         .make_result_view()
                         .expect("Failed to extract result")
-                        .as_scalars()
-                        .to_owned()
                 }
             };
 
             // Schedule writing the image
-            sender.send(image).expect("I/O thread has died");
+            sender
+                .send(image.as_scalars().to_owned())
+                .expect("I/O thread has died");
         }
     });
 

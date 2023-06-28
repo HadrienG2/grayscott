@@ -94,7 +94,10 @@ impl<C: Concentration> Species<C> {
     ///
     /// The concentration of the V species is the effective result of the
     /// simulation (what gets stored to HDF5, etc).
-    pub fn access_result<R>(&mut self, f: impl FnOnce(&mut C, &mut C::Context) -> R) -> R {
+    pub fn access_result<'s, R: 's>(
+        &'s mut self,
+        f: impl FnOnce(&'s mut C, &mut C::Context) -> R,
+    ) -> R {
         f(&mut self.v.0[0], &mut self.context)
     }
 
@@ -105,7 +108,7 @@ impl<C: Concentration> Species<C> {
     /// (SIMD, GPU...), some expensive preprocessing steps may be needed in
     /// order to get to a normal 2D view of it. This is how you get this done.
     pub fn make_result_view(&mut self) -> Result<C::ScalarView<'_>, C::Error> {
-        self.v.0[0].make_scalar_view(&mut self.context)
+        self.access_result(|v, ctx| v.make_scalar_view(ctx))
     }
 }
 
