@@ -270,8 +270,12 @@ dependencies = [
  "clap",
  "criterion",
  "data",
+ "directories",
  "env_logger",
+ "log",
  "ndarray",
+ "thiserror",
+ "vulkano",
 ]
 
 [[package]]
@@ -297,22 +301,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "compute_gpu"
-version = "0.1.0"
-dependencies = [
- "directories",
- "env_logger",
- "log",
- "thiserror",
- "vulkano",
-]
-
-[[package]]
 name = "compute_gpu_naive"
 version = "0.1.0"
 dependencies = [
  "compute",
- "compute_gpu",
  "crevice",
  "data",
  "thiserror",
@@ -326,7 +318,6 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "compute",
- "compute_gpu",
  "compute_gpu_naive",
  "data",
  "vulkano",

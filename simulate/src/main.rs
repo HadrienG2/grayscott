@@ -1,5 +1,5 @@
 use clap::Parser;
-use compute::{Simulate, SimulateBase};
+use compute::{Simulate, SimulateBase, SimulateCreate};
 use data::{
     concentration::{AsScalars, ScalarConcentration},
     hdf5::{self, Writer},
@@ -95,12 +95,14 @@ cfg_if::cfg_if! {
 
             type Error = Infallible;
 
-            fn new(_params: Parameters, _args: NoArgs) -> Result<Self, Infallible> {
-                std::compile_error!("Please enable at least one compute backend via crate features")
-            }
-
             fn make_species(&self, shape: [usize; 2]) -> Result<Species<ScalarConcentration>, Infallible> {
                 Species::new((), shape)
+            }
+        }
+        //
+        impl SimulateCreate for Simulation {
+            fn new(_params: Parameters, _args: NoArgs) -> Result<Self, Infallible> {
+                std::compile_error!("Please enable at least one compute backend via crate features")
             }
         }
         //

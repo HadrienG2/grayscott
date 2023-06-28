@@ -4,7 +4,7 @@
 //! to improve cache locality.
 
 use clap::Args;
-use compute::{CpuGrid, SimulateBase, SimulateCpu};
+use compute::{CpuGrid, SimulateBase, SimulateCpu, SimulateCreate};
 use data::{
     concentration::{Concentration, Species},
     parameters::Parameters,
@@ -51,6 +51,14 @@ impl<Backend: SimulateCpu, BlockSize: DefaultBlockSize> SimulateBase
     type Error =
         Error<<Backend as SimulateBase>::Error, <Self::Concentration as Concentration>::Error>;
 
+    fn make_species(&self, shape: [usize; 2]) -> Result<Species<Self::Concentration>, Self::Error> {
+        self.backend.make_species(shape).map_err(Error::Backend)
+    }
+}
+//
+impl<Backend: SimulateCpu, BlockSize: DefaultBlockSize> SimulateCreate
+    for BlockWiseSimulation<Backend, BlockSize>
+{
     fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error> {
         // Determine the desired block size in bytes
         let max_bytes_per_block = args
@@ -67,10 +75,6 @@ impl<Backend: SimulateCpu, BlockSize: DefaultBlockSize> SimulateBase
             backend: Backend::new(params, args.backend).map_err(Error::Backend)?,
             block_size: PhantomData,
         })
-    }
-
-    fn make_species(&self, shape: [usize; 2]) -> Result<Species<Self::Concentration>, Self::Error> {
-        self.backend.make_species(shape).map_err(Error::Backend)
     }
 }
 //

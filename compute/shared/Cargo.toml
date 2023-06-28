@@ -5,15 +5,25 @@ edition.workspace = true
 
 [features]
 criterion = ["dep:criterion", "env_logger"]
+gpu = ["directories", "log", "thiserror", "vulkano"]
 
 [dependencies]
 clap.workspace = true
 data.workspace = true
 ndarray.workspace = true
 
-# Benchmarking deps
+# Criterion benchmarking dependencies
 criterion = { workspace = true, optional = true }
 env_logger = { workspace = true, optional = true }
+
+# GPU dependencies
+directories = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+vulkano = { workspace = true, optional = true }
+
+[dev-dependencies]
+env_logger.workspace = true
 
 # Criterion workaround for lack of stable benchmark harness
 [lib]

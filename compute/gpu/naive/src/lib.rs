@@ -5,8 +5,10 @@
 //! in the split-source model that Vulkan-based Rust code must sadly use until
 //! rust-gpu is mature enough.
 
-use compute::{NoArgs, Simulate, SimulateBase};
-use compute_gpu::{VulkanConfig, VulkanContext};
+use compute::{
+    gpu::{SimulateGpu, VulkanConfig, VulkanContext},
+    NoArgs, Simulate, SimulateBase,
+};
 use crevice::std140::AsStd140;
 use data::{
     concentration::gpu::image::{ImageConcentration, ImageContext},
@@ -19,7 +21,7 @@ use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferError, BufferUsage},
     command_buffer::{
         AutoCommandBufferBuilder, BuildError, CommandBufferBeginError, CommandBufferExecError,
-        CommandBufferUsage, PipelineExecutionError,
+        CommandBufferExecFuture, CommandBufferUsage, PipelineExecutionError,
     },
     descriptor_set::{
         layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo},
@@ -86,11 +88,30 @@ impl SimulateBase for Simulation {
 
     type Error = Error;
 
-    fn new(params: Parameters, _args: NoArgs) -> Result<Self> {
+    fn make_species(&self, shape: [usize; 2]) -> Result<Species> {
+        check_image_shape_requirements(self.context.device.physical_device(), shape)?;
+        Ok(Species::new(
+            ImageContext::new(
+                self.context.memory_allocator.clone(),
+                self.context.command_allocator.clone(),
+                self.queue().clone(),
+                self.queue().clone(),
+                image_usage(),
+            )?,
+            shape,
+        )?)
+    }
+}
+//
+impl SimulateGpu for Simulation {
+    fn with_config(params: Parameters, _args: NoArgs, mut config: VulkanConfig) -> Result<Self> {
         // Set up Vulkan
         let context = VulkanConfig {
-            other_device_requirements: Box::new(Self::minimal_device_requirements),
-            ..VulkanConfig::default()
+            other_device_requirements: Box::new(move |device| {
+                (config.other_device_requirements)(device)
+                    && Self::minimal_device_requirements(device)
+            }),
+            ..config
         }
         .setup()?;
 
@@ -144,23 +165,18 @@ impl SimulateBase for Simulation {
         })
     }
 
-    fn make_species(&self, shape: [usize; 2]) -> Result<Species> {
-        check_image_shape_requirements(self.context.device.physical_device(), shape)?;
-        Ok(Species::new(
-            ImageContext::new(
-                self.context.memory_allocator.clone(),
-                self.context.command_allocator.clone(),
-                self.queue().clone(),
-                self.queue().clone(),
-                image_usage(),
-            )?,
-            shape,
-        )?)
+    fn context(&self) -> &VulkanContext {
+        &self.context
     }
-}
-//
-impl Simulate for Simulation {
-    fn perform_steps(&self, species: &mut Species, steps: usize) -> Result<()> {
+
+    type PrepareStepsFuture<After: GpuFuture> = CommandBufferExecFuture<After>;
+
+    fn prepare_steps<After: GpuFuture>(
+        &self,
+        after: After,
+        species: &mut Species,
+        steps: usize,
+    ) -> Result<CommandBufferExecFuture<After>> {
         // Prepare to record GPU commands
         let mut builder = AutoCommandBufferBuilder::primary(
             &self.context.command_allocator,
@@ -202,11 +218,13 @@ impl Simulate for Simulation {
 
         // Synchronously execute the simulation steps
         let commands = builder.build()?;
-        vulkano::sync::now(self.context.device.clone())
-            .then_execute(self.queue().clone(), commands)?
-            .then_signal_fence_and_flush()?
-            .wait(None)?;
-        Ok(())
+        Ok(after.then_execute(self.queue().clone(), commands)?)
+    }
+}
+//
+impl Simulate for Simulation {
+    fn perform_steps(&self, species: &mut Species, steps: usize) -> Result<()> {
+        self.perform_steps_impl(species, steps)
     }
 }
 //
@@ -439,7 +457,7 @@ pub fn check_image_shape_requirements(device: &PhysicalDevice, shape: [usize; 2]
 pub enum Error {
     /// Errors while initializing the Vulkan API
     #[error("failed to initialize the Vulkan API")]
-    Init(#[from] compute_gpu::Error),
+    Init(#[from] compute::gpu::Error),
 
     /// Errors while manipulating species concentration images
     #[error("failed to manipulate images")]

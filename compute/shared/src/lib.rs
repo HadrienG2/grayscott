@@ -1,5 +1,8 @@
 //! Common facilities shared by all compute backends
 
+#[cfg(feature = "gpu")]
+pub mod gpu;
+
 use clap::Args;
 #[cfg(feature = "criterion")]
 use criterion::{BenchmarkId, Criterion, Throughput};
@@ -11,7 +14,7 @@ use data::{
 use ndarray::{ArrayBase, ArrayView2, ArrayViewMut2, Axis, Dimension, RawData, ShapeBuilder};
 use std::{assert_eq, error::Error, fmt::Debug};
 
-/// Commonalities between the two Simulate interfaces
+/// Commonalities between all ways to implement a simulation
 pub trait SimulateBase: Sized {
     /// Supplementary CLI arguments allowing fine-tuning of this backend
     ///
@@ -26,11 +29,14 @@ pub trait SimulateBase: Sized {
     /// Error type used by simulation operations
     type Error: Error + From<<Self::Concentration as Concentration>::Error> + Send + Sync;
 
-    /// Set up the simulation
-    fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error>;
-
     /// Set up a species concentration grid
     fn make_species(&self, shape: [usize; 2]) -> Result<Species<Self::Concentration>, Self::Error>;
+}
+
+/// Commonalities between all ways to set up a simulation
+pub trait SimulateCreate : SimulateBase {
+    /// Set up the simulation
+    fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error>;
 }
 
 /// No CLI parameters
@@ -38,7 +44,7 @@ pub trait SimulateBase: Sized {
 pub struct NoArgs;
 
 /// Simulation compute backend interface expected by the binaries
-pub trait Simulate: SimulateBase {
+pub trait Simulate: SimulateBase + SimulateCreate {
     /// Perform `steps` simulation time steps on the specified grid
     ///
     /// At the end of the simulation, the input concentrations of `species` will
@@ -58,7 +64,7 @@ pub trait Simulate: SimulateBase {
 /// This is good enough for single- and multi-core CPU computations, but GPU
 /// and distributed computations may benefit from the batching of simulation
 /// time steps that is enabled by direct implementation of the `Simulate` trait.
-pub trait SimulateStep: SimulateBase {
+pub trait SimulateStep: SimulateBase + SimulateCreate {
     /// Perform a single simulation time step
     ///
     /// At the end of the simulation, the output concentrations of `species`
@@ -90,8 +96,8 @@ impl<T: SimulateStep> Simulate for T {
 /// slice the original step computations into smaller sub-computations for
 /// cache locality and parallelization purposes.
 ///
-/// If you implement this, then Simulate will be implemented automatically
-pub trait SimulateCpu: Simulate {
+/// If you implement this, then `Simulate` will be implemented automatically
+pub trait SimulateCpu: SimulateBase + SimulateCreate {
     /// Concentration values at a point on the simulation's grid
     ///
     /// Can be a single value or some SIMD type containing multiple values

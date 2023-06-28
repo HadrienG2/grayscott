@@ -8,7 +8,7 @@
 //! vectorize those anymore.
 
 use cfg_if::cfg_if;
-use compute::{CpuGrid, NoArgs, SimulateBase, SimulateCpu};
+use compute::{CpuGrid, NoArgs, SimulateBase, SimulateCpu, SimulateCreate};
 use data::{
     concentration::simd::SIMDConcentration,
     parameters::{stencil_offset, Parameters},
@@ -34,12 +34,14 @@ impl SimulateBase for Simulation {
 
     type Error = Infallible;
 
-    fn new(params: Parameters, _args: NoArgs) -> Result<Self, Infallible> {
-        Ok(Self { params })
-    }
-
     fn make_species(&self, shape: [usize; 2]) -> Result<Species, Infallible> {
         Species::new((), shape)
+    }
+}
+//
+impl SimulateCreate for Simulation {
+    fn new(params: Parameters, _args: NoArgs) -> Result<Self, Infallible> {
+        Ok(Self { params })
     }
 }
 //

@@ -3,7 +3,7 @@
 //! This version follows the logic of the naive_propagation.cpp example from the
 //! C++ tutorial, and is slow for the same reason.
 
-use compute::{NoArgs, SimulateBase, SimulateStep};
+use compute::{NoArgs, SimulateBase, SimulateCreate, SimulateStep};
 use data::{
     array2,
     concentration::ScalarConcentration,
@@ -27,12 +27,14 @@ impl SimulateBase for Simulation {
 
     type Error = Infallible;
 
-    fn new(params: Parameters, _args: NoArgs) -> Result<Self, Infallible> {
-        Ok(Self { params })
-    }
-
     fn make_species(&self, shape: [usize; 2]) -> Result<Species, Infallible> {
         Species::new((), shape)
+    }
+}
+//
+impl SimulateCreate for Simulation {
+    fn new(params: Parameters, _args: NoArgs) -> Result<Self, Infallible> {
+        Ok(Self { params })
     }
 }
 //

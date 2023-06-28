@@ -4,7 +4,7 @@
 //! on domain decomposition and fork-join parallelism.
 
 use clap::Args;
-use compute::{CpuGrid, SimulateBase, SimulateCpu};
+use compute::{CpuGrid, SimulateBase, SimulateCpu, SimulateCreate};
 use compute_block::{BlockWiseSimulation, DefaultBlockSize, SingleCore};
 use data::{
     concentration::{Concentration, Species},
@@ -71,6 +71,15 @@ where
     type Error =
         Error<<Backend as SimulateBase>::Error, <Self::Concentration as Concentration>::Error>;
 
+    fn make_species(&self, shape: [usize; 2]) -> Result<Species<Self::Concentration>, Self::Error> {
+        self.backend.make_species(shape).map_err(Error::Backend)
+    }
+}
+//
+impl<Backend: SimulateCpu + Sync> SimulateCreate for ParallelSimulation<Backend>
+where
+    Backend::Values: Send + Sync,
+{
     fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error> {
         if let Some(num_threads) = args.num_threads {
             ThreadPoolBuilder::new()
@@ -92,10 +101,6 @@ where
             sequential_len_threshold,
             backend: Backend::new(params, args.backend).map_err(Error::Backend)?,
         })
-    }
-
-    fn make_species(&self, shape: [usize; 2]) -> Result<Species<Self::Concentration>, Self::Error> {
-        self.backend.make_species(shape).map_err(Error::Backend)
     }
 }
 //

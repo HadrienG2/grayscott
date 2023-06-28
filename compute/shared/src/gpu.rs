@@ -1,3 +1,7 @@
+//! Common facilities shared by all GPU compute backends
+
+use super::{SimulateBase, SimulateCreate};
+use data::{concentration::Species, parameters::Parameters};
 use directories::ProjectDirs;
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
@@ -30,8 +34,92 @@ use vulkano::{
     },
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
     pipeline::cache::PipelineCache,
+    sync::{FlushError, GpuFuture},
     ExtensionProperties, LoadingError, OomError, VulkanError, VulkanLibrary,
 };
+
+/// Lower-level, asynchronous interface to a GPU compute backend
+///
+/// GPU programming is, by nature, asynchronous. After the CPU has submitted
+/// work to the GPU, it can move on to other things, and only wait for the GPU
+/// when it needs actual results from it. This interface lets you leverage this
+/// property for performance by exposing the asynchronism in the API.
+///
+/// Furthermore, creating multiple Vulkan contexts is expensive, and there is no
+/// easy way to communicate between them, so for visualization purposes, we will
+/// want to use a single context for both compute and visualization. This
+/// requires a little more API surface, which is exposed by this interface.
+///
+/// If you implement this, then SimulateCreate will be implemented for free and
+/// the provided `perform_steps_impl()` method can be used to implement
+/// `Simulate`. We can't provide a blanket `Simulate` impl for both
+/// `SimulateStep` and `SimulateGpu`, and since `SimulateStep` is more newbie
+/// focused it took priority for usage simplicity.
+pub trait SimulateGpu: SimulateBase
+where
+    <Self as SimulateBase>::Error: From<FlushError>,
+{
+    /// Variant of SimulateCreate::new() that also accepts a preliminary Vulkan
+    /// context configuration
+    ///
+    /// Used by clients who intend to reuse the simulation's Vulkan context for
+    /// other purposes, in order to specify their requirements on the Vulkan
+    /// context.
+    ///
+    /// Implementors of SimulateGpu should ensure that their final Vulkan
+    /// configuration accepts a subset of the devices accepted by `config`.
+    fn with_config(
+        params: Parameters,
+        args: Self::CliArgs,
+        config: VulkanConfig,
+    ) -> Result<Self, Self::Error>;
+
+    /// Access the Vulkan context used by the simulation
+    fn context(&self) -> &VulkanContext;
+
+    /// GpuFuture returned by `prepare_steps`
+    type PrepareStepsFuture<After: GpuFuture>: GpuFuture + 'static;
+
+    /// Prepare to perform `steps` simulation steps
+    ///
+    /// This is an asynchronous version of `Simulate::perform_steps`: it
+    /// schedules for some simulation steps to occur after the work designated
+    /// by `after`, but does not submit the work to the GPU.
+    ///
+    /// It is then up to the caller to schedule any extra GPU work they need,
+    /// then synchronize as needed.
+    fn prepare_steps<After: GpuFuture>(
+        &self,
+        after: After,
+        species: &mut Species<Self::Concentration>,
+        steps: usize,
+    ) -> Result<Self::PrepareStepsFuture<After>, Self::Error>;
+
+    /// Use this to implement `Simulate::perform_steps`
+    fn perform_steps_impl(
+        &self,
+        species: &mut Species<Self::Concentration>,
+        steps: usize,
+    ) -> Result<(), Self::Error> {
+        self.prepare_steps(
+            vulkano::sync::now(self.context().device.clone()),
+            species,
+            steps,
+        )?
+        .then_signal_fence_and_flush()?
+        .wait(None)?;
+        Ok(())
+    }
+}
+//
+impl<T: SimulateGpu> SimulateCreate for T
+where
+    <T as SimulateBase>::Error: From<FlushError>,
+{
+    fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error> {
+        Self::with_config(params, args, VulkanConfig::default())
+    }
+}
 
 /// Vulkan compute context
 ///
@@ -145,8 +233,6 @@ pub struct VulkanConfig<
     // TODO: Consider trying these optional device features later:
     //       - compute_full_subgroups => Garantie d'avoir des subgroups complets
     //       - event => Possibilité de synchroniser des commandes par événement
-    //       - inline_uniform_block => Des uniformes plus efficaces (à essayer après
-    //         les specialization constants)
     //       - shader_subgroup_uniform_control_flow => Plus de garanties sur la
     //         reconvergence des subgroups, utile pour les opérations collectives
     //          * khr_shader_subgroup_uniform_control_flow sur les vieux Vulkan
@@ -154,7 +240,6 @@ pub struct VulkanConfig<
     //          * ext_subgroup_size_control sur les vieux Vulkan
     //
     //       ...and these extensions:
-    //       - khr_performance_query => Perf counters, pour en savoir plus
     //       - ext_shader_subgroup_xyz => Opérations subgroups
     pub device_features_extensions: Box<dyn FnMut(&PhysicalDevice) -> (Features, DeviceExtensions)>,
 
@@ -272,7 +357,7 @@ impl
     /// the others to their default values:
     ///
     /// ```
-    /// # use compute_gpu::VulkanConfig;
+    /// # use compute::gpu::VulkanConfig;
     /// let config = VulkanConfig {
     ///     enumerate_portability: true,
     ///     .. VulkanConfig::default()
@@ -300,11 +385,11 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
     /// Set up a Vulkan compute context with this configuration
     ///
     /// ```
-    /// # use compute_gpu::VulkanConfig;
+    /// # use compute::gpu::VulkanConfig;
     /// let context = VulkanConfig::default().setup()?;
-    /// # Ok::<(), compute_gpu::Error>(())
+    /// # Ok::<(), compute::gpu::Error>(())
     /// ```
-    pub fn setup(mut self) -> Result<VulkanContext<MemAlloc, CommAlloc>> {
+    pub fn setup(mut self) -> Result<VulkanContext<MemAlloc, CommAlloc>, Error> {
         let library = load_library()?;
 
         let instance = DebuggedInstance::setup(
@@ -382,8 +467,6 @@ pub enum Error {
     #[error("failed to read or write on-disk pipeline cache")]
     PipelineCacheIo(#[from] std::io::Error),
 }
-//
-pub type Result<T> = std::result::Result<T, Error>;
 
 /// Suggested set of layers to enable
 #[allow(unused_variables)]
@@ -489,7 +572,7 @@ fn default_command_buffer_allocator(device: Arc<Device>) -> StandardCommandBuffe
 }
 
 /// Load the Vulkan library
-fn load_library() -> Result<Arc<VulkanLibrary>> {
+fn load_library() -> Result<Arc<VulkanLibrary>, Error> {
     let library = VulkanLibrary::new()?;
     info!("Loaded Vulkan library");
     trace!("- Supports Vulkan v{}", library.api_version());
@@ -543,7 +626,7 @@ impl DebuggedInstance {
         enabled_layers: Vec<String>,
         enabled_extensions: InstanceExtensions,
         enumerate_portability: bool,
-    ) -> Result<DebuggedInstance> {
+    ) -> Result<DebuggedInstance, Error> {
         let unsupported_extensions = *library.supported_extensions()
             - library
                 .supported_extensions_with_layers(enabled_layers.iter().map(String::as_ref))?;
@@ -642,7 +725,7 @@ fn select_physical_device(
     instance: &DebuggedInstance,
     mut requirements: impl FnMut(&PhysicalDevice) -> bool,
     mut preference: impl FnMut(&PhysicalDevice, &PhysicalDevice) -> Ordering,
-) -> Result<Arc<PhysicalDevice>> {
+) -> Result<Arc<PhysicalDevice>, Error> {
     let selected_device = instance
         .enumerate_physical_devices()?
         .inspect(|device| {
@@ -701,7 +784,7 @@ fn create_logical_device(
     enabled_features: Features,
     enabled_extensions: DeviceExtensions,
     queue_create_infos: Vec<QueueCreateInfo>,
-) -> Result<(Arc<Device>, Box<[Arc<Queue>]>)> {
+) -> Result<(Arc<Device>, Box<[Arc<Queue>]>), Error> {
     let create_info = DeviceCreateInfo {
         enabled_features,
         enabled_extensions,
@@ -724,7 +807,7 @@ pub struct PersistentPipelineCache {
 //
 impl PersistentPipelineCache {
     /// Attempt to load the pipeline cache from disk, otherwise create a new one
-    fn new(dirs: &ProjectDirs, device: Arc<Device>) -> Result<Self> {
+    fn new(dirs: &ProjectDirs, device: Arc<Device>) -> Result<Self, Error> {
         let path = dirs.cache_dir().join("gpu_pipelines.bin");
 
         // TODO: Consider treating some I/O errors as fatal and others as okay
@@ -741,7 +824,7 @@ impl PersistentPipelineCache {
     }
 
     /// Write the pipeline cache back to disk
-    fn write(&self) -> Result<()> {
+    fn write(&self) -> Result<(), Error> {
         let data = self.cache.get_data()?;
 
         let dir = self
@@ -805,7 +888,7 @@ mod tests {
     }
 
     #[test]
-    fn setup_vulkan() -> Result<()> {
+    fn setup_vulkan() -> Result<(), Error> {
         init_logger();
         VulkanConfig {
             enumerate_portability: true,

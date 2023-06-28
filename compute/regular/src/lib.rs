@@ -7,7 +7,7 @@
 //! computation. Better code generation can be obtained by discriminating these
 //! two scenarios.
 
-use compute::{NoArgs, SimulateBase, SimulateStep};
+use compute::{NoArgs, SimulateBase, SimulateCreate, SimulateStep};
 use data::{
     array2,
     concentration::ScalarConcentration,
@@ -25,6 +25,7 @@ pub struct Simulation {
     /// Simulation parameters
     params: Parameters,
 }
+//
 impl SimulateBase for Simulation {
     type CliArgs = NoArgs;
 
@@ -32,12 +33,14 @@ impl SimulateBase for Simulation {
 
     type Error = Infallible;
 
-    fn new(params: Parameters, _args: NoArgs) -> Result<Self, Infallible> {
-        Ok(Self { params })
-    }
-
     fn make_species(&self, shape: [usize; 2]) -> Result<Species, Infallible> {
         Species::new((), shape)
+    }
+}
+//
+impl SimulateCreate for Simulation {
+    fn new(params: Parameters, _args: NoArgs) -> Result<Self, Infallible> {
+        Ok(Self { params })
     }
 }
 //

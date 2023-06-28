@@ -6,8 +6,10 @@
 //! parameters, and also makes it a lot easier to keep CPU and GPU code in sync.
 
 use clap::Args;
-use compute::{Simulate, SimulateBase};
-use compute_gpu::{VulkanConfig, VulkanContext};
+use compute::{
+    gpu::{SimulateGpu, VulkanConfig, VulkanContext},
+    Simulate, SimulateBase,
+};
 use compute_gpu_naive::{Error, Result, Species, IMAGES_SET};
 use data::{
     concentration::gpu::image::{ImageConcentration, ImageContext},
@@ -15,7 +17,7 @@ use data::{
 };
 use std::{num::NonZeroU32, sync::Arc};
 use vulkano::{
-    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage},
+    command_buffer::{AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage},
     device::Queue,
     image::ImageUsage,
     pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
@@ -53,16 +55,36 @@ impl SimulateBase for Simulation {
 
     type Error = Error;
 
-    fn new(params: Parameters, args: CliArgs) -> Result<Self> {
+    fn make_species(&self, shape: [usize; 2]) -> Result<Species> {
+        compute_gpu_naive::check_image_shape_requirements(
+            self.context.device.physical_device(),
+            shape,
+        )?;
+        Ok(Species::new(
+            ImageContext::new(
+                self.context.memory_allocator.clone(),
+                self.context.command_allocator.clone(),
+                self.queue().clone(),
+                self.queue().clone(),
+                ImageUsage::SAMPLED | ImageUsage::STORAGE,
+            )?,
+            shape,
+        )?)
+    }
+}
+//
+impl SimulateGpu for Simulation {
+    fn with_config(params: Parameters, args: CliArgs, mut config: VulkanConfig) -> Result<Self> {
         // Pick work-group size
         let work_group_size = [args.work_group_cols.into(), args.work_group_rows.into(), 1];
 
         // Set up Vulkan
         let context = VulkanConfig {
             other_device_requirements: Box::new(move |device| {
-                compute_gpu_naive::image_device_requirements(device, work_group_size)
+                (config.other_device_requirements)(device)
+                    && compute_gpu_naive::image_device_requirements(device, work_group_size)
             }),
-            ..VulkanConfig::default()
+            ..config
         }
         .setup()?;
 
@@ -119,26 +141,18 @@ impl SimulateBase for Simulation {
         })
     }
 
-    fn make_species(&self, shape: [usize; 2]) -> Result<Species> {
-        compute_gpu_naive::check_image_shape_requirements(
-            self.context.device.physical_device(),
-            shape,
-        )?;
-        Ok(Species::new(
-            ImageContext::new(
-                self.context.memory_allocator.clone(),
-                self.context.command_allocator.clone(),
-                self.queue().clone(),
-                self.queue().clone(),
-                ImageUsage::SAMPLED | ImageUsage::STORAGE,
-            )?,
-            shape,
-        )?)
+    fn context(&self) -> &VulkanContext {
+        &self.context
     }
-}
-//
-impl Simulate for Simulation {
-    fn perform_steps(&self, species: &mut Species, steps: usize) -> Result<()> {
+
+    type PrepareStepsFuture<After: GpuFuture> = CommandBufferExecFuture<After>;
+
+    fn prepare_steps<After: GpuFuture>(
+        &self,
+        after: After,
+        species: &mut Species,
+        steps: usize,
+    ) -> Result<CommandBufferExecFuture<After>> {
         // Prepare to record GPU commands
         let mut builder = AutoCommandBufferBuilder::primary(
             &self.context.command_allocator,
@@ -174,11 +188,13 @@ impl Simulate for Simulation {
 
         // Synchronously execute the simulation steps
         let commands = builder.build()?;
-        vulkano::sync::now(self.context.device.clone())
-            .then_execute(self.queue().clone(), commands)?
-            .then_signal_fence_and_flush()?
-            .wait(None)?;
-        Ok(())
+        Ok(after.then_execute(self.queue().clone(), commands)?)
+    }
+}
+//
+impl Simulate for Simulation {
+    fn perform_steps(&self, species: &mut Species, steps: usize) -> Result<()> {
+        self.perform_steps_impl(species, steps)
     }
 }
 //
