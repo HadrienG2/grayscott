@@ -17,7 +17,7 @@ compute_gpu_specialized = ["dep:compute_gpu_specialized", "async-gpu"]
 cfg-if.workspace = true
 clap.workspace = true
 compute.workspace = true
-data.workspace = true
+data = { workspace = true, features = ["hdf5"] }
 indicatif.workspace = true
 log.workspace = true
 syslog.workspace = true

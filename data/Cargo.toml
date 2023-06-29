@@ -12,8 +12,10 @@ slipstream = ["simd", "dep:slipstream"]
 
 [dependencies]
 cfg-if.workspace = true
-hdf5.workspace = true
 ndarray.workspace = true
+
+# HDF5 storage
+hdf5 = { workspace = true, optional = true }
 
 # SIMD backends
 safe_arch = { workspace = true, optional = true }

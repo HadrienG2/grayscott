@@ -1,6 +1,7 @@
 //! Data format used by the Gray-Scott reaction simulation
 
 pub mod concentration;
+#[cfg(feature = "hdf5")]
 pub mod hdf5;
 pub mod parameters;
 
@@ -16,6 +17,7 @@ pub fn array2<T>(f: impl FnMut(usize) -> T) -> [T; 2] {
 }
 
 /// Equivalent of the unstable `<[T; N]>::each_mut()` function
+#[allow(unused)]
 #[inline(always)]
 fn array_each_mut<T, const N: usize>(a: &mut [T; N]) -> [&mut T; N] {
     let ptr = a.as_mut_ptr();
