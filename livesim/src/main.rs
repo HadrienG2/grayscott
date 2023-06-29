@@ -53,7 +53,7 @@ fn main() {
 
         // TODO: Add rendering
 
-        // TODO: Instead of making nbextrastep a tunable of this version,
+        // TODO: Instead of making nbextrastep a tunable of this version too,
         //       consider making it simulate-specific, and rather starting at 1
         //       step/frame, then monitoring the VSync'd framerate and
         //       autotuning the number of simulation steps to fit a frame nicely
