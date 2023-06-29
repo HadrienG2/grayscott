@@ -1,0 +1,44 @@
+[package]
+name = "livesim"
+version.workspace = true
+edition.workspace = true
+
+[features]
+# Compute backends
+#
+# You must enable at least one of these. If you enable several of them, we'll
+# use the best backend among those enabled.
+compute_autovec = ["compute_selector/compute_autovec"]
+compute_block = ["compute_selector/compute_block"]
+compute_gpu_naive = ["compute_selector/compute_gpu_naive"]
+compute_gpu_specialized = ["compute_selector/compute_gpu_specialized"]
+compute_manualvec = ["compute_selector/compute_manualvec"]
+compute_naive = ["compute_selector/compute_naive"]
+compute_parallel = ["compute_selector/compute_parallel"]
+compute_regular = ["compute_selector/compute_regular"]
+
+# Annotate GPU-side objects with a useful name for debuggers, profilers...
+# Requires the VK_EXT_debug_utils extension, will cause a little overhead
+gpu-debug-utils = ["compute/gpu-debug-utils"]
+
+# TODO: Add a feature to enable context and data sharing between the
+#       visualization and GPU compute backend + avoid unnecessary copies.
+#       Call that "gpu", make it a dep of compute_gpu_xyz features above.
+
+[dependencies]
+clap.workspace = true
+compute.workspace = true
+compute_selector.workspace = true
+data.workspace = true
+env_logger.workspace = true
+log.workspace = true
+ui.workspace = true
+
+[dev-dependencies]
+compute_selector = { workspace = true, features = ["compute_naive"] }
+
+# Criterion workaround for lack of stable benchmark harness
+[[bin]]
+name = "livesim"
+path = "src/main.rs"
+bench = false

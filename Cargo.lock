@@ -367,6 +367,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "compute_selector"
+version = "0.1.0"
+dependencies = [
+ "cfg-if",
+ "compute",
+ "compute_autovec",
+ "compute_block",
+ "compute_gpu_naive",
+ "compute_gpu_specialized",
+ "compute_manualvec",
+ "compute_naive",
+ "compute_parallel",
+ "compute_regular",
+ "data",
+]
+
+[[package]]
 name = "console"
 version = "0.15.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -558,13 +575,13 @@ name = "data-to-pics"
 version = "0.1.0"
 dependencies = [
  "clap",
- "colorous",
  "crossbeam-channel",
  "data",
  "image",
  "indicatif",
  "ndarray",
  "rayon",
+ "ui",
 ]
 
 [[package]]
@@ -958,6 +975,19 @@ name = "linux-raw-sys"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef53942eb7bf7ff43a617b3e2c1c4a5ecf5944a7c1bc12d7ee39bbb15e5c1519"
+
+[[package]]
+name = "livesim"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "compute",
+ "compute_selector",
+ "data",
+ "env_logger",
+ "log",
+ "ui",
+]
 
 [[package]]
 name = "lock_api"
@@ -1479,21 +1509,14 @@ checksum = "238abfbb77c1915110ad968465608b68e869e0772622c9656714e73e5a1a522f"
 name = "simulate"
 version = "0.1.0"
 dependencies = [
- "cfg-if",
  "clap",
  "compute",
- "compute_autovec",
- "compute_block",
- "compute_gpu_naive",
- "compute_gpu_specialized",
- "compute_manualvec",
- "compute_naive",
- "compute_parallel",
- "compute_regular",
+ "compute_selector",
  "data",
  "indicatif",
  "log",
  "syslog",
+ "ui",
 ]
 
 [[package]]
@@ -1645,6 +1668,16 @@ dependencies = [
  "indexmap",
  "toml_datetime",
  "winnow",
+]
+
+[[package]]
+name = "ui"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "colorous",
+ "compute",
+ "data",
 ]
 
 [[package]]
