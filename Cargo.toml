@@ -87,8 +87,9 @@ syslog = "6.1"
 thiserror = "1.0"
 
 # Interface to the Vulkan GPU library
-vulkano = "0.33"
-vulkano-shaders = "0.33"
+# TODO: Go back to upstream once fix is merged
+vulkano = { git = "https://github.com/HadrienG2/vulkano.git", branch = "fix-debug-utils-name-uaf-v0.33" }
+vulkano-shaders = { git = "https://github.com/HadrienG2/vulkano.git", branch = "fix-debug-utils-name-uaf-v0.33" }
 
 # Internal to this project
 compute.path = "compute/shared"

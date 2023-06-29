@@ -4,11 +4,22 @@ version.workspace = true
 edition.workspace = true
 
 [features]
+# GPU storage backend
 gpu = ["self_cell", "thiserror", "vulkano"]
-gpu-parameters = ["bytemuck", "crevice"]
+
+# Annotate GPU-side objects with a useful name for debuggers, profilers...
+# Requires the VK_EXT_debug_utils extension, will cause a little overhead
+gpu-debug-utils = ["gpu"]
+
+# Make it possible to upload simulation parameters to a GPU buffer
+gpu-parameters = ["bytemuck", "crevice", "gpu"]
+
+# SIMD storage backends
 safe_arch = ["dep:safe_arch", "simd"]
-simd = []
 slipstream = ["simd", "dep:slipstream"]
+
+# Commonalities between SIMD backends (automatically enabled when needed)
+simd = []
 
 [dependencies]
 cfg-if.workspace = true
@@ -26,7 +37,7 @@ self_cell = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 vulkano = { workspace = true, optional = true }
 
-# Prerequisites to treat parameters as a GPU struct
+# GPU parameter upload dependencies
 bytemuck = { workspace = true, optional = true }
 crevice = { workspace = true, optional = true }
 

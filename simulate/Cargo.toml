@@ -4,14 +4,23 @@ version.workspace = true
 edition.workspace = true
 
 [features]
+# Annotate GPU-side objects with a useful name for debuggers, profilers...
+# Requires the VK_EXT_debug_utils extension, will cause a little overhead
+gpu-debug-utils = ["compute/gpu-debug-utils"]
+
+# See also the optional compute backends below
+#
+# You must enable at least one of these, and it will enable async-gpu as
+# appropriate via the following directives:
+compute_gpu_naive = ["dep:compute_gpu_naive", "async-gpu"]
+compute_gpu_specialized = ["dep:compute_gpu_specialized", "async-gpu"]
+
 # Leverage the GPU's asynchronous scheduling capabilities
 #
 # This feature can only be used with one of the _gpu backends, and use of these
-# backends enable it automatically. Once Rust gets specialization, we'll use it
-# as a cleaner alternative to this cargo features trick.
+# backends enable it automatically. Once Rust gets specialization, we'll use
+# that as a cleaner alternative to this cargo features trick.
 async-gpu = []
-compute_gpu_naive = ["dep:compute_gpu_naive", "async-gpu"]
-compute_gpu_specialized = ["dep:compute_gpu_specialized", "async-gpu"]
 
 [dependencies]
 cfg-if.workspace = true

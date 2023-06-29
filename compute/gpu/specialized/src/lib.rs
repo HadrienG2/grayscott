@@ -132,8 +132,9 @@ impl SimulateGpu for Simulation {
                 constant_1: work_group_size[1],
             },
             Some(context.pipeline_cache.clone()),
-            compute_gpu_naive::sampler_setup_callback(context.device.clone())?,
+            compute_gpu_naive::sampler_setup_callback(&context)?,
         )?;
+        context.set_debug_utils_object_name(&pipeline, || "Simulation stepper".into())?;
 
         Ok(Self {
             context,
@@ -189,6 +190,8 @@ impl SimulateGpu for Simulation {
 
         // Synchronously execute the simulation steps
         let commands = builder.build()?;
+        self.context
+            .set_debug_utils_object_name(&commands, || "Compute simulation steps".into())?;
         Ok(after.then_execute(self.queue().clone(), commands)?)
     }
 }

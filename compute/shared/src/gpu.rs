@@ -6,6 +6,7 @@ use directories::ProjectDirs;
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
 use std::{
+    borrow::Cow,
     cmp::Ordering,
     fs::File,
     io::{Read, Write},
@@ -22,8 +23,8 @@ use vulkano::{
     descriptor_set::allocator::{DescriptorSetAllocator, StandardDescriptorSetAllocator},
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
-        Device, DeviceCreateInfo, DeviceCreationError, DeviceExtensions, Features, Queue,
-        QueueCreateInfo, QueueFamilyProperties, QueueFlags,
+        Device, DeviceCreateInfo, DeviceCreationError, DeviceExtensions, DeviceOwned, Features,
+        Queue, QueueCreateInfo, QueueFamilyProperties, QueueFlags,
     },
     instance::{
         debug::{
@@ -35,7 +36,7 @@ use vulkano::{
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
     pipeline::cache::PipelineCache,
     sync::{future::NowFuture, FlushError, GpuFuture},
-    ExtensionProperties, LoadingError, OomError, VulkanError, VulkanLibrary,
+    ExtensionProperties, LoadingError, OomError, VulkanError, VulkanLibrary, VulkanObject,
 };
 
 /// Lower-level, asynchronous interface to a GPU compute backend
@@ -162,6 +163,27 @@ pub struct VulkanContext<
     /// Pipeline cache (used for e.g. compiled shader caching)
     pub pipeline_cache: PersistentPipelineCache,
 }
+//
+impl<MemAlloc, CommAlloc, DescAlloc> VulkanContext<MemAlloc, CommAlloc, DescAlloc>
+where
+    MemAlloc: MemoryAllocator,
+    CommAlloc: CommandBufferAllocator,
+    DescAlloc: DescriptorSetAllocator,
+{
+    /// Give a Vulkan entity a name, if gpu_debug_utils is enabled
+    pub fn set_debug_utils_object_name<Object: VulkanObject + DeviceOwned>(
+        &self,
+        object: &Object,
+        make_name: impl FnOnce() -> Cow<'static, str>,
+    ) -> Result<(), Error> {
+        if cfg!(feature = "gpu-debug-utils") {
+            let name = make_name();
+            self.device
+                .set_debug_utils_object_name(object, Some(&name))?;
+        }
+        Ok(())
+    }
+}
 
 /// Vulkan compute context configuration
 ///
@@ -201,6 +223,10 @@ pub struct VulkanConfig<
     /// enable khr_get_physical_device_properties2 on older Vulkan versions,
     /// which is a prerequisite for the device robustness features that we
     /// enable by default.
+    ///
+    /// If the gpu-debug-utils feature is enabled, then we force the debug_utils
+    /// extension to be enabled, no matter if your configuration says otherwise,
+    /// as it is required functionality for naming GPU objects.
     pub instance_extensions: Box<dyn FnOnce(&VulkanLibrary) -> InstanceExtensions>,
 
     /// Truth that Vulkan Portability devices should be enumerated
@@ -314,12 +340,15 @@ pub struct VulkanConfig<
     /// parallel with either. In Vulkan, this is expressed through the notion
     /// of queue families, from which concrete command queues are constructed
     ///
+    /// This lets you decide which queues you want to allocate, and how you want
+    /// to name them when the gpu-debug-utils features is enabled.
+    ///
     /// By default, we only allocate a single queue, suitable for compute (and
     /// thus data transfers). We try to pick the device's main queue family for
     /// this purpose, at it may be the most performant in single-queue use
     /// cases. If you want to experiment with multi-queue workflows, this is
     /// the tuning knob that you want.
-    pub queues: Box<dyn FnOnce(&PhysicalDevice) -> Vec<QueueCreateInfo>>,
+    pub queues: Box<dyn FnOnce(&PhysicalDevice) -> (Vec<QueueCreateInfo>, Vec<Cow<'static, str>>)>,
 
     /// Set up a memory allocator
     ///
@@ -376,7 +405,7 @@ impl
             device_features_extensions: Box::new(default_features_extensions),
             other_device_requirements: Box::new(default_other_device_requirements),
             device_preference: Box::new(default_device_preference),
-            queues: Box::new(|device| vec![default_queue(device)]),
+            queues: Box::new(|device| (vec![default_queue(device)], vec!["Main queue".into()])),
             memory_allocator: Box::new(default_memory_allocator),
             command_allocator: Box::new(default_command_buffer_allocator),
             descriptor_allocator: Box::new(StandardDescriptorSetAllocator::new),
@@ -397,10 +426,14 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
     pub fn setup(mut self) -> Result<VulkanContext<MemAlloc, CommAlloc>, Error> {
         let library = load_library()?;
 
+        let mut instance_extensions = (self.instance_extensions)(&library);
+        if cfg!(feature = "gpu-debug-utils") {
+            instance_extensions.ext_debug_utils = true;
+        }
         let instance = DebuggedInstance::setup(
             library.clone(),
             (self.layers)(&library),
-            (self.instance_extensions)(&library),
+            instance_extensions,
             self.enumerate_portability,
         )?;
 
@@ -416,12 +449,20 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
         )?;
 
         let (features, extensions) = (self.device_features_extensions)(&physical_device);
-        let (device, queues) = create_logical_device(
-            physical_device.clone(),
-            features,
-            extensions,
-            (self.queues)(&physical_device),
-        )?;
+        let (queues_info, queue_names) = (self.queues)(&physical_device);
+        let (device, queues) =
+            create_logical_device(physical_device.clone(), features, extensions, queues_info)?;
+
+        assert_eq!(
+            queues.len(),
+            queue_names.len(),
+            "Number of queue names doesn't match number of queues"
+        );
+        if cfg!(feature = "gpu-debug-utils") {
+            for (queue, name) in queues.iter().zip(queue_names.into_iter()) {
+                device.set_debug_utils_object_name(queue, Some(&name))?;
+            }
+        }
 
         let memory_allocator = Arc::new((self.memory_allocator)(device.clone()));
         let command_allocator = Arc::new((self.command_allocator)(device.clone()));

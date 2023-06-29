@@ -1683,8 +1683,7 @@ dependencies = [
 [[package]]
 name = "vulkano"
 version = "0.33.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e1f15eeb9d93a05eb3c237332a10806eac1eb82444e54485bfcc1859c483c23"
+source = "git+https://github.com/HadrienG2/vulkano.git?branch=fix-debug-utils-name-uaf-v0.33#bfa8852682ba443eb0190cef4b87c9b8fc1c703d"
 dependencies = [
  "ahash",
  "ash",
@@ -1712,8 +1711,7 @@ dependencies = [
 [[package]]
 name = "vulkano-macros"
 version = "0.33.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "895b8a2cac1e7650d2d0552f2392da0970a358515ac11a34adaf19bfdc771b98"
+source = "git+https://github.com/HadrienG2/vulkano.git?branch=fix-debug-utils-name-uaf-v0.33#bfa8852682ba443eb0190cef4b87c9b8fc1c703d"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -1724,8 +1722,7 @@ dependencies = [
 [[package]]
 name = "vulkano-shaders"
 version = "0.33.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f8cf18e9becbc6d39f1c39e26bcf69546c93989553eb5748cd734a8a697a6e5"
+source = "git+https://github.com/HadrienG2/vulkano.git?branch=fix-debug-utils-name-uaf-v0.33#bfa8852682ba443eb0190cef4b87c9b8fc1c703d"
 dependencies = [
  "ahash",
  "heck",

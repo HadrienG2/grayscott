@@ -31,7 +31,7 @@ use vulkano::{
         AllocationCreateInfo, MemoryAllocatePreference, MemoryUsage, StandardMemoryAllocator,
     },
     sync::{future::NowFuture, FlushError, GpuFuture, Sharing},
-    DeviceSize,
+    DeviceSize, OomError,
 };
 
 /// Image-based Concentration implementation
@@ -210,6 +210,13 @@ impl ImageConcentration {
             },
             num_texels.try_into().unwrap(),
         )?;
+
+        if cfg!(feature = "gpu-debug-utils") {
+            let device = context.download_queue.device();
+            device
+                .set_debug_utils_object_name(gpu_image.inner().image, Some("GPU concentration"))?;
+            device.set_debug_utils_object_name(cpu_buffer.buffer(), Some("CPU concentration"))?;
+        }
 
         Ok(Self {
             gpu_image,
@@ -433,6 +440,12 @@ impl ImageContext {
                 builder.copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(src, dst))?;
             }
             let commands = builder.build()?;
+
+            if cfg!(feature = "gpu-debug-utils") {
+                let device = self.download_queue.device();
+                device.set_debug_utils_object_name(&commands, Some("Bulk concentration upload"))?;
+            }
+
             vulkano::sync::now(self.upload_queue.device().clone())
                 .then_execute(self.upload_queue.clone(), commands)?
                 .then_signal_fence_and_flush()?
@@ -474,6 +487,11 @@ impl ImageContext {
         builder.copy_image_to_buffer(CopyImageToBufferInfo::image_buffer(gpu, cpu))?;
         let commands = builder.build()?;
 
+        if cfg!(feature = "gpu-debug-utils") {
+            let device = self.download_queue.device();
+            device.set_debug_utils_object_name(&commands, Some("Single concentration download"))?;
+        }
+
         after
             .then_execute(self.download_queue.clone(), commands)?
             .then_signal_fence_and_flush()?
@@ -506,6 +524,9 @@ pub enum Error {
 
     #[error("failed to create or manipulate an image")]
     Image(#[from] ImageError),
+
+    #[error("ran out of memory")]
+    OutOfMemory(#[from] OomError),
 }
 //
 pub type Result<T> = std::result::Result<T, Error>;

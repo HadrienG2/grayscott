@@ -4,9 +4,18 @@ version.workspace = true
 edition.workspace = true
 
 [features]
+# CPU compute backend commonalities
 cpu = []
+
+# Benchmarking using criterion
 criterion = ["dep:criterion", "env_logger"]
+
+# GPU compute backend commonalities
 gpu = ["data/gpu", "directories", "log", "thiserror", "vulkano"]
+
+# Annotate GPU-side objects with a useful name for debuggers, profilers...
+# Requires the VK_EXT_debug_utils extension, will cause a little overhead
+gpu-debug-utils = ["data/gpu-debug-utils", "gpu"]
 
 [dependencies]
 clap.workspace = true

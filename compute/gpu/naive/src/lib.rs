@@ -29,7 +29,7 @@ use vulkano::{
     },
     device::{
         physical::{PhysicalDevice, PhysicalDeviceError},
-        Device, Queue,
+        Queue,
     },
     format::FormatFeatures,
     image::{
@@ -136,8 +136,9 @@ impl SimulateGpu for Simulation {
             shader.entry_point("main").expect("Should be present"),
             &(),
             Some(context.pipeline_cache.clone()),
-            sampler_setup_callback(context.device.clone())?,
+            sampler_setup_callback(&context)?,
         )?;
+        context.set_debug_utils_object_name(&pipeline, || "Simulation stepper".into())?;
 
         // Move parameters to GPU-accessible memory
         let params = Buffer::from_data(
@@ -152,6 +153,7 @@ impl SimulateGpu for Simulation {
             },
             params.as_std140(),
         )?;
+        context.set_debug_utils_object_name(params.buffer(), || "Simulation parameters".into())?;
         let params_layout = pipeline.layout().set_layouts()[PARAMS_SET as usize].clone();
         let params = PersistentDescriptorSet::new(
             &context.descriptor_allocator,
@@ -219,6 +221,8 @@ impl SimulateGpu for Simulation {
 
         // Synchronously execute the simulation steps
         let commands = builder.build()?;
+        self.context
+            .set_debug_utils_object_name(&commands, || "Compute simulation steps".into())?;
         Ok(after.then_execute(self.queue().clone(), commands)?)
     }
 }
@@ -269,10 +273,10 @@ mod shader {
 /// Generate the callback to configure image sampling during GPU compute
 /// pipeline construction
 pub fn sampler_setup_callback(
-    device: Arc<Device>,
+    context: &VulkanContext,
 ) -> Result<impl FnOnce(&mut [DescriptorSetLayoutCreateInfo])> {
     let input_sampler = Sampler::new(
-        device.clone(),
+        context.device.clone(),
         SamplerCreateInfo {
             address_mode: [SamplerAddressMode::ClampToBorder; 3],
             border_color: BorderColor::FloatOpaqueBlack,
@@ -280,6 +284,7 @@ pub fn sampler_setup_callback(
             ..Default::default()
         },
     )?;
+    context.set_debug_utils_object_name(&input_sampler, || "Concentration sampler".into())?;
     Ok(
         move |descriptor_sets: &mut [DescriptorSetLayoutCreateInfo]| {
             fn binding(
