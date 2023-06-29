@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 compute = { workspace = true, features = ["gpu"] }
 crevice.workspace = true
-data = { workspace = true, features = ["gpu"] }
+data = { workspace = true, features = ["crevice", "gpu"] }
 thiserror.workspace = true
 vulkano.workspace = true
 vulkano-shaders.workspace = true
