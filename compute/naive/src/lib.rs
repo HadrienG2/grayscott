@@ -3,7 +3,7 @@
 //! This version follows the logic of the naive_propagation.cpp example from the
 //! C++ tutorial, and is slow for the same reason.
 
-use compute::{NoArgs, SimulateBase, SimulateCreate, SimulateStep};
+use compute::{cpu::SimulateStep, NoArgs, SimulateBase, SimulateCreate};
 use data::{
     array2,
     concentration::ScalarConcentration,

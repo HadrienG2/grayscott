@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-compute.workspace = true
+compute = { workspace = true, features = ["cpu"] }
 data.workspace = true
 ndarray.workspace = true
 

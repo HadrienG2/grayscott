@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [features]
+cpu = []
 criterion = ["dep:criterion", "env_logger"]
 gpu = ["data/gpu", "directories", "log", "thiserror", "vulkano"]
 

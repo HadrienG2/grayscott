@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 cfg-if.workspace = true
-compute.workspace = true
+compute = { workspace = true, features = ["cpu"] }
 data = { workspace = true, features = ["safe_arch"] }
 safe_arch.workspace = true
 

@@ -8,7 +8,10 @@
 //! revolving around picking the right vector width.
 
 use cfg_if::cfg_if;
-use compute::{CpuGrid, NoArgs, SimulateBase, SimulateCpu, SimulateCreate};
+use compute::{
+    cpu::{CpuGrid, SimulateCpu},
+    NoArgs, SimulateBase, SimulateCreate,
+};
 use data::{
     concentration::simd::SIMDConcentration,
     parameters::{stencil_offset, Parameters},
@@ -69,7 +72,7 @@ impl SimulateCpu for Simulation {
         let ones = Values::splat(1.0);
 
         // Iterate over center pixels of the species concentration matrices
-        for (out_u, out_v, win_u, win_v) in compute::fast_grid_iter(grid) {
+        for (out_u, out_v, win_u, win_v) in compute::cpu::fast_grid_iter(grid) {
             // Access center value of u
             let u = win_u[stencil_offset];
             let v = win_v[stencil_offset];

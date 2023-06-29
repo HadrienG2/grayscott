@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 clap = { workspace = true, features = ["env"] }
-compute.workspace = true
+compute = { workspace = true, features = ["cpu"] }
 compute_autovec.workspace = true
 data.workspace = true
 hwlocality.workspace = true

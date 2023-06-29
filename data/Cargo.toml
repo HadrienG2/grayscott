@@ -5,6 +5,9 @@ edition.workspace = true
 
 [features]
 gpu = ["bytemuck", "crevice", "self_cell", "thiserror", "vulkano"]
+safe_arch = ["dep:safe_arch", "simd"]
+simd = []
+slipstream = ["simd", "dep:slipstream"]
 
 [dependencies]
 cfg-if.workspace = true

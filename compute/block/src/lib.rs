@@ -4,7 +4,10 @@
 //! to improve cache locality.
 
 use clap::Args;
-use compute::{CpuGrid, SimulateBase, SimulateCpu, SimulateCreate};
+use compute::{
+    cpu::{CpuGrid, SimulateCpu},
+    SimulateBase, SimulateCreate,
+};
 use data::{
     concentration::{Concentration, Species},
     parameters::Parameters,

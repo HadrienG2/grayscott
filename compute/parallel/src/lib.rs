@@ -4,7 +4,10 @@
 //! on domain decomposition and fork-join parallelism.
 
 use clap::Args;
-use compute::{CpuGrid, SimulateBase, SimulateCpu, SimulateCreate};
+use compute::{
+    cpu::{CpuGrid, SimulateCpu},
+    SimulateBase, SimulateCreate,
+};
 use compute_block::{BlockWiseSimulation, DefaultBlockSize, SingleCore};
 use data::{
     concentration::{Concentration, Species},

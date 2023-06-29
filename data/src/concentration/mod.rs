@@ -2,6 +2,7 @@
 
 #[cfg(feature = "gpu")]
 pub mod gpu;
+#[cfg(feature = "simd")]
 pub mod simd;
 
 use crate::array2;

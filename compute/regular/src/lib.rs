@@ -7,7 +7,7 @@
 //! computation. Better code generation can be obtained by discriminating these
 //! two scenarios.
 
-use compute::{NoArgs, SimulateBase, SimulateCreate, SimulateStep};
+use compute::{cpu::SimulateStep, NoArgs, SimulateBase, SimulateCreate};
 use data::{
     array2,
     concentration::ScalarConcentration,
@@ -73,7 +73,7 @@ impl Simulation {
         // Iterate over center pixels of the species concentration matrices
         // and corresponding windows of input data
         let center_slice = s![center_range[0].clone(), center_range[1].clone()];
-        for (out_u, out_v, win_u, win_v) in compute::fast_grid_iter((
+        for (out_u, out_v, win_u, win_v) in compute::cpu::fast_grid_iter((
             [in_u.view(), in_v.view()],
             [out_u.slice_mut(center_slice), out_v.slice_mut(center_slice)],
         )) {

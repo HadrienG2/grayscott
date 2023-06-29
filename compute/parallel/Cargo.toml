@@ -5,8 +5,7 @@ edition.workspace = true
 
 [dependencies]
 clap = { workspace = true, features = ["env"] }
-compute.workspace = true
-# TODO: Remove direct dependency on autovec once blocking fully works
+compute = { workspace = true, features = ["cpu"] }
 compute_autovec.workspace = true
 compute_block.workspace = true
 data = { workspace = true, features = ["slipstream"] }
