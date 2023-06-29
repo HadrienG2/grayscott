@@ -89,7 +89,8 @@ macro_rules! cpu_benchmark {
     ($backend:ident) => {
         $crate::criterion_benchmark!(
             $backend,
-            sync_workload => ""
+            compute_workload => "compute",
+            full_sync_workload => "full"
         );
     };
 }
@@ -101,8 +102,9 @@ macro_rules! gpu_benchmark {
     ($backend:ident) => {
         $crate::criterion_benchmark!(
             $backend,
-            sync_workload => "sync",
-            gpu_future_workload => "future"
+            compute_workload => "compute",
+            full_sync_workload => "full_sync",
+            full_gpu_future_workload => "full_future"
         );
     };
 }

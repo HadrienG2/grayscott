@@ -66,13 +66,23 @@ pub fn criterion_benchmark<Simulation: Simulate>(
                     b.iter(|| workload(&sim, &mut species, num_steps as usize));
                 },
             );
+            black_box(species);
         }
     }
     group.finish();
 }
 
-// Workload for synchronous simulation
-pub fn sync_workload<Simulation: Simulate>(
+// Workload for performing a few simulation steps, without building the result
+pub fn compute_workload<Simulation: Simulate>(
+    sim: &Simulation,
+    species: &mut Species<Simulation::Concentration>,
+    num_steps: usize,
+) {
+    sim.perform_steps(species, num_steps as usize).unwrap();
+}
+
+// Full simulation workload, each step being synchronous
+pub fn full_sync_workload<Simulation: Simulate>(
     sim: &Simulation,
     species: &mut Species<Simulation::Concentration>,
     num_steps: usize,
@@ -81,10 +91,10 @@ pub fn sync_workload<Simulation: Simulate>(
     black_box(species.make_result_view().unwrap());
 }
 
-// Workload for asynchronous GPU simulation
+// Full GPU simulation workload, as a single synchronous transaction
 // TODO: Expand beyond ImageConcentration once GpuConcentration is a thing
 #[cfg(feature = "gpu")]
-pub fn gpu_future_workload<
+pub fn full_gpu_future_workload<
     Simulation: crate::gpu::SimulateGpu<Concentration = ImageConcentration>,
 >(
     sim: &Simulation,
