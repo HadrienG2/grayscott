@@ -126,7 +126,7 @@ impl DefaultBlockSize for SingleCore {
 /// Things that can go wrong when performing block-wise simulation
 #[derive(Clone, Debug, Error)]
 pub enum Error<BackendError: std::error::Error, ConcentrationError: std::error::Error> {
-    /// Error from the backend
+    /// Error from the underlying compute backend
     #[error(transparent)]
     Backend(BackendError),
 

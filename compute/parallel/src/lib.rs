@@ -88,7 +88,7 @@ where
             ThreadPoolBuilder::new()
                 .num_threads(num_threads.into())
                 .build_global()
-                .map_err(Error::Rayon)?;
+                .map_err(Error::ThreadPool)?;
         }
 
         let seq_block_size = args
@@ -151,7 +151,7 @@ impl DefaultBlockSize for MultiCore {
 /// Things that can go wrong when performing parallel simulation
 #[derive(Debug, Error)]
 pub enum Error<BackendError: std::error::Error, ConcentrationError: std::error::Error> {
-    /// Error from the backend
+    /// Error from the underlying compute backend
     #[error(transparent)]
     Backend(BackendError),
 
@@ -159,9 +159,9 @@ pub enum Error<BackendError: std::error::Error, ConcentrationError: std::error::
     #[error("failed to query hardware topology")]
     Hwloc(RawHwlocError),
 
-    /// Error from rayon (failed to configure thread pool)
+    /// Failed to configure thread pool
     #[error("failed to configure thread pool")]
-    Rayon(ThreadPoolBuildError),
+    ThreadPool(ThreadPoolBuildError),
 
     /// Error from the Concentration implementation
     ///

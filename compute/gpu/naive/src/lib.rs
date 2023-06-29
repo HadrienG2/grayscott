@@ -456,63 +456,48 @@ pub fn check_image_shape_requirements(device: &PhysicalDevice, shape: [usize; 2]
 /// Errors that can occur during this computation
 #[derive(Debug, Error)]
 pub enum Error {
-    /// Errors while initializing the Vulkan API
     #[error("failed to initialize the Vulkan API")]
     Init(#[from] compute::gpu::Error),
 
-    /// Errors while manipulating species concentration images
     #[error("failed to manipulate images")]
     Image(#[from] data::concentration::gpu::image::Error),
 
-    /// Errors while GPU-fying parameters
     #[error("failed to move parameters to GPU-accessible memory")]
     ParamsUpload(#[from] BufferError),
 
-    /// Errors while creating the GPU shader
     #[error("failed to create compute shader")]
     ShaderCreation(#[from] ShaderCreationError),
 
-    /// Errors while creating the compute pipeline
     #[error("failed to create compute pipeline")]
     PipelineCreation(#[from] ComputePipelineCreationError),
 
-    /// Errors while creating samplers
     #[error("failed to create sampler")]
     SamplerCreation(#[from] SamplerCreationError),
 
-    /// Errors while creating image views
     #[error("failed to create image view")]
     ImageViewCreation(#[from] ImageViewCreationError),
 
-    /// Errors while creating descriptor sets
     #[error("failed to create descriptor set")]
     DescriptorSetCreation(#[from] DescriptorSetCreationError),
 
-    /// Errors while starting to record a command buffer
     #[error("failed to start recording a command buffer")]
     CommandBufferBegin(#[from] CommandBufferBeginError),
 
-    /// Errors while recording a compute dispatch command
     #[error("failed to record a compute dispatch")]
     PipelineExecution(#[from] PipelineExecutionError),
 
-    /// Errors while building a command buffer
     #[error("failed to build a command buffer")]
     CommandBufferBuild(#[from] BuildError),
 
-    /// Errors while submitting commands to a queue
     #[error("failed to submit commands to the queue")]
     CommandBufferExec(#[from] CommandBufferExecError),
 
-    /// Errors while flushing commands to the GPU
     #[error("failed to flush the queue to the GPU")]
     Flush(#[from] FlushError),
 
-    /// Shader does not support the requested grid shape
     #[error("device or shader does not support this grid shape")]
     UnsupportedShape,
 
-    /// Failed to interrogate the physical device
     #[error("failed to query physical device")]
     PhysicalDevice(#[from] PhysicalDeviceError),
 }
