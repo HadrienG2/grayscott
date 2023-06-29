@@ -1,6 +1,16 @@
+# Binary artifacts
 /target
+
+# Simulation output
 /pics
 /output.h5
+
+# Perf profiles
 perf.data*
+
+# VKtracer traces
 Gray-Scott.vktracer
 /traces
+
+# GpuVis traces
+trace*.dat
