@@ -336,11 +336,12 @@ pub struct ImageContext {
 //
 impl ImageContext {
     /// Prepare to set up image-based concentration
-    pub fn new(
+    pub fn new<'other_queues>(
         memory_allocator: Arc<MemAlloc>,
         command_allocator: Arc<CommAlloc>,
         upload_queue: Arc<Queue>,
         download_queue: Arc<Queue>,
+        other_queues: impl IntoIterator<Item = &'other_queues Arc<Queue>>,
         client_image_usage: ImageUsage,
     ) -> Result<Self> {
         let queue_family_indices = [
@@ -348,6 +349,11 @@ impl ImageContext {
             download_queue.queue_family_index(),
         ]
         .into_iter()
+        .chain(
+            other_queues
+                .into_iter()
+                .map(|queue| queue.queue_family_index()),
+        )
         .collect();
 
         Ok(Self {
@@ -367,7 +373,7 @@ impl ImageContext {
         &self.memory_allocator
     }
 
-    /// Query which queue family indices images may be used with
+    /// Query which queue family indices images and buffers may be used with
     fn queue_family_indices(&self) -> impl Iterator<Item = u32> + '_ {
         self.queue_family_indices.iter().copied()
     }

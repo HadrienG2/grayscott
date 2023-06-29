@@ -96,6 +96,7 @@ impl SimulateBase for Simulation {
                 self.context.command_allocator.clone(),
                 self.queue().clone(),
                 self.queue().clone(),
+                [],
                 image_usage(),
             )?,
             shape,
