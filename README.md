@@ -81,6 +81,8 @@ In the same spirit as the C++ version, the code is sliced into several crates:
   syntax as the `xyz_gray_scott` binaries from the C++ version, but the
   choice of compute backend is made through Cargo features. For each
   `compute/xyz` backend, there is a matching `compute_xyz` feature.
+- `livesim` is a variation of `simulate` that displays each image to a live
+  window instead of writing images to files, and runs indefinitely.
 - `data-to-pics` is a binary that converts HDF5 output datafiles from `simulate`
   into PNG images, much like the `gray_scott2pic` binary from the C++ version
   except it uses a different color palette.

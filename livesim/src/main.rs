@@ -22,7 +22,8 @@ fn main() {
     let [kill_rate, feed_rate, time_step] = ui::kill_feed_deltat(&args.shared);
 
     // Set up the simulation
-    // TODO: Once ready to share the GPU context, send in our requirements
+    // TODO: Once ready to share the GPU context, send in our requirements to
+    //       GPU backends so their context is right for us!
     let simulation = Simulation::new(
         Parameters {
             kill_rate,
@@ -51,5 +52,12 @@ fn main() {
             .as_scalars();
 
         // TODO: Add rendering
+
+        // TODO: Instead of making nbextrastep a tunable of this version,
+        //       consider making it simulate-specific, and rather starting at 1
+        //       step/frame, then monitoring the VSync'd framerate and
+        //       autotuning the number of simulation steps to fit a frame nicely
+        //       with some margin, with 1 step/frame as the minimum for slow
+        //       backends.
     }
 }
