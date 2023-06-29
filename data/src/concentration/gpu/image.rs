@@ -189,14 +189,14 @@ impl ImageConcentration {
             Self::format(),
             image_format_info.usage,
             image_format_info.flags,
-            context.queue_family_indices(),
+            context.gpu_queue_family_indices(),
         )?;
 
         let cpu_buffer = make_buffer(
             context.memory_allocator(),
             BufferCreateInfo {
-                sharing: if context.queue_family_indices().count() > 1 {
-                    Sharing::Concurrent(context.queue_family_indices().collect())
+                sharing: if context.cpu_queue_family_indices().count() > 1 {
+                    Sharing::Concurrent(context.cpu_queue_family_indices().collect())
                 } else {
                     Sharing::Exclusive
                 },
@@ -318,8 +318,11 @@ pub struct ImageContext {
     /// Client-requested image usage
     client_image_usage: ImageUsage,
 
-    /// Queue family indices of the upload and download queues
-    queue_family_indices: HashSet<u32>,
+    /// Queue family indices that CPU-side resources will be used with
+    cpu_queue_family_indices: HashSet<u32>,
+
+    /// Queue family indices that GPU-side resources will be used with
+    gpu_queue_family_indices: HashSet<u32>,
 
     /// Command buffer allocator
     command_allocator: Arc<CommAlloc>,
@@ -341,26 +344,45 @@ impl ImageContext {
         command_allocator: Arc<CommAlloc>,
         upload_queue: Arc<Queue>,
         download_queue: Arc<Queue>,
-        other_queues: impl IntoIterator<Item = &'other_queues Arc<Queue>>,
+        other_queues: impl IntoIterator<Item = &'other_queues Arc<Queue>> + Clone,
         client_image_usage: ImageUsage,
     ) -> Result<Self> {
-        let queue_family_indices = [
+        // Check for configuration consistency
+        assert!(
+            [
+                command_allocator.device().clone(),
+                upload_queue.device().clone(),
+                download_queue.device().clone()
+            ]
+            .into_iter()
+            .chain(other_queues.clone().into_iter().map(|q| q.device().clone()))
+            .all(|other| other == *memory_allocator.device()),
+            "All specified entities should map to the same Vulkan device"
+        );
+
+        // Collect the list of all queue family indices that CPU- and GPU-side
+        // ressources will be used with
+        let cpu_queue_family_indices = [
             upload_queue.queue_family_index(),
             download_queue.queue_family_index(),
         ]
         .into_iter()
-        .chain(
-            other_queues
-                .into_iter()
-                .map(|queue| queue.queue_family_index()),
-        )
-        .collect();
-
+        .collect::<HashSet<_>>();
+        let gpu_queue_family_indices = cpu_queue_family_indices
+            .iter()
+            .copied()
+            .chain(
+                other_queues
+                    .into_iter()
+                    .map(|queue| queue.queue_family_index()),
+            )
+            .collect();
         Ok(Self {
             descriptor_sets: HashMap::new(),
             memory_allocator,
             client_image_usage,
-            queue_family_indices,
+            cpu_queue_family_indices,
+            gpu_queue_family_indices,
             command_allocator,
             pending_uploads: HashMap::new(),
             upload_queue,
@@ -373,9 +395,14 @@ impl ImageContext {
         &self.memory_allocator
     }
 
-    /// Query which queue family indices images and buffers may be used with
-    fn queue_family_indices(&self) -> impl Iterator<Item = u32> + '_ {
-        self.queue_family_indices.iter().copied()
+    /// Query which queue family indices CPU-side resources may be used with
+    fn cpu_queue_family_indices(&self) -> impl Iterator<Item = u32> + '_ {
+        self.cpu_queue_family_indices.iter().copied()
+    }
+
+    /// Query which queue family indices GPU-side resources may be used with
+    fn gpu_queue_family_indices(&self) -> impl Iterator<Item = u32> + '_ {
+        self.gpu_queue_family_indices.iter().copied()
     }
 
     /// Signal that the CPU version of an image has been modified
