@@ -1,0 +1,10 @@
+[package]
+name = "ui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+clap.workspace = true
+colorous.workspace = true
+compute.workspace = true
+data.workspace = true

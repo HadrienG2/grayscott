@@ -4,45 +4,42 @@ version.workspace = true
 edition.workspace = true
 
 [features]
+# Compute backends
+#
+# You must enable at least one of these. If you enable several of them, we'll
+# use the best backend among those enabled.
+compute_autovec = ["compute_selector/compute_autovec"]
+compute_block = ["compute_selector/compute_block"]
+compute_gpu_naive = ["async-gpu", "compute_selector/compute_gpu_naive"]
+compute_gpu_specialized = ["async-gpu", "compute_selector/compute_gpu_specialized"]
+compute_manualvec = ["compute_selector/compute_manualvec"]
+compute_naive = ["compute_selector/compute_naive"]
+compute_parallel = ["compute_selector/compute_parallel"]
+compute_regular = ["compute_selector/compute_regular"]
+
 # Annotate GPU-side objects with a useful name for debuggers, profilers...
 # Requires the VK_EXT_debug_utils extension, will cause a little overhead
 gpu-debug-utils = ["compute/gpu-debug-utils"]
 
-# See also the optional compute backends below
-#
-# You must enable at least one of these, and it will enable async-gpu as
-# appropriate via the following directives:
-compute_gpu_naive = ["dep:compute_gpu_naive", "async-gpu"]
-compute_gpu_specialized = ["dep:compute_gpu_specialized", "async-gpu"]
-
 # Leverage the GPU's asynchronous scheduling capabilities
 #
-# This feature can only be used with one of the _gpu backends, and use of these
+# This feature can only be used with one of the gpu backends, and use of these
 # backends enable it automatically. Once Rust gets specialization, we'll use
-# that as a cleaner alternative to this cargo features trick.
+# that as a cleaner alternative to this dirty cargo features trick.
 async-gpu = []
 
 [dependencies]
-cfg-if.workspace = true
 clap.workspace = true
 compute.workspace = true
+compute_selector.workspace = true
 data = { workspace = true, features = ["hdf5"] }
 indicatif.workspace = true
 log.workspace = true
 syslog.workspace = true
-
-# Compute backends
-compute_autovec = { workspace = true, optional = true }
-compute_block = { workspace = true, optional = true }
-compute_gpu_naive = { workspace = true, optional = true }
-compute_gpu_specialized = { workspace = true, optional = true }
-compute_manualvec = { workspace = true, optional = true }
-compute_naive = { workspace = true, optional = true }
-compute_parallel = { workspace = true, optional = true }
-compute_regular = { workspace = true, optional = true }
+ui.workspace = true
 
 [dev-dependencies]
-compute_naive.workspace = true
+compute_selector = { workspace = true, features = ["compute_naive"] }
 
 # Criterion workaround for lack of stable benchmark harness
 [[bin]]

@@ -1,0 +1,24 @@
+[package]
+name = "compute_selector"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cfg-if.workspace = true
+compute.workspace = true
+compute_autovec = { workspace = true, optional = true }
+compute_block = { workspace = true, optional = true }
+compute_gpu_naive = { workspace = true, optional = true }
+compute_gpu_specialized = { workspace = true, optional = true }
+compute_manualvec = { workspace = true, optional = true }
+compute_naive = { workspace = true, optional = true }
+compute_parallel = { workspace = true, optional = true }
+compute_regular = { workspace = true, optional = true }
+data.workspace = true
+
+[dev-dependencies]
+compute_naive.workspace = true
+
+# Criterion workaround for lack of stable benchmark harness
+[lib]
+bench = false

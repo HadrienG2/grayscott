@@ -1,8 +1,5 @@
 use clap::Parser;
-use data::{
-    hdf5::{Config, Reader},
-    Precision,
-};
+use data::hdf5::{Config, Reader};
 use image::{ImageBuffer, Rgb, RgbImage};
 use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
 use ndarray::Axis;
@@ -67,10 +64,6 @@ fn main() {
         ..Default::default()
     })
     .expect("Failed to open input file");
-
-    // Setup image rendering
-    let gradient = colorous::INFERNO;
-    let norm = 1.0 / 0.6 as Precision;
     let [rows, cols] = reader.image_shape();
 
     // Set up progress reporting
@@ -144,7 +137,7 @@ fn main() {
             )
             .for_each(|(subinput, mut subimage)| {
                 for (value, pixel) in subinput.iter().zip(subimage.pixels_mut()) {
-                    let color = gradient.eval_continuous((norm * value).into());
+                    let color = ui::GRADIENT.eval_continuous((ui::AMPLITUDE_SCALE * value).into());
                     *pixel = Rgb([color.r, color.g, color.b]);
                 }
             });

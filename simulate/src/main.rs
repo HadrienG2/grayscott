@@ -1,51 +1,30 @@
 use clap::Parser;
 #[cfg(feature = "async-gpu")]
 use compute::gpu::SimulateGpu;
-#[allow(unused)]
-use compute::Simulate;
-use compute::{SimulateBase, SimulateCreate};
+use compute::{Simulate, SimulateBase, SimulateCreate};
+use compute_selector::Simulation;
 use data::{
     concentration::{AsScalars, ScalarConcentration},
     hdf5::{self, Writer},
     parameters::Parameters,
-    Precision,
 };
 use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
 use log::LevelFilter;
 use std::{num::NonZeroUsize, path::PathBuf, sync::mpsc, time::Duration};
 use syslog::Facility;
+use ui::SharedArgs;
 
 /// Perform Gray-Scott simulation
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Rate of the process which converts V into P
-    #[arg(short, long)]
-    killrate: Option<Precision>,
-
-    /// Rate of the process which feeds U and drains U, V and P
-    #[arg(short, long)]
-    feedrate: Option<Precision>,
+    /// CLI arguments shared with the "livesim" executable
+    #[command(flatten)]
+    shared: SharedArgs<Simulation>,
 
     /// Number of images to be created
     #[arg(short, long, default_value_t = 1000)]
     nbimage: usize,
-
-    /// Number of steps to be computed between images
-    #[arg(short = 'e', long, default_value_t = NonZeroUsize::new(34).unwrap())]
-    nbextrastep: NonZeroUsize,
-
-    /// Number of rows of the images to be created
-    #[arg(short = 'r', long, default_value_t = 1080)]
-    nbrow: usize,
-
-    /// Number of columns of the images to be created
-    #[arg(short = 'c', long, default_value_t = 1920)]
-    nbcol: usize,
-
-    /// Time interval between two computations
-    #[arg(short = 't', long)]
-    deltat: Option<Precision>,
 
     /// Path to the results output file
     #[arg(short, long)]
@@ -58,68 +37,6 @@ struct Args {
     /// values may be beneficial if the I/O backend works in a batched fashion.
     #[arg(long, default_value_t = NonZeroUsize::new(2).unwrap())]
     output_buffer: NonZeroUsize,
-
-    /// Backend-specific CLI arguments
-    #[command(flatten)]
-    backend: <Simulation as SimulateBase>::CliArgs,
-}
-
-// Use the best compute backend allowed by enabled crate features
-cfg_if::cfg_if! {
-    // TODO: Add more advanced and preferrable implementations above
-    if #[cfg(feature = "compute_gpu_specialized")] {
-        type Simulation = compute_gpu_specialized::Simulation;
-    } else if #[cfg(feature = "compute_gpu_naive")] {
-        type Simulation = compute_gpu_naive::Simulation;
-    } else if #[cfg(feature = "compute_parallel")] {
-        type Simulation = compute_parallel::Simulation;
-    } else if #[cfg(feature = "compute_block")] {
-        type Simulation = compute_block::Simulation;
-    } else if #[cfg(feature = "compute_autovec")] {
-        type Simulation = compute_autovec::Simulation;
-    } else if #[cfg(feature = "compute_manualvec")] {
-        type Simulation = compute_manualvec::Simulation;
-    } else if #[cfg(feature = "compute_regular")] {
-        type Simulation = compute_regular::Simulation;
-    } else if #[cfg(any(feature = "compute_naive", test))] {
-        type Simulation = compute_naive::Simulation;
-    } else {
-        // If no backend was specified, use a backend skeleton that throws a
-        // minimal number of compiler errors.
-        use compute::NoArgs;
-        use data::concentration::Species;
-        use std::convert::Infallible;
-        //
-        struct Simulation;
-        //
-        impl SimulateBase for Simulation {
-            type CliArgs = NoArgs;
-
-            type Concentration = ScalarConcentration;
-
-            type Error = Infallible;
-
-            fn make_species(&self, shape: [usize; 2]) -> Result<Species<ScalarConcentration>, Infallible> {
-                Species::new((), shape)
-            }
-        }
-        //
-        impl SimulateCreate for Simulation {
-            fn new(_params: Parameters, _args: NoArgs) -> Result<Self, Infallible> {
-                std::compile_error!("Please enable at least one compute backend via crate features")
-            }
-        }
-        //
-        impl Simulate for Simulation {
-            fn perform_steps(
-                &self,
-                _species: &mut Species<ScalarConcentration>,
-                _steps: usize
-            ) -> Result<(), Infallible> {
-                Ok(())
-            }
-        }
-    }
 }
 
 fn main() {
@@ -135,13 +52,10 @@ fn main() {
     )
     .expect("Failed to initialize syslog");
 
-    // Parse CLI arguments and handle unconventional defaults
+    // Parse CLI arguments and handle clap-incompatible defaults
     let args = Args::parse();
-    let kill_rate = args.killrate.unwrap_or(Parameters::default().kill_rate);
-    let feed_rate = args.feedrate.unwrap_or(Parameters::default().feed_rate);
-    let time_step = args.deltat.unwrap_or(Parameters::default().time_step);
+    let [kill_rate, feed_rate, time_step] = ui::kill_feed_deltat(&args.shared);
     let file_name = args.output.unwrap_or_else(|| "output.h5".into());
-    let steps_per_image = usize::from(args.nbextrastep);
 
     // Set up the simulation
     let simulation = Simulation::new(
@@ -151,13 +65,13 @@ fn main() {
             time_step,
             ..Default::default()
         },
-        args.backend,
+        args.shared.backend,
     )
     .expect("Failed to create simulation");
 
     // Set up chemical species concentration storage
     let mut species = simulation
-        .make_species([args.nbrow, args.nbcol])
+        .make_species([args.shared.nbrow, args.shared.nbcol])
         .expect("Failed to set up simulation grid");
     let mut writer = Writer::create(
         hdf5::Config {
@@ -202,7 +116,7 @@ fn main() {
                 #[cfg(feature = "async-gpu")]
                 {
                     let steps = simulation
-                        .prepare_steps(simulation.now(), &mut species, steps_per_image)
+                        .prepare_steps(simulation.now(), &mut species, args.shared.nbextrastep)
                         .expect("Failed to prepare simulation steps");
                     species.access_result(|v, context| {
                         v.make_scalar_view_after(steps, context)
@@ -214,7 +128,7 @@ fn main() {
                 #[cfg(not(feature = "async-gpu"))]
                 {
                     simulation
-                        .perform_steps(&mut species, steps_per_image)
+                        .perform_steps(&mut species, args.shared.nbextrastep)
                         .expect("Failed to compute simulation steps");
                     species
                         .make_result_view()

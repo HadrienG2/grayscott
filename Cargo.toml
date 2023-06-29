@@ -8,10 +8,13 @@ members = [
     "compute/naive",
     "compute/parallel",
     "compute/regular",
+    "compute/selector",
     "compute/shared",
     "data",
     "data-to-pics",
-    "simulate"
+    "livesim",
+    "simulate",
+    "ui",
 ]
 
 [workspace.package]
@@ -101,7 +104,9 @@ compute_manualvec.path = "compute/manualvec"
 compute_naive.path = "compute/naive"
 compute_parallel.path = "compute/parallel"
 compute_regular.path = "compute/regular"
+compute_selector.path = "compute/selector"
 data.path = "data"
+ui.path = "ui"
 
 [profile.dev]
 # Keep the runtime speed of debug builds reasonable
