@@ -32,6 +32,7 @@ pub struct CliArgs<BackendArgs: Args> {
 }
 
 /// Gray-Scott simulation wrapper that enforces block-wise iteration
+#[derive(Debug)]
 pub struct BlockWiseSimulation<Backend: SimulateCpu, BlockSize: DefaultBlockSize> {
     /// Maximal number of grid elements (scalars or SIMD blocks) to be
     /// manipulated in one processing batch for optimal cache locality
@@ -115,6 +116,7 @@ pub trait DefaultBlockSize {
 ///
 /// Single-core computations should process data in blocks that fit in the L1
 /// cache of any single core, and that's what this policy enforces.
+#[derive(Debug)]
 pub struct SingleCore;
 //
 impl DefaultBlockSize for SingleCore {

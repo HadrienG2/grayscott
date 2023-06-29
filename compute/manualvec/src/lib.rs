@@ -25,6 +25,7 @@ type Concentration = SIMDConcentration<{ Values::WIDTH }, Values>;
 type Species = data::concentration::Species<Concentration>;
 
 /// Gray-Scott reaction simulation
+#[derive(Debug)]
 pub struct Simulation {
     /// Simulation parameters
     params: Parameters,

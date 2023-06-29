@@ -51,6 +51,7 @@ pub struct CliArgs<BackendArgs: Args> {
 }
 
 /// Gray-Scott simulation wrapper that enforces parallel iteration
+#[derive(Debug)]
 pub struct ParallelSimulation<Backend: SimulateCpu + Sync>
 where
     Backend::Values: Send + Sync,
@@ -136,6 +137,7 @@ where
 ///
 /// Multi-core computations should process data in blocks that fit in the sum of
 /// the last-level caches of all cores, and that's what this policy enforces.
+#[derive(Debug)]
 pub struct MultiCore;
 //
 impl DefaultBlockSize for MultiCore {

@@ -21,6 +21,7 @@ use std::{convert::Infallible, ops::Range};
 type Species = data::concentration::Species<ScalarConcentration>;
 
 /// Gray-Scott reaction simulation
+#[derive(Debug)]
 pub struct Simulation {
     /// Simulation parameters
     params: Parameters,

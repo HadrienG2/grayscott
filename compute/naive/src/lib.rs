@@ -15,6 +15,7 @@ use std::convert::Infallible;
 type Species = data::concentration::Species<ScalarConcentration>;
 
 /// Gray-Scott reaction simulation
+#[derive(Debug)]
 pub struct Simulation {
     /// Simulation parameters
     params: Parameters,
