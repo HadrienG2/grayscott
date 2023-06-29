@@ -8,3 +8,7 @@ clap.workspace = true
 colorous.workspace = true
 compute.workspace = true
 data.workspace = true
+
+# Criterion workaround for lack of stable benchmark harness
+[lib]
+bench = false
