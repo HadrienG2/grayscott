@@ -1,7 +1,7 @@
 //! Computation parameters
 
 use crate::Precision;
-#[cfg(feature = "crevice")]
+#[cfg(feature = "gpu-parameters")]
 use crevice::{
     glsl::{Glsl, GlslStruct},
     std140::{AsStd140, Mat3},
@@ -9,7 +9,7 @@ use crevice::{
 
 /// Computation parameters
 #[derive(Copy, Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "crevice", derive(AsStd140, GlslStruct))]
+#[cfg_attr(feature = "gpu-parameters", derive(AsStd140, GlslStruct))]
 pub struct Parameters {
     /// Matrix of weights to be applied in the stencil computation
     pub weights: StencilWeights,
@@ -55,7 +55,7 @@ pub struct StencilWeights(pub [[Precision; STENCIL_SHAPE[1]]; STENCIL_SHAPE[0]])
 
 // Make StencilWeights uploadable to the GPU if support is enabled
 cfg_if::cfg_if! {
-    if #[cfg(feature = "crevice")] {
+    if #[cfg(feature = "gpu-parameters")] {
         impl AsStd140 for StencilWeights {
             type Output = Mat3;
 

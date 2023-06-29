@@ -8,7 +8,7 @@ clap = { workspace = true, features = ["env"] }
 compute = { workspace = true, features = ["cpu"] }
 compute_autovec.workspace = true
 compute_block.workspace = true
-data = { workspace = true, features = ["slipstream"] }
+data.workspace = true
 hwlocality.workspace = true
 rayon.workspace = true
 thiserror.workspace = true

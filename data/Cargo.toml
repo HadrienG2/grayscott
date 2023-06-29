@@ -4,7 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-gpu = ["bytemuck", "self_cell", "thiserror", "vulkano"]
+gpu = ["self_cell", "thiserror", "vulkano"]
+gpu-parameters = ["bytemuck", "crevice"]
 safe_arch = ["dep:safe_arch", "simd"]
 simd = []
 slipstream = ["simd", "dep:slipstream"]
@@ -19,11 +20,13 @@ safe_arch = { workspace = true, optional = true }
 slipstream = { workspace = true, optional = true }
 
 # GPU backend dependencies
-bytemuck = { workspace = true, optional = true }
-crevice = { workspace = true, optional = true }
 self_cell = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 vulkano = { workspace = true, optional = true }
+
+# Prerequisites to treat parameters as a GPU struct
+bytemuck = { workspace = true, optional = true }
+crevice = { workspace = true, optional = true }
 
 # Criterion workaround for lack of stable benchmark harness
 [lib]
