@@ -14,7 +14,7 @@ use data::{
     parameters::Parameters,
 };
 use hwlocality::{errors::RawHwlocError, Topology};
-use rayon::{prelude::*, ThreadPoolBuildError, ThreadPoolBuilder};
+use rayon::{prelude::*, ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
 use std::num::NonZeroUsize;
 use thiserror::Error;
 
@@ -56,6 +56,9 @@ pub struct ParallelSimulation<Backend: SimulateCpu + Sync>
 where
     Backend::Values: Send + Sync,
 {
+    /// Thread pool
+    thread_pool: ThreadPool,
+
     /// Number of grid elements (scalars or SIMD blocks) below which
     /// parallelism is not considered worthwhile
     sequential_len_threshold: usize,
@@ -85,13 +88,13 @@ where
     Backend::Values: Send + Sync,
 {
     fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error> {
-        if let Some(num_threads) = args.num_threads {
-            ThreadPoolBuilder::new()
-                .num_threads(num_threads.into())
-                .build_global()
-                .map_err(Error::ThreadPool)?;
-        }
+        // Set up the thread pool
+        let thread_pool = ThreadPoolBuilder::new()
+            .num_threads(args.num_threads.map(usize::from).unwrap_or(0))
+            .build()
+            .map_err(Error::ThreadPool)?;
 
+        // Define the granularity of sequential processing
         let seq_block_size = args
             .seq_block_size
             .map(|bs| Ok::<_, Self::Error>(usize::from(bs)))
@@ -102,6 +105,7 @@ where
         let sequential_len_threshold = seq_block_size / std::mem::size_of::<Backend::Values>();
 
         Ok(Self {
+            thread_pool,
             sequential_len_threshold,
             backend: Backend::new(params, args.backend).map_err(Error::Backend)?,
         })
@@ -119,16 +123,18 @@ where
     }
 
     fn unchecked_step_impl(&self, grid: CpuGrid<Self::Values>) {
-        rayon::iter::split(grid, |subgrid| {
-            if Self::grid_len(&subgrid) <= self.sequential_len_threshold {
-                (subgrid, None)
-            } else {
-                let [half1, half2] = Self::split_grid(subgrid);
-                (half1, Some(half2))
-            }
-        })
-        .for_each(|subgrid| {
-            self.backend.step_impl(subgrid);
+        self.thread_pool.install(|| {
+            rayon::iter::split(grid, |subgrid| {
+                if Self::grid_len(&subgrid) <= self.sequential_len_threshold {
+                    (subgrid, None)
+                } else {
+                    let [half1, half2] = Self::split_grid(subgrid);
+                    (half1, Some(half2))
+                }
+            })
+            .for_each(|subgrid| {
+                self.backend.step_impl(subgrid);
+            });
         });
     }
 }
