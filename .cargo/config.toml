@@ -1,2 +1,5 @@
 [build]
-rustflags = ["-C", "target-cpu=native"]
+# FIXME: Workaround for https://github.com/rust-lang/rust/issues/112398,
+#        revert back to native arch once this is fixed (rust 1.71?) + the
+#        fix version of rustc is old enough.
+rustflags = ["-C", "target-cpu=x86-64-v3"]
