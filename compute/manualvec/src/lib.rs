@@ -59,6 +59,8 @@ impl SimulateCpu for Simulation {
             [out_u.simd_center_mut(), out_v.simd_center_mut()],
         )
     }
+
+    #[inline]
     fn unchecked_step_impl(&self, grid: CpuGrid<Self::Values>) {
         // Determine offset from the top-left corner of the stencil to its center
         let stencil_offset = stencil_offset();
