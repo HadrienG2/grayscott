@@ -1,14 +1,12 @@
 use clap::Parser;
 use data::hdf5::{Config, Reader};
 use image::{ImageBuffer, Rgb, RgbImage};
-use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
 use ndarray::Axis;
 use rayon::prelude::*;
 use std::{
     num::NonZeroUsize,
     path::PathBuf,
     sync::mpsc::{self, TryRecvError},
-    time::Duration,
 };
 
 /// Convert Gray-Scott simulation output to images
@@ -55,26 +53,22 @@ struct Args {
 }
 
 fn main() {
+    // Enable logging to syslog
+    ui::init_syslog();
+
     // Parse CLI arguments
     let args = Args::parse();
 
     // Open the HDF5 dataset
     let reader = Reader::open(Config {
-        file_name: args.input.unwrap_or_else(|| "output.h5".into()),
+        file_name: ui::simulation_output_path(args.input),
         ..Default::default()
     })
     .expect("Failed to open input file");
     let [rows, cols] = reader.image_shape();
 
     // Set up progress reporting
-    let progress = ProgressBar::new(reader.num_images() as u64)
-        .with_message("Exporting image")
-        .with_style(
-            ProgressStyle::with_template("{msg} {pos}/{len} {wide_bar} {elapsed}/~{duration}")
-                .expect("Failed to parse style"),
-        )
-        .with_finish(ProgressFinish::AndClear);
-    progress.enable_steady_tick(Duration::from_millis(100));
+    let progress = ui::init_progress_reporting("Generating image", reader.num_images());
 
     // Set up the I/O threads
     std::thread::scope(|s| {

@@ -8,10 +8,7 @@ use data::{
     hdf5::{self, Writer},
     parameters::Parameters,
 };
-use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
-use log::LevelFilter;
-use std::{num::NonZeroUsize, path::PathBuf, sync::mpsc, time::Duration};
-use syslog::Facility;
+use std::{num::NonZeroUsize, path::PathBuf, sync::mpsc};
 use ui::SharedArgs;
 
 /// Perform Gray-Scott simulation
@@ -41,21 +38,12 @@ struct Args {
 
 fn main() {
     // Enable logging to syslog
-    syslog::init(
-        Facility::default(),
-        if cfg!(debug_assertions) {
-            LevelFilter::Debug
-        } else {
-            LevelFilter::Info
-        },
-        None,
-    )
-    .expect("Failed to initialize syslog");
+    ui::init_syslog();
 
     // Parse CLI arguments and handle clap-incompatible defaults
     let args = Args::parse();
     let [kill_rate, feed_rate, time_step] = ui::kill_feed_deltat(&args.shared);
-    let file_name = args.output.unwrap_or_else(|| "output.h5".into());
+    let file_name = ui::simulation_output_path(args.output);
 
     // Set up the simulation
     let simulation = Simulation::new(
@@ -84,14 +72,7 @@ fn main() {
     .expect("Failed to open output file");
 
     // Set up progress reporting
-    let progress = ProgressBar::new(args.nbimage as u64)
-        .with_message("Generating image")
-        .with_style(
-            ProgressStyle::with_template("{msg} {pos}/{len} {wide_bar} {elapsed}/~{duration}")
-                .expect("Failed to parse style"),
-        )
-        .with_finish(ProgressFinish::AndClear);
-    progress.enable_steady_tick(Duration::from_millis(100));
+    let progress = ui::init_progress_reporting("Running simulation step", args.nbimage);
 
     // Set up the HDF5 writer thread
     std::thread::scope(|s| {
@@ -112,7 +93,7 @@ fn main() {
         for _ in 0..args.nbimage {
             // Move the simulation forward and collect image
             let image = {
-                // If gpu-specific asynchronous commands are available, use them
+                // If GPU-specific asynchronous commands are available, use them
                 #[cfg(feature = "async-gpu")]
                 {
                     let steps = simulation

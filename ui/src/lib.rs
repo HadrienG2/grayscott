@@ -1,13 +1,18 @@
 //! This crate collects elements that are shared between the three CLI
 //! programs data-to-pics, livesim and simulate.
 
-use clap::Args;
-use colorous::Gradient;
+#[cfg(feature = "simulation")]
 use compute::SimulateBase;
-use data::{parameters::Parameters, Precision};
+#[cfg(any(feature = "simulation", feature = "visualization"))]
+use data::Precision;
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
-/// CLI arguments shared by the "livesim" and "simulate" executables
-#[derive(Args)]
+/// CLI arguments shared by simulation programs
+#[cfg(feature = "simulation")]
+#[derive(clap::Args)]
 pub struct SharedArgs<Simulation: SimulateBase> {
     /// Rate of the process which converts V into P
     #[arg(short, long)]
@@ -39,19 +44,65 @@ pub struct SharedArgs<Simulation: SimulateBase> {
 }
 
 /// Argument defaults for killrate, feedrate and deltat that clap can't handle
+#[cfg(feature = "simulation")]
 pub fn kill_feed_deltat(args: &SharedArgs<impl SimulateBase>) -> [Precision; 3] {
-    let default_params = Parameters::default();
+    let default_params = data::parameters::Parameters::default();
     let kill_rate = args.killrate.unwrap_or(default_params.kill_rate);
     let feed_rate = args.feedrate.unwrap_or(default_params.feed_rate);
     let time_step = args.deltat.unwrap_or(default_params.time_step);
     [kill_rate, feed_rate, time_step]
 }
 
-/// Color gradient shared by the "simulate" and "livesim" visualizations
-pub const GRADIENT: Gradient = colorous::INFERNO;
+/// Default simulation output file name
+pub fn simulation_output_path(specified_path: Option<PathBuf>) -> Cow<'static, Path> {
+    let default_path: &Path = "output.h5".as_ref();
+    specified_path.map_or(default_path.into(), Cow::from)
+}
 
-/// Amplitude scale shared by the "simulate" and "livesim" visualizations
+/// Set up logging using syslog
+#[cfg(feature = "tui")]
+pub fn init_syslog() {
+    syslog::init(
+        syslog::Facility::default(),
+        if cfg!(debug_assertions) {
+            log::LevelFilter::Debug
+        } else {
+            log::LevelFilter::Info
+        },
+        None,
+    )
+    .expect("Failed to initialize syslog");
+    eprintln!("Since stderr is not usable inside of a TUI, logs will be emitted on syslog...");
+}
+
+/// Set up indicatif-based progress reporting
+#[cfg(feature = "tui")]
+pub fn init_progress_reporting(
+    message: impl Into<std::borrow::Cow<'static, str>>,
+    num_steps: usize,
+) -> indicatif::ProgressBar {
+    use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
+    use std::time::Duration;
+
+    let progress = ProgressBar::new(num_steps as u64)
+        .with_message(message)
+        .with_style(
+            ProgressStyle::with_template("{msg} {pos}/{len} {wide_bar} {elapsed}/~{duration}")
+                .expect("Failed to parse style"),
+        )
+        .with_finish(ProgressFinish::AndClear);
+    progress.enable_steady_tick(Duration::from_millis(100));
+    progress
+}
+
+/// Color gradient
+#[cfg(feature = "visualization")]
+pub const GRADIENT: colorous::Gradient = colorous::INFERNO;
+
+/// Amplitude scale
+#[cfg(feature = "visualization")]
 pub const MAX_AMPLITUDE: Precision = 0.6;
 
-/// Amplitude scale factor associated with MAX_AMPLITUDE
+/// Amplitude rescaling factor associated with MAX_AMPLITUDE
+#[cfg(feature = "visualization")]
 pub const AMPLITUDE_SCALE: Precision = 1.0 / MAX_AMPLITUDE;

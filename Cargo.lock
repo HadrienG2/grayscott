@@ -578,7 +578,6 @@ dependencies = [
  "crossbeam-channel",
  "data",
  "image",
- "indicatif",
  "ndarray",
  "rayon",
  "ui",
@@ -1513,9 +1512,6 @@ dependencies = [
  "compute",
  "compute_selector",
  "data",
- "indicatif",
- "log",
- "syslog",
  "ui",
 ]
 
@@ -1678,6 +1674,9 @@ dependencies = [
  "colorous",
  "compute",
  "data",
+ "indicatif",
+ "log",
+ "syslog",
 ]
 
 [[package]]

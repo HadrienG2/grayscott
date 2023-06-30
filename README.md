@@ -42,7 +42,8 @@ In the same spirit as the C++ version, the code is sliced into several crates:
       for the sake of readability.
     * The `regular` backend leverages the fact that the computation is simpler
       at the center of the domain than it is at the edges in order to get about
-      2x more performance on the center pixels.
+      2x more performance on the center pixels, at the cost of some code
+      duplication between the center and edge computations.
     * The `autovec` backend shapes the computation and data in such a way that
       the compiler can automatically vectorize most of the code. The code is
       simpler and more portable than if it were written directly against harware
@@ -50,10 +51,10 @@ In the same spirit as the C++ version, the code is sliced into several crates:
       compiler autovectorizer whims. Data layout is also improved, pretty much
       like what was done in the `_intrinsics` C++ version.
     * The `manualvec` backend does the vectorization manually instead, like the
-      `_intrinsics` C++ version. It is significantly more complex and less
-      portable than `autovec` while having comparable runtime performance, which
-      shows that for this particular problem autovectorization can actually be
-      a better tradeoff.
+      `_intrinsics` C++ version does under the hood. It is significantly more
+      complex and less portable than `autovec` while having comparable runtime
+      performance, which shows that for this particular problem
+      autovectorization can actually be a better tradeoff.
         * Due to Rust's [orphan rules](https://github.com/Ixrec/rust-orphan-rules),
           a significant share of the SIMD abstraction layer that is needed by
           the shared `Species` concentration storage code is implemented in the
@@ -77,6 +78,11 @@ In the same spirit as the C++ version, the code is sliced into several crates:
              compile time (this allows for more optimized shader code, though
              here the simulation is so memory-bound it doesn't matter).
         * TODO: Add more backends here as they are implemented.
+- The `compute/selector` crate provides a way for compute binaries to
+  selectively enable compute backends and pick the most powerful backend
+  amongst those that are currently enabled.
+- The `ui` crate lets the various binaries listed below share code and
+  command-line options where appropriate.
 - `simulate` is a binary that runs the simulation. It uses the same CLI argument
   syntax as the `xyz_gray_scott` binaries from the C++ version, but the
   choice of compute backend is made through Cargo features. For each
@@ -115,13 +121,20 @@ $ cargo run --release --bin data-to-pics -- -i <input> -o pics
 To run all the microbenchmarks, you can use this command:
 
 ```
-$ cargo criterion --workspace
+$ cargo criterion
 ```
 
-Alternatively, you can run microbenchmarks for a specific compute backend `xyz`:
+Alternatively, you can run microbenchmarks for a specific compute backend `xyz`,
+which can speed up compilation by avoiding compilation of unused backends:
 
 ```
 $ cargo criterion --package xyz
+```
+
+You can also selectively run benchmarks based on a regular expression, like so:
+
+```
+$ cargo criterion -- '(parallel|gpu).*2048x.*32'
 ```
 
 The microbenchmark runner exports a more detailed HTML report in

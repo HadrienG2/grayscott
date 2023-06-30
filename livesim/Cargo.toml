@@ -32,7 +32,7 @@ compute_selector.workspace = true
 data.workspace = true
 env_logger.workspace = true
 log.workspace = true
-ui.workspace = true
+ui = { workspace = true, features = ["simulation", "visualization"] }
 
 [dev-dependencies]
 compute_selector = { workspace = true, features = ["compute_naive"] }

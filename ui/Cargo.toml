@@ -3,11 +3,19 @@ name = "ui"
 version.workspace = true
 edition.workspace = true
 
+[features]
+simulation = ["clap", "compute"]
+visualization = ["colorous"]
+tui = ["indicatif", "log", "syslog"]
+
 [dependencies]
-clap.workspace = true
-colorous.workspace = true
-compute.workspace = true
+clap = { workspace = true, optional = true }
+colorous = { workspace = true, optional = true }
+compute = { workspace = true, optional = true }
 data.workspace = true
+indicatif = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
+syslog = { workspace = true, optional = true }
 
 # Criterion workaround for lack of stable benchmark harness
 [lib]

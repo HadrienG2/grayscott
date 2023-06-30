@@ -33,10 +33,7 @@ clap.workspace = true
 compute.workspace = true
 compute_selector.workspace = true
 data = { workspace = true, features = ["hdf5"] }
-indicatif.workspace = true
-log.workspace = true
-syslog.workspace = true
-ui.workspace = true
+ui = { workspace = true, features = ["simulation", "tui"] }
 
 [dev-dependencies]
 compute_selector = { workspace = true, features = ["compute_naive"] }
