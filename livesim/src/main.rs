@@ -66,6 +66,11 @@ fn main() {
     )
     .expect("Failed to create simulation");
 
+    // TODO: Reuse simulation context instead in GPU mode
+    let context = vulkan_config
+        .setup()
+        .expect("Failed to set up Vulkan context");
+
     // TODO: Create swapchain, upload buffers, pipeline, etc
 
     // Set up chemical species concentration storage
