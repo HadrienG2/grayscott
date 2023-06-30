@@ -505,37 +505,19 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
             }
         }
 
-        let physical_device =
-            select_physical_device(
-                &instance,
-                |device| {
-                    // General device requirements
-                    let (features, extensions) = (self.device_features_extensions)(&device);
-                    if !(device.supported_features().contains(&features)
-                        && device.supported_extensions().contains(&extensions)
-                        && (self.other_device_requirements)(device))
-                    {
-                        return false;
-                    }
-
-                    // Extra requirements imposed by presenting to a surface
-                    if let Some(surface) = &surface {
-                        let supports_swapchain = device.supported_extensions().khr_swapchain;
-                        let can_present = device.queue_family_properties().iter().enumerate().any(
-                            |(idx, family)| {
-                                family.queue_flags.contains(QueueFlags::COMPUTE)
-                                    && device.surface_support(idx as u32, surface).unwrap_or(false)
-                            },
-                        );
-                        if !(supports_swapchain && can_present) {
-                            return false;
-                        }
-                    }
-
-                    return true;
-                },
-                self.device_preference,
-            )?;
+        let physical_device = select_physical_device(
+            &instance,
+            |device| {
+                let (features, extensions) = (self.device_features_extensions)(&device);
+                device.supported_features().contains(&features)
+                    && device.supported_extensions().contains(&extensions)
+                    && (self.other_device_requirements)(device)
+                    && surface
+                        .as_ref()
+                        .map_or(true, |surface| device_supports_surface(device, surface))
+            },
+            self.device_preference,
+        )?;
 
         let (features, mut extensions) = (self.device_features_extensions)(&physical_device);
         if surface.is_some() {
@@ -925,6 +907,20 @@ fn select_physical_device(
     } else {
         Err(Error::NoMatchingDevice)
     }
+}
+
+/// Truth that a device can present to a certain surface via a swapchain
+fn device_supports_surface(device: &PhysicalDevice, surface: &Surface) -> bool {
+    let supports_swapchain = device.supported_extensions().khr_swapchain;
+    let can_present = device
+        .queue_family_properties()
+        .iter()
+        .enumerate()
+        .any(|(idx, family)| {
+            family.queue_flags.contains(QueueFlags::COMPUTE)
+                && device.surface_support(idx as u32, surface).unwrap_or(false)
+        });
+    supports_swapchain && can_present
 }
 
 /// Create a logical device and associated command queues
