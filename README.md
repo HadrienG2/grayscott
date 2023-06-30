@@ -88,7 +88,10 @@ In the same spirit as the C++ version, the code is sliced into several crates:
   choice of compute backend is made through Cargo features. For each
   `compute/xyz` backend, there is a matching `compute_xyz` feature.
 - `livesim` is a variation of `simulate` that displays each image to a live
-  window instead of writing images to files, and runs indefinitely.
+  window instead of writing images to files, and runs indefinitely. It is
+  designed to compute as many simulation steps per second as possible while
+  keeping the animation smooth, and should thus provide a nice visual overview
+  of how fast backends are.
 - `data-to-pics` is a binary that converts HDF5 output datafiles from `simulate`
   into PNG images, much like the `gray_scott2pic` binary from the C++ version
   except it uses a different color palette.
@@ -115,6 +118,14 @@ $ cargo run --release --bin data-to-pics -- -i <input> -o pics
 
 ...where `<input>` is the name of the input HDF5 file produced by `simulate`
 (`output.h5` by default).
+
+Alternatively, you can run a live version of the simulation which produces a
+visual render similar to the aforementioned PNG images in real time, using the
+following command:
+
+```
+$ cargo run --release --bin livesim --features <backend> -- <CLI args>
+```
 
 ---
 
