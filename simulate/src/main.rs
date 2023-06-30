@@ -1,7 +1,9 @@
 use clap::Parser;
 #[cfg(feature = "async-gpu")]
 use compute::gpu::SimulateGpu;
-use compute::{Simulate, SimulateBase, SimulateCreate};
+#[cfg(not(feature = "async-gpu"))]
+use compute::Simulate;
+use compute::{SimulateBase, SimulateCreate};
 use compute_selector::Simulation;
 use data::{
     concentration::{AsScalars, ScalarConcentration},
