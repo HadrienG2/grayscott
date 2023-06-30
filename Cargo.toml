@@ -93,8 +93,12 @@ thiserror = "1.0"
 # TODO: Go back to upstream once fix is merged
 vulkano = { git = "https://github.com/HadrienG2/vulkano.git", branch = "fix-debug-utils-name-uaf-v0.33" }
 vulkano-shaders = { git = "https://github.com/HadrienG2/vulkano.git", branch = "fix-debug-utils-name-uaf-v0.33" }
+vulkano-win = { git = "https://github.com/HadrienG2/vulkano.git", branch = "fix-debug-utils-name-uaf-v0.33" }
 
-# Internal to this project
+# Used to create windows
+winit = "0.28"
+
+# Expose crates from this project to other crates in this project
 compute.path = "compute/shared"
 compute_autovec.path = "compute/autovec"
 compute_gpu_naive.path = "compute/gpu/naive"

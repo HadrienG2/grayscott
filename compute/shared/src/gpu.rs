@@ -35,9 +35,12 @@ use vulkano::{
     },
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
     pipeline::cache::PipelineCache,
+    swapchain::{Surface, SurfaceCreationError},
     sync::{future::NowFuture, FlushError, GpuFuture},
     ExtensionProperties, LoadingError, OomError, VulkanError, VulkanLibrary, VulkanObject,
 };
+#[cfg(feature = "livesim")]
+use winit::window::Window;
 
 /// Lower-level, asynchronous interface to a GPU compute backend
 ///
@@ -145,6 +148,9 @@ pub struct VulkanContext<
     /// Messenger that sends Vulkan debug messages to the [`log`] crate
     _messenger: Option<DebugUtilsMessenger>,
 
+    /// Window surface (set if a window was specified in the VulkanConfig)
+    pub surface: Option<Arc<Surface>>,
+
     /// Logical device (used for resource allocation)
     pub device: Arc<Device>,
 
@@ -202,6 +208,10 @@ pub struct VulkanConfig<
     CommAlloc: CommandBufferAllocator = StandardCommandBufferAllocator,
     DescAlloc: DescriptorSetAllocator = StandardDescriptorSetAllocator,
 > {
+    /// Window to which this Vulkan context is meant to render, if any
+    #[cfg(feature = "livesim")]
+    pub window: Option<Arc<Window>>,
+
     /// Decide which Vulkan layers should be enabled
     ///
     /// Layers are used for various debugging and profiling tasks. Note that
@@ -343,12 +353,21 @@ pub struct VulkanConfig<
     /// This lets you decide which queues you want to allocate, and how you want
     /// to name them when the gpu-debug-utils features is enabled.
     ///
+    /// If a surface is passed in as a parameter, then the first selected
+    /// queue should be able to perform compute operations and present to this
+    /// surface.
+    ///
     /// By default, we only allocate a single queue, suitable for compute (and
     /// thus data transfers). We try to pick the device's main queue family for
     /// this purpose, at it may be the most performant in single-queue use
     /// cases. If you want to experiment with multi-queue workflows, this is
     /// the tuning knob that you want.
-    pub queues: Box<dyn FnOnce(&PhysicalDevice) -> (Vec<QueueCreateInfo>, Vec<Cow<'static, str>>)>,
+    pub queues: Box<
+        dyn FnOnce(
+            &PhysicalDevice,
+            Option<&Surface>,
+        ) -> (Vec<QueueCreateInfo>, Vec<Cow<'static, str>>),
+    >,
 
     /// Set up a memory allocator
     ///
@@ -398,17 +417,46 @@ impl
     /// };
     /// ```
     pub fn default() -> Self {
-        Self {
-            layers: Box::new(default_layers),
-            instance_extensions: Box::new(default_instance_extensions),
-            enumerate_portability: false,
-            device_features_extensions: Box::new(default_features_extensions),
-            other_device_requirements: Box::new(default_other_device_requirements),
-            device_preference: Box::new(default_device_preference),
-            queues: Box::new(|device| (vec![default_queue(device)], vec!["Main queue".into()])),
-            memory_allocator: Box::new(default_memory_allocator),
-            command_allocator: Box::new(default_command_buffer_allocator),
-            descriptor_allocator: Box::new(StandardDescriptorSetAllocator::new),
+        let layers = Box::new(default_layers);
+        let instance_extensions = Box::new(default_instance_extensions);
+        let enumerate_portability = false;
+        let device_features_extensions = Box::new(default_features_extensions);
+        let other_device_requirements = Box::new(default_other_device_requirements);
+        let device_preference = Box::new(default_device_preference);
+        let queues = Box::new(default_queues);
+        let memory_allocator = Box::new(default_memory_allocator);
+        let command_allocator = Box::new(default_command_buffer_allocator);
+        let descriptor_allocator = Box::new(StandardDescriptorSetAllocator::new);
+        #[cfg(feature = "livesim")]
+        {
+            Self {
+                window: None,
+                layers,
+                instance_extensions,
+                enumerate_portability,
+                device_features_extensions,
+                other_device_requirements,
+                device_preference,
+                queues,
+                memory_allocator,
+                command_allocator,
+                descriptor_allocator,
+            }
+        }
+        #[cfg(not(feature = "livesim"))]
+        {
+            Self {
+                layers,
+                instance_extensions,
+                enumerate_portability,
+                device_features_extensions,
+                other_device_requirements,
+                device_preference,
+                queues,
+                memory_allocator,
+                command_allocator,
+                descriptor_allocator,
+            }
         }
     }
 }
@@ -423,12 +471,19 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
     /// let context = VulkanConfig::default().setup()?;
     /// # Ok::<(), compute::gpu::Error>(())
     /// ```
+    #[allow(unused_assignments, unused_mut)]
     pub fn setup(mut self) -> Result<VulkanContext<MemAlloc, CommAlloc>, Error> {
         let library = load_library()?;
 
         let mut instance_extensions = (self.instance_extensions)(&library);
         if cfg!(feature = "gpu-debug-utils") {
             instance_extensions.ext_debug_utils = true;
+        }
+        #[cfg(feature = "livesim")]
+        {
+            if self.window.is_some() {
+                instance_extensions |= vulkano_win::required_extensions(&library);
+            }
         }
         let instance = DebuggedInstance::setup(
             library.clone(),
@@ -437,19 +492,56 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
             self.enumerate_portability,
         )?;
 
-        let physical_device = select_physical_device(
-            &instance,
-            |device| {
-                let (features, extensions) = (self.device_features_extensions)(&device);
-                device.supported_features().contains(&features)
-                    && device.supported_extensions().contains(&extensions)
-                    && (self.other_device_requirements)(device)
-            },
-            self.device_preference,
-        )?;
+        let mut surface = None;
+        #[cfg(feature = "livesim")]
+        {
+            if let Some(window) = self.window {
+                let new_surface = vulkano_win::create_surface_from_winit(window, instance.clone())?;
+                info!(
+                    "Created a surface from window with API {:?}",
+                    new_surface.api()
+                );
+                surface = Some(new_surface);
+            }
+        }
 
-        let (features, extensions) = (self.device_features_extensions)(&physical_device);
-        let (queues_info, queue_names) = (self.queues)(&physical_device);
+        let physical_device =
+            select_physical_device(
+                &instance,
+                |device| {
+                    // General device requirements
+                    let (features, extensions) = (self.device_features_extensions)(&device);
+                    if !(device.supported_features().contains(&features)
+                        && device.supported_extensions().contains(&extensions)
+                        && (self.other_device_requirements)(device))
+                    {
+                        return false;
+                    }
+
+                    // Extra requirements imposed by presenting to a surface
+                    if let Some(surface) = &surface {
+                        let supports_swapchain = device.supported_extensions().khr_swapchain;
+                        let can_present = device.queue_family_properties().iter().enumerate().any(
+                            |(idx, family)| {
+                                family.queue_flags.contains(QueueFlags::COMPUTE)
+                                    && device.surface_support(idx as u32, surface).unwrap_or(false)
+                            },
+                        );
+                        if !(supports_swapchain && can_present) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                },
+                self.device_preference,
+            )?;
+
+        let (features, mut extensions) = (self.device_features_extensions)(&physical_device);
+        if surface.is_some() {
+            extensions.khr_swapchain = true;
+        }
+        let (queues_info, queue_names) = (self.queues)(&physical_device, surface.as_deref());
         let (device, queues) =
             create_logical_device(physical_device.clone(), features, extensions, queues_info)?;
 
@@ -473,6 +565,7 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
 
         Ok(VulkanContext {
             _messenger: instance._messenger,
+            surface,
             device,
             queues,
             memory_allocator,
@@ -512,6 +605,10 @@ pub enum Error {
 
     #[error("failed to read or write on-disk pipeline cache")]
     PipelineCacheIo(#[from] std::io::Error),
+
+    #[cfg(feature = "livesim")]
+    #[error("failed to create a surface from specified window")]
+    SurfaceCreation(#[from] SurfaceCreationError),
 }
 
 /// Suggested set of layers to enable
@@ -576,17 +673,31 @@ fn default_device_preference(device1: &PhysicalDevice, device2: &PhysicalDevice)
     device_type_score(device1).cmp(&device_type_score(device2))
 }
 
-/// Suggested queue creation info
+/// Suggested single-queue creation info
 ///
 /// Will pick a single queue, in the family which is presumed to be the "main"
 /// queue family of the the device.
-fn default_queue(device: &PhysicalDevice) -> QueueCreateInfo {
-    let (idx, _) = device
+fn default_queues(
+    device: &PhysicalDevice,
+    surface: Option<&Surface>,
+) -> (Vec<QueueCreateInfo>, Vec<Cow<'static, str>>) {
+    let (queue_family_index, _) = device
         .queue_family_properties()
         .iter()
         .enumerate()
-        // We need a queue with compute support
-        .filter(|(_idx, queue)| queue.queue_flags.contains(QueueFlags::COMPUTE))
+        .map(|(idx, family)| (idx as u32, family))
+        .filter(|(idx, family)| {
+            // We need a queue with compute support
+            if !family.queue_flags.contains(QueueFlags::COMPUTE) {
+                return false;
+            }
+
+            // If a surface is specified, then we must be able to present to
+            // that surface too
+            surface.map_or(true, |surface| {
+                device.surface_support(*idx, surface).unwrap_or(false)
+            })
+        })
         .max_by(|(idx1, queue1), (idx2, queue2)| {
             // Queues that support graphics are most likely to be the main queue
             let supports_graphics =
@@ -601,10 +712,14 @@ fn default_queue(device: &PhysicalDevice) -> QueueCreateInfo {
             idx2.cmp(idx1)
         })
         .expect("There should be at least one queue family");
-    QueueCreateInfo {
-        queue_family_index: idx as _,
-        ..Default::default()
-    }
+
+    (
+        vec![QueueCreateInfo {
+            queue_family_index,
+            ..Default::default()
+        }],
+        vec!["Main queue".into()],
+    )
 }
 
 /// Suggested memory allocator

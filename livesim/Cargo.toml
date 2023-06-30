@@ -27,12 +27,15 @@ gpu-debug-utils = ["compute/gpu-debug-utils"]
 
 [dependencies]
 clap.workspace = true
-compute.workspace = true
+compute = { workspace = true, features = ["livesim"] }
 compute_selector.workspace = true
 data.workspace = true
 env_logger.workspace = true
 log.workspace = true
 ui = { workspace = true, features = ["simulation", "visualization"] }
+vulkano.workspace = true
+vulkano-win.workspace = true
+winit.workspace = true
 
 [dev-dependencies]
 compute_selector = { workspace = true, features = ["compute_naive"] }

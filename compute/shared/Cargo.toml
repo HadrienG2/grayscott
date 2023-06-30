@@ -13,6 +13,9 @@ criterion = ["dep:criterion", "env_logger"]
 # GPU compute backend commonalities
 gpu = ["data/gpu", "directories", "log", "thiserror", "vulkano"]
 
+# Functionality needed for live simulation display
+livesim = ["gpu", "vulkano-win", "winit"]
+
 # Annotate GPU-side objects with a useful name for debuggers, profilers...
 # Requires the VK_EXT_debug_utils extension, will cause a little overhead
 gpu-debug-utils = ["data/gpu-debug-utils", "gpu"]
@@ -31,6 +34,10 @@ directories = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 vulkano = { workspace = true, optional = true }
+
+# Live simulation display dependencies
+vulkano-win = { workspace = true, optional = true }
+winit = { workspace = true, optional = true }
 
 [dev-dependencies]
 env_logger.workspace = true
