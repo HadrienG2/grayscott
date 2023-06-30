@@ -66,6 +66,8 @@ fn main() {
     )
     .expect("Failed to create simulation");
 
+    // TODO: Create swapchain, upload buffers, pipeline, etc
+
     // Set up chemical species concentration storage
     let mut species = simulation
         .make_species([args.shared.nbrow, args.shared.nbcol])
@@ -74,20 +76,11 @@ fn main() {
     // Show window and start event loop
     window.set_visible(true);
     event_loop.run(move |event, _, control_flow| {
-        // Continuously runs the event loop, even if the OS hasn't dispatched
-        // any events. This is ideal for live visualization.
+        // Continuously run even if no events have been incoming
         control_flow.set_poll();
 
         // Process incoming events
         match event {
-            // Exit when the window is closed
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => {
-                *control_flow = ControlFlow::Exit;
-            }
-
             // Render when asked to
             Event::MainEventsCleared => {
                 // TODO: Add fast path for GPU backends
@@ -107,6 +100,14 @@ fn main() {
                 //       autotuning the number of simulation steps to fit a frame nicely
                 //       with some margin, with 1 step/frame as the minimum for slow
                 //       backends.
+            }
+
+            // Exit when the window is closed
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
             }
 
             // Ignore other events
