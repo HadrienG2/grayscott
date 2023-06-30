@@ -8,7 +8,7 @@ use compute::{
     cpu::{CpuGrid, SimulateCpu},
     SimulateBase, SimulateCreate,
 };
-use compute_block::{BlockWiseSimulation, DefaultBlockSize, SingleCore};
+use compute_block::{DefaultBlockSize, SingleCore};
 use data::{
     concentration::{Concentration, Species},
     parameters::Parameters,
@@ -19,8 +19,7 @@ use std::num::NonZeroUsize;
 use thiserror::Error;
 
 /// Gray-Scott reaction simulation
-pub type Simulation =
-    BlockWiseSimulation<ParallelSimulation<compute_autovec::Simulation>, MultiCore>;
+pub type Simulation = ParallelSimulation<compute_autovec::Simulation>;
 
 /// Parameters are tunable via CLI args and environment variables
 #[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
@@ -35,13 +34,6 @@ pub struct CliArgs<BackendArgs: Args> {
     /// (default for optimal cache locality in the HT regime) and the L3 per-core
     /// cache size (will reduce work distribution overhead if the backend can
     /// live with the reduced bandwidth and increased latency of the L3 cache).
-    ///
-    /// You should also consider tuning the `block_size` parameter from the
-    /// `BlockWiseSimulation` layer. By default, it ensures that the simulation
-    /// working set fits in the L3 cache, at the cost of increasing thread
-    /// synchronization overhead. Larger blocks will reduce the frequency of
-    /// synchronization, which will be a net benefit on CPUs with a smaller
-    /// amount of L3 cache and larger synchronization overheads.
     #[arg(long, env)]
     seq_block_size: Option<NonZeroUsize>,
 
@@ -136,23 +128,6 @@ where
                 self.backend.step_impl(subgrid);
             });
         });
-    }
-}
-
-/// Multi-core block size selection policy
-///
-/// Multi-core computations should process data in blocks that fit in the sum of
-/// the last-level caches of all cores, and that's what this policy enforces.
-#[derive(Debug)]
-pub struct MultiCore;
-//
-impl DefaultBlockSize for MultiCore {
-    fn block_size(topology: &Topology) -> usize {
-        *topology
-            .cpu_cache_stats()
-            .total_data_cache_sizes()
-            .last()
-            .unwrap() as usize
     }
 }
 
