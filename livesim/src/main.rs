@@ -3,10 +3,13 @@ use clap::Parser;
 use compute::gpu::SimulateGpu;
 #[cfg(not(feature = "gpu"))]
 use compute::SimulateCreate;
-use compute::{gpu::VulkanConfig, Simulate, SimulateBase};
+use compute::{
+    gpu::{VulkanConfig, VulkanContext},
+    Simulate, SimulateBase,
+};
 use compute_selector::Simulation;
 use data::{concentration::AsScalars, parameters::Parameters};
-use std::sync::Arc;
+use std::{borrow::Borrow, sync::Arc};
 use ui::SharedArgs;
 use winit::{
     dpi::PhysicalSize,
@@ -30,46 +33,15 @@ fn main() {
 
     // Parse CLI arguments and handle clap-incompatible defaults
     let args = Args::parse();
-    let [kill_rate, feed_rate, time_step] = ui::kill_feed_deltat(&args.shared);
 
     // Set up an event loop and window
     let (event_loop, window) = create_window(args.shared.nbcol as u32, args.shared.nbrow as u32);
 
-    // Vulkan context configuration
-    let vulkan_config = vulkan_config(window.clone());
+    // Set up the simulation
+    let simulation = create_simulation(&args, &window);
 
-    // Set up the simulation, adapting its Vulkan context (if any) for our needs
-    let parameters = Parameters {
-        kill_rate,
-        feed_rate,
-        time_step,
-        ..Default::default()
-    };
-    let simulation = {
-        #[cfg(feature = "gpu")]
-        {
-            Simulation::with_config(parameters, args.shared.backend, vulkan_config)
-        }
-        #[cfg(not(feature = "gpu"))]
-        {
-            Simulation::new(parameters, args.shared.backend)
-        }
-    }
-    .expect("Failed to create simulation");
-
-    // Create a Vulkan context or reuse that of the simulation
-    let context = {
-        #[cfg(feature = "gpu")]
-        {
-            simulation.context()
-        }
-        #[cfg(not(feature = "gpu"))]
-        {
-            vulkan_config
-                .setup()
-                .expect("Failed to set up Vulkan context")
-        }
-    };
+    // Create a Vulkan context, or share that of the simulation if it has one
+    let context = get_context(&simulation, &window).borrow();
 
     // TODO: Create swapchain, upload buffers, pipeline, etc
 
@@ -86,7 +58,7 @@ fn main() {
 
         // Process incoming events
         match event {
-            // Render when asked to
+            // Render when all events have been processed
             Event::MainEventsCleared => {
                 // TODO: Add fast path for GPU backends
                 simulation
@@ -135,6 +107,51 @@ fn create_window(width: u32, height: u32) -> (EventLoop<()>, Arc<Window>) {
             .expect("Failed to build window"),
     );
     (event_loop, window)
+}
+
+// Set up the simulation
+#[allow(unused)]
+fn create_simulation(args: &Args, window: &Arc<Window>) -> Simulation {
+    let [kill_rate, feed_rate, time_step] = ui::kill_feed_deltat(&args.shared);
+    let parameters = Parameters {
+        kill_rate,
+        feed_rate,
+        time_step,
+        ..Default::default()
+    };
+    {
+        #[cfg(feature = "gpu")]
+        {
+            Simulation::with_config(
+                parameters,
+                args.shared.backend,
+                vulkan_config(window.clone()),
+            )
+        }
+        #[cfg(not(feature = "gpu"))]
+        {
+            Simulation::new(parameters, args.shared.backend)
+        }
+    }
+    .expect("Failed to create simulation")
+}
+
+// Create a Vulkan context or reuse that of the simulation
+#[allow(unused)]
+fn get_context<'simulation>(
+    simulation: &'simulation Simulation,
+    window: &Arc<Window>,
+) -> impl Borrow<VulkanContext> + 'simulation {
+    #[cfg(feature = "gpu")]
+    {
+        simulation.context()
+    }
+    #[cfg(not(feature = "gpu"))]
+    {
+        vulkan_config(window.clone())
+            .setup()
+            .expect("Failed to set up Vulkan context")
+    }
 }
 
 // Vulkan context configuration that we need
