@@ -35,7 +35,7 @@ fn main() {
     let args = Args::parse();
 
     // Set up an event loop and window
-    let (event_loop, window) = create_window(args.shared.nbcol as u32, args.shared.nbrow as u32);
+    let (event_loop, window) = create_window(&args);
 
     // Set up the simulation
     let simulation = create_simulation(&args, &window);
@@ -94,11 +94,14 @@ fn main() {
 }
 
 // Set up a window and associated event loop
-fn create_window(width: u32, height: u32) -> (EventLoop<()>, Arc<Window>) {
+fn create_window(args: &Args) -> (EventLoop<()>, Arc<Window>) {
     let event_loop = EventLoop::new();
     let window = Arc::new(
         WindowBuilder::new()
-            .with_inner_size(PhysicalSize::new(width, height))
+            .with_inner_size(PhysicalSize::new(
+                args.shared.nbcol as u32,
+                args.shared.nbrow as u32,
+            ))
             .with_resizable(false)
             .with_title("Gray-Scott reaction")
             .with_visible(false)
