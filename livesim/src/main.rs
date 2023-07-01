@@ -22,7 +22,7 @@ use winit::{
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// CLI arguments shared with the "livesim" executable
+    /// CLI arguments shared with the "simulate" executable
     #[command(flatten)]
     shared: SharedArgs<Simulation>,
 }
