@@ -10,8 +10,8 @@ edition.workspace = true
 # use the best backend among those enabled.
 compute_autovec = ["compute_selector/compute_autovec"]
 compute_block = ["compute_selector/compute_block"]
-compute_gpu_naive = ["compute_selector/compute_gpu_naive"]
-compute_gpu_specialized = ["compute_selector/compute_gpu_specialized"]
+compute_gpu_naive = ["compute_selector/compute_gpu_naive", "gpu"]
+compute_gpu_specialized = ["compute_selector/compute_gpu_specialized", "gpu"]
 compute_manualvec = ["compute_selector/compute_manualvec"]
 compute_naive = ["compute_selector/compute_naive"]
 compute_parallel = ["compute_selector/compute_parallel"]
@@ -20,6 +20,13 @@ compute_regular = ["compute_selector/compute_regular"]
 # Annotate GPU-side objects with a useful name for debuggers, profilers...
 # Requires the VK_EXT_debug_utils extension, will cause a little overhead
 gpu-debug-utils = ["compute/gpu-debug-utils"]
+
+# Truth that the active backend is a GPU backend
+#
+# Used for vulkan context sharing and data locality optimizations. Automatically
+# enabled for relevant backends. Once Rust gets specialization, we'll use
+# that as a cleaner alternative to this dirty cargo features trick.
+gpu = ["data/gpu"]
 
 # TODO: Add a feature to enable context and data sharing between the
 #       visualization and GPU compute backend + avoid unnecessary copies.

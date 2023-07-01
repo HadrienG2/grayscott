@@ -1,5 +1,9 @@
 use clap::Parser;
-use compute::{gpu::VulkanConfig, Simulate, SimulateBase, SimulateCreate};
+#[cfg(feature = "gpu")]
+use compute::gpu::SimulateGpu;
+#[cfg(not(feature = "gpu"))]
+use compute::SimulateCreate;
+use compute::{gpu::VulkanConfig, Simulate, SimulateBase};
 use compute_selector::Simulation;
 use data::{concentration::AsScalars, parameters::Parameters};
 use std::sync::Arc;
@@ -8,7 +12,7 @@ use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::{Theme, WindowBuilder},
+    window::{Theme, Window, WindowBuilder},
 };
 
 /// Perform Gray-Scott simulation
@@ -29,47 +33,43 @@ fn main() {
     let [kill_rate, feed_rate, time_step] = ui::kill_feed_deltat(&args.shared);
 
     // Set up an event loop and window
-    let event_loop = EventLoop::new();
-    let window = Arc::new(
-        WindowBuilder::new()
-            .with_inner_size(PhysicalSize::new(
-                args.shared.nbcol as u32,
-                args.shared.nbrow as u32,
-            ))
-            .with_resizable(false)
-            .with_title("Gray-Scott reaction")
-            .with_visible(false)
-            .with_theme(Some(Theme::Dark))
-            .build(&event_loop)
-            .expect("Failed to build window"),
-    );
+    let (event_loop, window) = create_window(args.shared.nbcol as u32, args.shared.nbrow as u32);
 
     // Vulkan context configuration
-    // TODO: Fill in requirements as we move forward
-    let default_config = VulkanConfig::default();
-    let vulkan_config = VulkanConfig {
-        window: Some(window.clone()),
-        ..default_config
-    };
+    let vulkan_config = vulkan_config(window.clone());
 
-    // Set up the simulation
-    // TODO: Once ready to share the GPU context, send in our requirements to
-    //       GPU backends so their context is right for us!
-    let simulation = Simulation::new(
-        Parameters {
-            kill_rate,
-            feed_rate,
-            time_step,
-            ..Default::default()
-        },
-        args.shared.backend,
-    )
+    // Set up the simulation, adapting its Vulkan context (if any) for our needs
+    let parameters = Parameters {
+        kill_rate,
+        feed_rate,
+        time_step,
+        ..Default::default()
+    };
+    let simulation = {
+        #[cfg(feature = "gpu")]
+        {
+            Simulation::with_config(parameters, args.shared.backend, vulkan_config)
+        }
+        #[cfg(not(feature = "gpu"))]
+        {
+            Simulation::new(parameters, args.shared.backend)
+        }
+    }
     .expect("Failed to create simulation");
 
-    // TODO: Reuse simulation context instead in GPU mode
-    let context = vulkan_config
-        .setup()
-        .expect("Failed to set up Vulkan context");
+    // Create a Vulkan context or reuse that of the simulation
+    let context = {
+        #[cfg(feature = "gpu")]
+        {
+            simulation.context()
+        }
+        #[cfg(not(feature = "gpu"))]
+        {
+            vulkan_config
+                .setup()
+                .expect("Failed to set up Vulkan context")
+        }
+    };
 
     // TODO: Create swapchain, upload buffers, pipeline, etc
 
@@ -119,4 +119,30 @@ fn main() {
             _ => {}
         }
     });
+}
+
+// Set up a window and associated event loop
+fn create_window(width: u32, height: u32) -> (EventLoop<()>, Arc<Window>) {
+    let event_loop = EventLoop::new();
+    let window = Arc::new(
+        WindowBuilder::new()
+            .with_inner_size(PhysicalSize::new(width, height))
+            .with_resizable(false)
+            .with_title("Gray-Scott reaction")
+            .with_visible(false)
+            .with_theme(Some(Theme::Dark))
+            .build(&event_loop)
+            .expect("Failed to build window"),
+    );
+    (event_loop, window)
+}
+
+// Vulkan context configuration that we need
+fn vulkan_config(window: Arc<Window>) -> VulkanConfig {
+    let default_config = VulkanConfig::default();
+    VulkanConfig {
+        window: Some(window),
+        // TODO: Flesh out as code is added
+        ..default_config
+    }
 }
