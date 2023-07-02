@@ -35,7 +35,7 @@ use vulkano::{
     },
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
     pipeline::cache::PipelineCache,
-    swapchain::{Surface, SurfaceCreationError},
+    swapchain::{Surface, SurfaceCreationError, SurfaceInfo},
     sync::{future::NowFuture, FlushError, GpuFuture},
     ExtensionProperties, LoadingError, OomError, VulkanError, VulkanLibrary, VulkanObject,
 };
@@ -513,11 +513,9 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
                 device.supported_features().contains(&features)
                     && device.supported_extensions().contains(&extensions)
                     && (self.other_device_requirements)(device)
-                    && surface
-                        .as_ref()
-                        .map_or(true, |surface| device_supports_surface(device, surface))
             },
             self.device_preference,
+            surface.as_deref(),
         )?;
 
         let (features, mut extensions) = (self.device_features_extensions)(&physical_device);
@@ -872,6 +870,9 @@ impl Deref for DebuggedInstance {
 /// requirements specified through the `requirements` callback and device
 /// preferences (among viable devices) specified through the `preference` callback.
 ///
+/// If rendering to a window is enabled, device compatibility with the window's
+/// surface is also checked.
+///
 /// See [`suggested_requirements()`] for suggested device requirements that you
 /// should AND with your own requirements.
 ///
@@ -881,30 +882,19 @@ fn select_physical_device(
     instance: &DebuggedInstance,
     mut requirements: impl FnMut(&PhysicalDevice) -> bool,
     mut preference: impl FnMut(&PhysicalDevice, &PhysicalDevice) -> Ordering,
+    surface: Option<&Surface>,
 ) -> Result<Arc<PhysicalDevice>, Error> {
     let selected_device = instance
         .enumerate_physical_devices()?
         .inspect(|device| {
             info!("Found physical device {}", device.properties().device_name);
-            trace!("- With {:#?}", device.properties());
-            trace!(
-                "- With device extensions {}",
-                format_extension_properties(device.extension_properties())
-            );
-            trace!("- With features {:#?}", device.supported_features());
-            trace!("- With {:#?}", device.memory_properties());
-            trace!(
-                "- With queue families {:#?}",
-                device.queue_family_properties()
-            );
-            if device.api_version() >= Version::V1_3
-                || device.supported_extensions().ext_tooling_info
-            {
-                trace!("- With tools {:#?}", device.tool_properties().unwrap());
-            }
+            log_device_description(&device, surface);
         })
         .filter(|device| {
-            let can_use = requirements(device);
+            let can_use = requirements(device)
+                && surface
+                    .as_ref()
+                    .map_or(true, |surface| device_supports_surface(device, surface));
             if can_use {
                 info!("=> Device meets requirements");
             } else {
@@ -919,6 +909,59 @@ fn select_physical_device(
         Ok(device)
     } else {
         Err(Error::NoMatchingDevice)
+    }
+}
+
+/// Log a description of the device at higher log levels
+fn log_device_description(device: &PhysicalDevice, surface: Option<&Surface>) {
+    trace!("- With {:#?}", device.properties());
+    trace!(
+        "- With device extensions {}",
+        format_extension_properties(device.extension_properties())
+    );
+    trace!("- With features {:#?}", device.supported_features());
+    trace!("- With {:#?}", device.memory_properties());
+    trace!(
+        "- With queue families {:#?}",
+        device.queue_family_properties()
+    );
+    if device.api_version() >= Version::V1_3 || device.supported_extensions().ext_tooling_info {
+        trace!("- With tools {:#?}", device.tool_properties().unwrap());
+    }
+    if let Some(surface) = surface {
+        trace!("- And when it comes to the requested drawing surface...");
+        trace!(
+            "  * Can present from queue families {:?}",
+            device
+                .queue_family_properties()
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, _family)| {
+                    device
+                        .surface_support(idx as u32, surface)
+                        .unwrap_or(false)
+                        .then_some(idx)
+                })
+                .collect::<Vec<_>>()
+        );
+        trace!(
+            "  * Supports present modes {:?}",
+            device
+                .surface_present_modes(surface)
+                .map(|iter| iter.collect::<Vec<_>>())
+                .unwrap_or_default()
+        );
+        let surface_info = SurfaceInfo::default();
+        trace!(
+            "  * Supports surface capabilities {:#?}",
+            device.surface_capabilities(surface, surface_info.clone()),
+        );
+        trace!(
+            "  * Supports surface formats {:?}",
+            device
+                .surface_formats(surface, surface_info)
+                .unwrap_or_default()
+        );
     }
 }
 
