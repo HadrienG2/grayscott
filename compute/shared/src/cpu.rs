@@ -77,8 +77,8 @@ pub trait SimulateCpu: SimulateBase + SimulateCreate {
         debug_assert_eq!(out_u_center.shape(), out_v_center.shape());
 
         let stencil_offset = data::parameters::stencil_offset();
-        debug_assert_eq!(out_u_center.nrows(), in_u.nrows() + 2 * stencil_offset[0]);
-        debug_assert_eq!(out_u_center.ncols(), in_u.ncols() + 2 * stencil_offset[1]);
+        debug_assert_eq!(in_u.nrows(), out_u_center.nrows() + 2 * stencil_offset[0]);
+        debug_assert_eq!(in_u.ncols(), out_u_center.ncols() + 2 * stencil_offset[1]);
     }
 
     /// Like `unchecked_step_impl()`, but with some sanity checks
