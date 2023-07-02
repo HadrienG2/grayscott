@@ -11,6 +11,12 @@ use compute_selector::Simulation;
 use data::{concentration::AsScalars, parameters::Parameters};
 use std::{borrow::Borrow, sync::Arc};
 use ui::SharedArgs;
+use vulkano::{
+    device::physical::PhysicalDevice,
+    format::Format,
+    image::ImageUsage,
+    swapchain::{ColorSpace, Surface, SurfaceInfo},
+};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
@@ -161,8 +167,26 @@ fn get_context<'simulation>(
 fn vulkan_config(window: Arc<Window>) -> VulkanConfig {
     let default_config = VulkanConfig::default();
     VulkanConfig {
-        window: Some(window),
+        window_and_reqs: Some((window, Box::new(surface_requirements))),
         // TODO: Flesh out as code is added
         ..default_config
     }
+}
+
+/// Surface-dependent device requirements
+fn surface_requirements(device: &PhysicalDevice, surface: &Surface) -> bool {
+    let surface_info = SurfaceInfo::default();
+    device
+        .surface_formats(surface, surface_info.clone())
+        .map(|vec| {
+            vec.iter().any(|&(format, color)| {
+                (format == Format::R8G8B8A8_SRGB || format == Format::B8G8R8A8_SRGB)
+                    && color == ColorSpace::SrgbNonLinear
+            })
+        })
+        .unwrap_or(false)
+        && device
+            .surface_capabilities(surface, surface_info)
+            .map(|caps| caps.supported_usage_flags.contains(ImageUsage::STORAGE))
+            .unwrap_or(false)
 }

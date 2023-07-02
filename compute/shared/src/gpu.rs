@@ -208,9 +208,10 @@ pub struct VulkanConfig<
     CommAlloc: CommandBufferAllocator = StandardCommandBufferAllocator,
     DescAlloc: DescriptorSetAllocator = StandardDescriptorSetAllocator,
 > {
-    /// Window to which this Vulkan context is meant to render, if any
+    /// Window to which this Vulkan context is meant to render, if any,
+    /// along with associated surface requirements
     #[cfg(feature = "livesim")]
-    pub window: Option<Arc<Window>>,
+    pub window_and_reqs: Option<(Arc<Window>, SurfaceRequirements)>,
 
     /// Decide which Vulkan layers should be enabled
     ///
@@ -430,7 +431,7 @@ impl
         #[cfg(feature = "livesim")]
         {
             Self {
-                window: None,
+                window_and_reqs: None,
                 layers,
                 instance_extensions,
                 enumerate_portability,
@@ -481,7 +482,7 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
         }
         #[cfg(feature = "livesim")]
         {
-            if self.window.is_some() {
+            if self.window_and_reqs.is_some() {
                 instance_extensions =
                     instance_extensions.union(&vulkano_win::required_extensions(&library));
             }
@@ -493,16 +494,17 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
             self.enumerate_portability,
         )?;
 
-        let mut surface = None;
+        let mut surface_and_reqs = None;
         #[cfg(feature = "livesim")]
         {
-            if let Some(window) = self.window {
-                let new_surface = vulkano_win::create_surface_from_winit(window, instance.clone())?;
+            if let Some((window, reqs)) = self.window_and_reqs {
+                let created_surface =
+                    vulkano_win::create_surface_from_winit(window, instance.clone())?;
                 info!(
                     "Created a surface from window with API {:?}",
-                    new_surface.api()
+                    created_surface.api()
                 );
-                surface = Some(new_surface);
+                surface_and_reqs = Some((created_surface, reqs));
             }
         }
 
@@ -515,8 +517,9 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
                     && (self.other_device_requirements)(device)
             },
             self.device_preference,
-            surface.as_deref(),
+            &mut surface_and_reqs,
         )?;
+        let surface = surface_and_reqs.map(|t| t.0);
 
         let (features, mut extensions) = (self.device_features_extensions)(&physical_device);
         if surface.is_some() {
@@ -556,6 +559,9 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
         })
     }
 }
+//
+/// Requirements on a Surface
+pub type SurfaceRequirements = Box<dyn FnMut(&PhysicalDevice, &Surface) -> bool>;
 
 /// Things that can go wrong while setting up a VulkanContext
 #[derive(Debug, Error)]
@@ -882,19 +888,22 @@ fn select_physical_device(
     instance: &DebuggedInstance,
     mut requirements: impl FnMut(&PhysicalDevice) -> bool,
     mut preference: impl FnMut(&PhysicalDevice, &PhysicalDevice) -> Ordering,
-    surface: Option<&Surface>,
+    mut surface_and_reqs: &mut Option<(
+        Arc<Surface>,
+        impl FnMut(&PhysicalDevice, &Surface) -> bool,
+    )>,
 ) -> Result<Arc<PhysicalDevice>, Error> {
     let selected_device = instance
         .enumerate_physical_devices()?
-        .inspect(|device| {
-            info!("Found physical device {}", device.properties().device_name);
-            log_device_description(&device, surface);
-        })
         .filter(|device| {
-            let can_use = requirements(device)
-                && surface
-                    .as_ref()
-                    .map_or(true, |surface| device_supports_surface(device, surface));
+            info!("Found physical device {}", device.properties().device_name);
+            log_device_description(&device, surface_and_reqs.as_ref().map(|t| t.0.deref()));
+
+            let mut can_use = requirements(device);
+            if let Some((surface, requirements)) = &mut surface_and_reqs {
+                can_use |=
+                    device_supports_surface(device, &surface) && requirements(device, &surface);
+            }
             if can_use {
                 info!("=> Device meets requirements");
             } else {
