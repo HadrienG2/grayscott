@@ -953,14 +953,14 @@ fn log_device_description(device: &PhysicalDevice, surface: Option<&Surface>) {
         );
         let surface_info = SurfaceInfo::default();
         trace!(
-            "  * Supports surface capabilities {:#?}",
-            device.surface_capabilities(surface, surface_info.clone()),
-        );
-        trace!(
             "  * Supports surface formats {:?}",
             device
-                .surface_formats(surface, surface_info)
+                .surface_formats(surface, surface_info.clone())
                 .unwrap_or_default()
+        );
+        trace!(
+            "  * Supports surface capabilities {:#?}",
+            device.surface_capabilities(surface, surface_info),
         );
     }
 }
