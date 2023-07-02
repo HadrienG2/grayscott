@@ -792,7 +792,7 @@ impl DebuggedInstance {
             type DUMS = DebugUtilsMessageSeverity;
             type DUMT = DebugUtilsMessageType;
             let mut debug_messenger_info = DebugUtilsMessengerCreateInfo {
-                message_severity: DUMS::ERROR | DUMS::WARNING,
+                message_severity: DUMS::empty(),
                 message_type: DUMT::GENERAL,
                 ..DebugUtilsMessengerCreateInfo::user_callback(Arc::new(|message: &Message| {
                     // SAFETY: This callback must not call into Vulkan APIs
@@ -810,8 +810,19 @@ impl DebuggedInstance {
                     log!(target: &target, level, "{}", message.description);
                 }))
             };
+            if log::STATIC_MAX_LEVEL >= log::Level::Error {
+                debug_messenger_info.message_severity |= DUMS::ERROR;
+            }
+            if log::STATIC_MAX_LEVEL >= log::Level::Warn {
+                debug_messenger_info.message_severity |= DUMS::WARNING;
+            }
+            if log::STATIC_MAX_LEVEL >= log::Level::Debug {
+                debug_messenger_info.message_severity |= DUMS::INFO;
+            }
+            if log::STATIC_MAX_LEVEL >= log::Level::Trace {
+                debug_messenger_info.message_severity |= DUMS::VERBOSE;
+            }
             if cfg!(debug_assertions) {
-                debug_messenger_info.message_severity |= DUMS::INFO | DUMS::VERBOSE;
                 debug_messenger_info.message_type |= DUMT::VALIDATION | DUMT::PERFORMANCE;
             };
             let instance = unsafe {
