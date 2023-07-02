@@ -131,16 +131,19 @@ pub trait Vector: Copy + Sized {
     fn mul(self, other: Self) -> Self;
 
     /// Multiply-add
+    #[inline]
     fn mul_add(self, mul: Self, add: Self) -> Self {
         self.mul(mul).add(add)
     }
 
     /// Multiply-subtract
+    #[inline]
     fn mul_sub(self, mul: Self, sub: Self) -> Self {
         self.mul(mul).sub(sub)
     }
 
     /// Negated multiply-add
+    #[inline]
     fn mul_neg_add(self, min_mul: Self, add: Self) -> Self {
         add.sub(self.mul(min_mul))
     }
@@ -172,33 +175,40 @@ cfg_if! {
 
             type Element = f32;
 
+            #[inline]
             fn splat(x: Self::Element) -> Self {
                 safe_arch::set_splat_m256(x)
             }
 
+            #[inline]
             fn add(self, other: Self) -> Self {
                 safe_arch::add_m256(self, other)
             }
 
+            #[inline]
             fn sub(self, other: Self) -> Self {
                 safe_arch::sub_m256(self, other)
             }
 
+            #[inline]
             fn mul(self, other: Self) -> Self {
                 safe_arch::mul_m256(self, other)
             }
 
             #[cfg(target_feature = "fma")]
+            #[inline]
             fn mul_add(self, mul: Self, add: Self) -> Self {
                 safe_arch::fused_mul_add_m256(self, mul, add)
             }
 
             #[cfg(target_feature = "fma")]
+            #[inline]
             fn mul_sub(self, mul: Self, sub: Self) -> Self {
                 safe_arch::fused_mul_sub_m256(self, mul, sub)
             }
 
             #[cfg(target_feature = "fma")]
+            #[inline]
             fn mul_neg_add(self, min_mul: Self, add: Self) -> Self {
                 safe_arch::fused_mul_neg_add_m256(self, min_mul, add)
             }
@@ -213,33 +223,40 @@ cfg_if! {
 
             type Element = f64;
 
+            #[inline]
             fn splat(x: Self::Element) -> Self {
                 safe_arch::set_splat_m256d(x)
             }
 
+            #[inline]
             fn add(self, other: Self) -> Self {
                 safe_arch::add_m256d(self, other)
             }
 
+            #[inline]
             fn sub(self, other: Self) -> Self {
                 safe_arch::sub_m256d(self, other)
             }
 
+            #[inline]
             fn mul(self, other: Self) -> Self {
                 safe_arch::mul_m256d(self, other)
             }
 
             #[cfg(target_feature = "fma")]
+            #[inline]
             fn mul_add(self, mul: Self, add: Self) -> Self {
                 safe_arch::fused_mul_add_m256d(self, mul, add)
             }
 
             #[cfg(target_feature = "fma")]
+            #[inline]
             fn mul_sub(self, mul: Self, sub: Self) -> Self {
                 safe_arch::fused_mul_sub_m256d(self, mul, sub)
             }
 
             #[cfg(target_feature = "fma")]
+            #[inline]
             fn mul_neg_add(self, min_mul: Self, add: Self) -> Self {
                 safe_arch::fused_mul_neg_add_m256d(self, min_mul, add)
             }
@@ -257,33 +274,40 @@ cfg_if! {
 
             type Element = f32;
 
+            #[inline]
             fn splat(x: Self::Element) -> Self {
                 safe_arch::set_splat_m128(x)
             }
 
+            #[inline]
             fn add(self, other: Self) -> Self {
                 safe_arch::add_m128(self, other)
             }
 
+            #[inline]
             fn sub(self, other: Self) -> Self {
                 safe_arch::sub_m128(self, other)
             }
 
+            #[inline]
             fn mul(self, other: Self) -> Self {
                 safe_arch::mul_m128(self, other)
             }
 
             #[cfg(target_feature = "fma")]
+            #[inline]
             fn mul_add(self, mul: Self, add: Self) -> Self {
                 safe_arch::fused_mul_add_m128(self, mul, add)
             }
 
             #[cfg(target_feature = "fma")]
+            #[inline]
             fn mul_sub(self, mul: Self, sub: Self) -> Self {
                 safe_arch::fused_mul_sub_m128(self, mul, sub)
             }
 
             #[cfg(target_feature = "fma")]
+            #[inline]
             fn mul_neg_add(self, min_mul: Self, add: Self) -> Self {
                 safe_arch::fused_mul_neg_add_m128(self, min_mul, add)
             }
@@ -298,33 +322,40 @@ cfg_if! {
 
             type Element = f64;
 
+            #[inline]
             fn splat(x: Self::Element) -> Self {
                 safe_arch::set_splat_m128d(x)
             }
 
+            #[inline]
             fn add(self, other: Self) -> Self {
                 safe_arch::add_m128d(self, other)
             }
 
+            #[inline]
             fn sub(self, other: Self) -> Self {
                 safe_arch::sub_m128d(self, other)
             }
 
+            #[inline]
             fn mul(self, other: Self) -> Self {
                 safe_arch::mul_m128d(self, other)
             }
 
             #[cfg(target_feature = "fma")]
+            #[inline]
             fn mul_add(self, mul: Self, add: Self) -> Self {
                 safe_arch::fused_mul_add_m128d(self, mul, add)
             }
 
             #[cfg(target_feature = "fma")]
+            #[inline]
             fn mul_sub(self, mul: Self, sub: Self) -> Self {
                 safe_arch::fused_mul_sub_m128d(self, mul, sub)
             }
 
             #[cfg(target_feature = "fma")]
+            #[inline]
             fn mul_neg_add(self, min_mul: Self, add: Self) -> Self {
                 safe_arch::fused_mul_neg_add_m128d(self, min_mul, add)
             }
@@ -340,18 +371,22 @@ cfg_if! {
 
             type Element = T;
 
+            #[inline]
             fn splat(x: Self::Element) -> Self {
                 x
             }
 
+            #[inline]
             fn add(self, other: Self) -> Self {
                 self + other
             }
 
+            #[inline]
             fn sub(self, other: Self) -> Self {
                 self - other
             }
 
+            #[inline]
             fn mul(self, other: Self) -> Self {
                 self * other
             }
