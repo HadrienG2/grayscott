@@ -203,6 +203,8 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     let in_row_stride = checked_row_stride([&in_u, &in_v]);
 
     // Prepare a way to access input windows and output refs by output position
+    // The safety of the closures below is actually asserted on the caller's
+    // side, but sadly unsafe closures aren't a thing in Rust yet.
     let window_shape = (STENCIL_SHAPE[0], STENCIL_SHAPE[1]).strides((in_row_stride, 1));
     let offset = |position: [usize; 2], row_stride: usize| -> usize {
         position[0] * row_stride + position[1]
@@ -228,6 +230,7 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
         }
 
         // Produce current result
+        // Safe because it will only be called on valid window positions
         let out_u = unchecked_output(out_u_ptr, out_pos);
         let out_v = unchecked_output(out_v_ptr, out_pos);
         let win_u = unchecked_input_window(in_u_ptr, out_pos);

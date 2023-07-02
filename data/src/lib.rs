@@ -21,5 +21,6 @@ pub fn array2<T>(f: impl FnMut(usize) -> T) -> [T; 2] {
 #[inline(always)]
 fn array_each_mut<T, const N: usize>(a: &mut [T; N]) -> [&mut T; N] {
     let ptr = a.as_mut_ptr();
+    // Safe because it's just an array map that works around a borrow checker limitation
     array::from_fn(|i| unsafe { &mut *ptr.add(i) })
 }

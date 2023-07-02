@@ -86,6 +86,7 @@ cfg_if::cfg_if! {
             }
         }
 
+        // Safe because the AsStd140 impl does emit a Mat3
         unsafe impl Glsl for StencilWeights {
             const NAME: &'static str = "mat3";
         }

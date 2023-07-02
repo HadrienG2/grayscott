@@ -215,8 +215,9 @@ mod sse2 {
         #[inline(always)]
         fn store(self, target: &mut [f32]) {
             assert_eq!(target.len(), 4);
-            let target = target as *mut [f32] as *mut [f32; 4];
+            // Safe due to assertion above
             unsafe {
+                let target = target as *mut [f32] as *mut [f32; 4];
                 safe_arch::store_unaligned_m128(&mut *target, self);
             }
         }
@@ -265,8 +266,9 @@ mod sse2 {
         #[inline(always)]
         fn store(self, target: &mut [f64]) {
             assert_eq!(target.len(), 2);
-            let target = target as *mut [f64] as *mut [f64; 2];
+            // Safe due to assertion above
             unsafe {
+                let target = target as *mut [f64] as *mut [f64; 2];
                 safe_arch::store_unaligned_m128d(&mut *target, self);
             }
         }
@@ -442,8 +444,9 @@ mod avx {
         #[inline(always)]
         fn store(self, target: &mut [f64]) {
             assert_eq!(target.len(), 4);
-            let target = target as *mut [f64] as *mut [f64; 4];
+            // Safe due to assertion above
             unsafe {
+                let target = target as *mut [f64] as *mut [f64; 4];
                 safe_arch::store_unaligned_m256d(&mut *target, self);
             }
         }
@@ -719,8 +722,9 @@ mod avx {
         #[inline(always)]
         fn store(self, target: &mut [f32]) {
             assert_eq!(target.len(), 8);
-            let target = target as *mut [f32] as *mut [f32; 8];
+            // Safe due to assertion above
             unsafe {
+                let target = target as *mut [f32] as *mut [f32; 8];
                 safe_arch::store_unaligned_m256(&mut *target, self);
             }
         }
@@ -730,6 +734,9 @@ mod avx {
     #[inline(always)]
     #[cfg(target_feature = "avx2")]
     fn shuffle_av_f32_all_m256d(a: m256, idx: m256i) -> m256 {
+        // Safe because safe_arch types are repr(transparent) wrappers
+        // around raw SIMD types and the underlying _mm256_permutevar8x32_ps
+        // intrinsic is safe for all input values
         unsafe {
             let a = std::mem::transmute::<m256, __m256>(a);
             let idx = std::mem::transmute::<m256i, __m256i>(idx);

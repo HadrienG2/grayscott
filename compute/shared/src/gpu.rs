@@ -822,6 +822,7 @@ impl DebuggedInstance {
                 )?
             };
             let messenger =
+                // Safe because our logger does not call into Vulkan APIs
                 unsafe { DebugUtilsMessenger::new(instance.clone(), debug_messenger_info)? };
             Self {
                 instance,
