@@ -482,7 +482,8 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
         #[cfg(feature = "livesim")]
         {
             if self.window.is_some() {
-                instance_extensions |= vulkano_win::required_extensions(&library);
+                instance_extensions =
+                    instance_extensions.union(&vulkano_win::required_extensions(&library));
             }
         }
         let instance = DebuggedInstance::setup(
