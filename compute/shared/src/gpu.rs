@@ -657,7 +657,7 @@ fn default_device_preference(device1: &PhysicalDevice, device2: &PhysicalDevice)
 /// Suggested single-queue creation info
 ///
 /// Will pick a single queue, in the family which is presumed to be the "main"
-/// queue family of the the device.
+/// queue family of the the device, with compute support.
 fn default_queues(
     device: &PhysicalDevice,
     surface: Option<&Surface>,
