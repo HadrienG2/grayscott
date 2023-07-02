@@ -36,6 +36,7 @@ data = { workspace = true, features = ["hdf5"] }
 ui = { workspace = true, features = ["simulation", "tui"] }
 
 [dev-dependencies]
+# Needed in order not to break rust-analyzer
 compute_selector = { workspace = true, features = ["compute_naive"] }
 
 # Criterion workaround for lack of stable benchmark harness

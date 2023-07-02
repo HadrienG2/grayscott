@@ -17,6 +17,7 @@ compute_regular = { workspace = true, optional = true }
 data.workspace = true
 
 [dev-dependencies]
+# Needed in order not to break rust-analyzer
 compute_naive.workspace = true
 
 # Criterion workaround for lack of stable benchmark harness

@@ -45,6 +45,7 @@ vulkano-win.workspace = true
 winit.workspace = true
 
 [dev-dependencies]
+# Needed in order not to break rust-analyzer
 compute_selector = { workspace = true, features = ["compute_naive"] }
 
 # Criterion workaround for lack of stable benchmark harness
