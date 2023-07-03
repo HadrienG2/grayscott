@@ -168,13 +168,13 @@ impl<Backend: SimulateCpu, BlockSize: DefaultBlockSize> SimulateCreate
         };
         let defaults = BlockSize::new(&topology);
         let max_values_per_line = block_values(args.l1_block_size, defaults.l1_block_size());
-        let l2_block_values = block_values(args.l2_block_size, defaults.l2_block_size());
+        let max_values_per_block_pair = block_values(args.l2_block_size, defaults.l2_block_size());
+        let max_values_per_block = max_values_per_block_pair / 2;
 
         // Translate that into a number of SIMD vectors
         Ok(Self {
             max_values_per_line,
-            // 2 blocks must fit in L2 cache for good cache locality
-            max_values_per_block: l2_block_values / 2,
+            max_values_per_block,
             backend: Backend::new(params, args.backend).map_err(Error::Backend)?,
             block_size: PhantomData,
         })
@@ -191,19 +191,23 @@ impl<Backend: SimulateCpu, BlockSize: DefaultBlockSize> SimulateCpu
     }
 
     fn unchecked_step_impl(&self, grid: CpuGrid<Self::Values>) {
-        if Self::grid_len(&grid) > self.max_values_per_block {
-            // Recursively split simulation grid until L2 locality is achieved
+        let line_len_ok = Self::grid_line_len(&grid) <= self.max_values_per_line;
+        if line_len_ok {
+            // Hand over sufficiently small blocks to the backend
+            self.backend.step_impl(grid);
+        } else if Self::grid_len(&grid) > self.max_values_per_block {
+            // Recursively split simulation grid by longest axis (this maximizes
+            // the number of boundary elements that will be hot in cache when
+            // switching from the first half to the second half) until we
+            // reach the desired L2 block size.
             for half_grid in Self::split_grid(grid, None) {
                 self.step_impl(half_grid)
             }
-        } else if Self::grid_line_len(&grid) > self.max_values_per_line {
-            // Recursively split grid lines until L1 locality is achieved
+        } else {
+            // Then, if needed, recursively split grid lines for L1 locality
             for half_grid in Self::split_grid(grid, Some(1)) {
                 self.step_impl(half_grid)
             }
-        } else {
-            // Hand over sufficiently small blocks to the backend
-            self.backend.step_impl(grid);
         }
     }
 }
