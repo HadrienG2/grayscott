@@ -23,8 +23,8 @@ pub struct SharedArgs<Simulation: SimulateBase> {
     pub feedrate: Option<Precision>,
 
     /// Number of simulation steps to perform between images
-    #[arg(short = 'e', long, default_value_t = 34)]
-    pub nbextrastep: usize,
+    #[arg(short = 'e', long)]
+    pub nbextrastep: Option<usize>,
 
     /// Number of rows of the images to be created
     #[arg(short = 'r', long, default_value_t = 1080)]

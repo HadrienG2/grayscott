@@ -41,6 +41,8 @@ fn main() -> Result<()> {
 
     // Parse CLI arguments and handle clap-incompatible defaults
     let args = Args::parse();
+    // TODO: Autotune this, or at least autotune from this
+    let steps_per_image = args.shared.nbextrastep.unwrap_or(1);
 
     // Set up an event loop and window
     let (event_loop, window) = create_window(&args)?;
@@ -80,7 +82,7 @@ fn main() -> Result<()> {
                 // TODO: Add fast path for GPU backends
                 simulation_context
                     .simulation
-                    .perform_steps(&mut species, args.shared.nbextrastep)
+                    .perform_steps(&mut species, steps_per_image)
                     .expect("Failed to compute simulation steps");
                 species
                     .make_result_view()

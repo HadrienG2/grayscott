@@ -46,6 +46,7 @@ fn main() -> Result<()> {
     // Parse CLI arguments and handle clap-incompatible defaults
     let args = Args::parse();
     let [kill_rate, feed_rate, time_step] = ui::kill_feed_deltat(&args.shared);
+    let steps_per_image = args.shared.nbextrastep.unwrap_or(34);
     let file_name = ui::simulation_output_path(args.output);
 
     // Set up the simulation
@@ -98,7 +99,7 @@ fn main() -> Result<()> {
                     let steps = simulation.prepare_steps(
                         simulation.now(),
                         &mut species,
-                        args.shared.nbextrastep,
+                        steps_per_image,
                     )?;
                     species.access_result(|v, context| v.make_scalar_view_after(steps, context))?
                 }
@@ -106,7 +107,7 @@ fn main() -> Result<()> {
                 // Otherwise, use synchronous commands
                 #[cfg(not(feature = "async-gpu"))]
                 {
-                    simulation.perform_steps(&mut species, args.shared.nbextrastep)?;
+                    simulation.perform_steps(&mut species, steps_per_image)?;
                     species.make_result_view()?
                 }
             };
