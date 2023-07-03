@@ -82,7 +82,7 @@ pub trait SimulateCpu: SimulateBase + SimulateCreate {
     }
 
     /// Like `unchecked_step_impl()`, but with some sanity checks
-    #[inline(always)]
+    #[inline]
     fn step_impl(
         &self,
         grid: CpuGrid<Self::Values>,
@@ -91,33 +91,47 @@ pub trait SimulateCpu: SimulateBase + SimulateCreate {
         self.unchecked_step_impl(grid);
     }
 
-    /// Count the number of grid elements which `step_impl()` would manipulate
-    #[inline(always)]
+    /// Count the total number of grid elements which `step_impl()` would manipulate
+    #[inline]
     fn grid_len(grid: &CpuGrid<Self::Values>) -> usize {
         Self::check_grid(grid);
         let ([in_u, in_v], [out_u_center, out_v_center]) = grid;
         in_u.len() + in_v.len() + out_u_center.len() + out_v_center.len()
     }
 
+    /// Count the number of grid elements which `step_impl()` would manipulate
+    /// over the course of processing a single line of output elements
+    #[inline]
+    fn grid_line_len(grid: &CpuGrid<Self::Values>) -> usize {
+        Self::check_grid(grid);
+        let ([in_u, in_v], [out_u_center, out_v_center]) = grid;
+        3 * in_u.ncols() + 3 * in_v.ncols() + out_u_center.ncols() + out_v_center.ncols()
+    }
+
     /// Split the grid on which `step_impl()` operates into two parts
     ///
-    /// The split is performed on the longest axis so that given enough
-    /// splitting iterations, the processed grid fragment becomes close to
-    /// square, which is optimal from the point of view of cache locality.
-    #[inline(always)]
+    /// If no split axis is specified, the split is performed across the longest
+    /// axis in order to maximize the number of shared elements.
+    #[inline]
     fn split_grid<'input, 'output>(
         grid: CpuGrid<'input, 'output, Self::Values>,
+        axis_idx: Option<usize>,
     ) -> [CpuGrid<'input, 'output, Self::Values>; 2] {
         Self::check_grid(&grid);
         let ([in_u, in_v], [out_u_center, out_v_center]) = grid;
 
         // Split across the longest grid axis
         let out_shape = out_u_center.shape();
-        let (axis_idx, out_length) = out_shape
+        let (axis_idx, out_length) = axis_idx.map(
+            |idx| (idx, out_shape[idx])
+        ).unwrap_or_else(||
+            out_shape
             .iter()
+            .copied()
             .enumerate()
             .max_by_key(|(_idx, length)| *length)
-            .unwrap();
+            .unwrap()
+        );
         let axis = Axis(axis_idx);
         let stencil_offset = data::parameters::stencil_offset()[axis_idx];
 
@@ -169,7 +183,7 @@ impl<T: SimulateCpu> SimulateStep for T {
 ///
 /// But at present time, rustc/LLVM cannot optimize the zipped iterator as well
 /// as a specialized explicit joint iterator...
-#[inline(always)]
+#[inline]
 pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     ([in_u, in_v], [mut out_u_center, mut out_v_center]): CpuGrid<'input, 'output, Values>,
 ) -> impl Iterator<

@@ -19,7 +19,7 @@ use std::num::NonZeroUsize;
 use thiserror::Error;
 
 /// Gray-Scott reaction simulation
-pub type Simulation = ParallelSimulation<compute_autovec::Simulation>;
+pub type Simulation = ParallelSimulation<compute_block::Simulation>;
 
 /// Parameters are tunable via CLI args and environment variables
 #[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
@@ -92,7 +92,10 @@ where
             .map(|bs| Ok::<_, Self::Error>(usize::from(bs)))
             .unwrap_or_else(|| {
                 let topology = Topology::new().map_err(Error::Hwloc)?;
-                Ok(SingleCore::block_size(&topology) / 2)
+                let defaults = SingleCore::new(&topology);
+                // FIXME: Expose cache-per-thread in hwlocality so I don't need
+                //        this hardcoded factor of 2 for hyperthreading.
+                Ok(defaults.l2_block_size() / 2)
             })?;
         let sequential_len_threshold = seq_block_size / std::mem::size_of::<Backend::Values>();
 
@@ -120,7 +123,7 @@ where
                 if Self::grid_len(&subgrid) <= self.sequential_len_threshold {
                     (subgrid, None)
                 } else {
-                    let [half1, half2] = Self::split_grid(subgrid);
+                    let [half1, half2] = Self::split_grid(subgrid, None);
                     (half1, Some(half2))
                 }
             })

@@ -22,9 +22,107 @@ pub type Simulation = BlockWiseSimulation<compute_autovec::Simulation, SingleCor
 /// Parameters are tunable via CLI args and environment variables
 #[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CliArgs<BackendArgs: Args> {
-    /// Block size in bytes
+    /// Level 1 block size in bytes
+    ///
+    /// Owing to the stencil nature of the computation, in order to generate one
+    /// line of the output grid, we need to read three lines of the input grid
+    /// (matching line, line before, line after).
+    ///
+    /// The following ASCII art demonstrates the naive input data access
+    /// pattern without any cache blocking:
+    ///
+    /// ```text
+    /// Input:                         Output:
+    /// ------------------------       ------------------------
+    /// ==###===================       ------------------------
+    /// ==###===================       ===#====================
+    /// ==###===================       ------------------------
+    /// ------------------------       ------------------------
+    /// ------------------------       ------------------------
+    /// ------------------------       ------------------------
+    /// ------------------------       ------------------------
+    /// ```
+    ///
+    /// Here's what the various symbols represent:
+    ///
+    /// - `#` represents data which is directly being accessed over the course
+    ///   of processing one output data point
+    /// - `=` represents data which is being accessed over the course of
+    ///   processing one line of output data points
+    /// - `-` represents other data which is accessed before and after the
+    ///   active lines of inputs/outputs.
+    ///
+    /// This CLI parameter controls a first layer of cache blocking which cuts
+    /// lines in segments to ensure that three consecutive segments fit in
+    /// cache. This way, by the time we start processing a new line, the input
+    /// line before will still resident in cache.
+    ///
+    /// If we applied only this layer of cache blocking, the data access
+    /// pattern would become this...
+    ///
+    /// ```text
+    /// Input:                          Output
+    /// --------................        --------................
+    /// ==###===................        --------................
+    /// ==###===................        ===#====................
+    /// ==###===................        --------................
+    /// --------................        --------................
+    /// --------................        --------................
+    /// --------................        --------................
+    /// --------................        --------................
+    /// ```
+    ///
+    /// ...where data is now accessed in columnar blocks. In this new schematic,
+    /// `-` represents of data line segments that will be accessed before or
+    /// after the active segment inside of the active columnar block, and `.`
+    /// represents data points which will be accessed later on.
+    ///
+    /// By default, the block size is tuned to the size of the CPU's L1 cache.
+    /// Lines will be cut so that that 3 line segments fit into the block size.
     #[arg(long, env)]
-    block_size: Option<NonZeroUsize>,
+    l1_block_size: Option<NonZeroUsize>,
+
+    /// Level 2 block size in bytes
+    ///
+    /// The first layer of cache blocking cuts the grid into columnar blocks,
+    /// which ensures cache locality between consecutive data lines. However,
+    /// it does not ensure cache locality is not guaranteed between consecutive
+    /// data columns: by the time a new columnar data block starts being
+    /// processed, all memory accesses to the line of input data on the left of
+    /// the column may cache-miss all the way to RAM.
+    ///
+    /// To address this, a second layer of cache blocking is used, which further
+    /// subdivides the columnar blocks produced by L1 blocking into rectangles:
+    ///
+    /// ```text
+    /// Input:                          Output
+    /// --------................        --------................
+    /// ==###===................        --------................
+    /// ==###===................        ===#====................
+    /// ==###===................        --------................
+    /// --------................        --------................
+    /// --------................        --------................
+    /// ........................        ........................
+    /// ........................        ........................
+    /// ```
+    ///
+    /// These rectangular blocks are then accessed along a fractal space-filling
+    /// curve, ensuring that elements on the boundary between two consecutive
+    /// blocks fit in in the highest level of cache possible. Here is an
+    /// example of block access order with the Z-shaped Morton curve:
+    ///
+    /// ```text
+    ///  1  2  5  6
+    ///  3  4  7  8
+    ///  9 10 13 14
+    /// 11 12 15 16
+    /// ```
+    ///
+    /// By default, the block size is tuned to the size of the CPU's L2 cache.
+    /// Rectangular blocks will be cut to ensure that 2 consecutive blocks fit
+    /// into the block size.
+    #[arg(long, env)]
+    l2_block_size: Option<NonZeroUsize>,
 
     /// Expose backend arguments too
     #[command(flatten)]
@@ -34,12 +132,14 @@ pub struct CliArgs<BackendArgs: Args> {
 /// Gray-Scott simulation wrapper that enforces block-wise iteration
 #[derive(Debug)]
 pub struct BlockWiseSimulation<Backend: SimulateCpu, BlockSize: DefaultBlockSize> {
-    /// Maximal number of grid elements (scalars or SIMD blocks) to be
-    /// manipulated in one processing batch for optimal cache locality
-    max_values_per_block: usize,
-
     /// Underlying compute backend
     backend: Backend,
+
+    /// Maximal number of values processed per line of the simulation grid
+    max_values_per_line: usize,
+
+    /// Maximal number of values processed per recursively split grid block
+    max_values_per_block: usize,
 
     /// Block size selector
     block_size: PhantomData<BlockSize>,
@@ -64,18 +164,20 @@ impl<Backend: SimulateCpu, BlockSize: DefaultBlockSize> SimulateCreate
     for BlockWiseSimulation<Backend, BlockSize>
 {
     fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error> {
-        // Determine the desired block size in bytes
-        let max_bytes_per_block = args
-            .block_size
-            .map(|bs| Ok::<_, Self::Error>(usize::from(bs)))
-            .unwrap_or_else(|| {
-                let topology = Topology::new().map_err(Error::Hwloc)?;
-                Ok(BlockSize::block_size(&topology))
-            })?;
+        // Determine the desired block sizes in unit of processed values
+        let topology = Topology::new().map_err(Error::Hwloc)?;
+        let block_values = |arg: Option<NonZeroUsize>, default| {
+            arg.map(usize::from).unwrap_or(default) / std::mem::size_of::<Backend::Values>()
+        };
+        let defaults = BlockSize::new(&topology);
+        let max_values_per_line = block_values(args.l1_block_size, defaults.l1_block_size());
+        let l2_block_values = block_values(args.l2_block_size, defaults.l2_block_size());
 
         // Translate that into a number of SIMD vectors
         Ok(Self {
-            max_values_per_block: max_bytes_per_block / std::mem::size_of::<Backend::Values>(),
+            max_values_per_line,
+            // 2 blocks must fit in L2 cache for good cache locality
+            max_values_per_block: l2_block_values / 2,
             backend: Backend::new(params, args.backend).map_err(Error::Backend)?,
             block_size: PhantomData,
         })
@@ -92,36 +194,72 @@ impl<Backend: SimulateCpu, BlockSize: DefaultBlockSize> SimulateCpu
     }
 
     fn unchecked_step_impl(&self, grid: CpuGrid<Self::Values>) {
-        // Is the current grid fragment small enough?
-        if Self::grid_len(&grid) < self.max_values_per_block {
-            // If so, process it as is
-            self.backend.step_impl(grid);
-        } else {
-            // Otherwise, split it and process the two halves sequentially
-            for half_grid in Self::split_grid(grid) {
+        if Self::grid_len(&grid) > self.max_values_per_block {
+            // Recursively split simulation grid until L2 locality is achieved
+            for half_grid in Self::split_grid(grid, None) {
                 self.step_impl(half_grid)
             }
+        } else if Self::grid_line_len(&grid) > self.max_values_per_line {
+            // Recursively split grid lines until L1 locality is achieved
+            for half_grid in Self::split_grid(grid, Some(1)) {
+                self.step_impl(half_grid)
+            }
+        } else {
+            // Hand over sufficiently small blocks to the backend
+            self.backend.step_impl(grid);
         }
     }
 }
 
 /// Default block size selection policy, in absence of explicit user setting
 pub trait DefaultBlockSize {
-    /// Knowing the hardware topology, pick a good block size for the
-    /// computation of interest (results are in bytes)
-    fn block_size(topology: &Topology) -> usize;
+    /// Acquire required data from the hwloc topology
+    fn new(topology: &Topology) -> Self;
+
+    /// Suggested level 1 block size in bytes
+    fn l1_block_size(&self) -> usize;
+
+    /// Suggested level 2 block size in bytes
+    fn l2_block_size(&self) -> usize;
 }
 
 /// Single-core block size selection policy
 ///
-/// Single-core computations should process data in blocks that fit in the L1
-/// cache of any single core, and that's what this policy enforces.
+/// Single-core computations can use the full L1 and L2 cache and need not
+/// concern themselves with another hyperthread using part of it.
 #[derive(Debug)]
-pub struct SingleCore;
+pub struct SingleCore {
+    /// Level 1 block size in bytes
+    l1_block_size: usize,
+
+    /// Level 2 block size in bytes
+    l2_block_size: usize,
+}
 //
 impl DefaultBlockSize for SingleCore {
-    fn block_size(topology: &Topology) -> usize {
-        topology.cpu_cache_stats().smallest_data_cache_sizes()[0] as usize
+    fn new(topology: &Topology) -> Self {
+        let cache_stats = topology.cpu_cache_stats();
+        let cache_sizes = cache_stats.smallest_data_cache_sizes();
+
+        let l1_block_size = cache_sizes.get(0).copied().unwrap_or(32 * 1024) as usize;
+        let l2_block_size = if cache_sizes.len() > 1 {
+            cache_sizes[1] as usize
+        } else {
+            l1_block_size
+        };
+
+        Self {
+            l1_block_size,
+            l2_block_size,
+        }
+    }
+
+    fn l1_block_size(&self) -> usize {
+        self.l1_block_size
+    }
+
+    fn l2_block_size(&self) -> usize {
+        self.l2_block_size
     }
 }
 
