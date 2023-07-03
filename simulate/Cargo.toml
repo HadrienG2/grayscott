@@ -29,6 +29,7 @@ gpu-debug-utils = ["compute/gpu-debug-utils"]
 async-gpu = []
 
 [dependencies]
+anyhow.workspace = true
 clap.workspace = true
 compute.workspace = true
 compute_selector.workspace = true

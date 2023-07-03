@@ -1,3 +1,4 @@
+use anyhow::Result;
 use clap::Parser;
 use data::hdf5::{Config, Reader};
 use image::{ImageBuffer, Rgb, RgbImage};
@@ -52,7 +53,7 @@ struct Args {
     output_threads: NonZeroUsize,
 }
 
-fn main() {
+fn main() -> Result<()> {
     // Enable logging to syslog
     ui::init_syslog();
 
@@ -63,8 +64,7 @@ fn main() {
     let reader = Reader::open(Config {
         file_name: ui::simulation_output_path(args.input),
         ..Default::default()
-    })
-    .expect("Failed to open input file");
+    })?;
     let [rows, cols] = reader.image_shape();
 
     // Set up progress reporting
@@ -137,11 +137,10 @@ fn main() {
             });
 
             // Send it to the output thread so it's written down
-            image_send
-                .send((idx, image))
-                .expect("Output thread has crashed");
+            image_send.send((idx, image))?;
         }
-    });
+        Ok::<_, anyhow::Error>(())
+    })
 }
 
 // Unfortunately, the image crate does not currently have view types and
@@ -155,7 +154,7 @@ fn image_view(image: &mut RgbImage) -> RgbImageView {
     let width = image.width();
     let height = image.height();
     let subpixels: &mut [u8] = image;
-    RgbImageView::from_raw(width, height, subpixels).unwrap()
+    RgbImageView::from_raw(width, height, subpixels).expect("Should never fail")
 }
 
 // Vertically split an image view
@@ -166,6 +165,6 @@ fn vsplit_image(image: RgbImageView, row: usize) -> [RgbImageView; 2] {
     let (subpixels1, subpixels2) = subpixels.split_at_mut(subpixels_per_row * row);
     [subpixels1, subpixels2].map(|subpixels| {
         let height = (subpixels.len() / subpixels_per_row) as u32;
-        RgbImageView::from_raw(width, height, subpixels).unwrap()
+        RgbImageView::from_raw(width, height, subpixels).expect("Should never fail")
     })
 }

@@ -125,6 +125,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.71"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c7d0618f0e0b7e8ff11427422b64564d5fb0be1940354bfe2e0529b18a9d9b8"
+
+[[package]]
 name = "arrayref"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -683,6 +689,7 @@ dependencies = [
 name = "data-to-pics"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "crossbeam-channel",
  "data",
@@ -1136,13 +1143,13 @@ checksum = "ef53942eb7bf7ff43a617b3e2c1c4a5ecf5944a7c1bc12d7ee39bbb15e5c1519"
 name = "livesim"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "compute",
  "compute_selector",
  "data",
  "env_logger",
  "log",
- "thiserror",
  "ui",
  "vulkano",
  "vulkano-win",
@@ -1865,6 +1872,7 @@ checksum = "238abfbb77c1915110ad968465608b68e869e0772622c9656714e73e5a1a522f"
 name = "simulate"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "compute",
  "compute_selector",

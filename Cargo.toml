@@ -22,6 +22,9 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace.dependencies]
+# Used for error propagation and backtraces in final binaries
+anyhow = "1.0"
+
 # Used to safely manipulate data as bytes
 bytemuck = "1.13"
 

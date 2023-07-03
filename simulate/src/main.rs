@@ -1,3 +1,4 @@
+use anyhow::Result;
 use clap::Parser;
 #[cfg(feature = "async-gpu")]
 use compute::gpu::SimulateGpu;
@@ -38,7 +39,7 @@ struct Args {
     output_buffer: NonZeroUsize,
 }
 
-fn main() {
+fn main() -> Result<()> {
     // Enable logging to syslog
     ui::init_syslog();
 
@@ -56,13 +57,10 @@ fn main() {
             ..Default::default()
         },
         args.shared.backend,
-    )
-    .expect("Failed to create simulation");
+    )?;
 
     // Set up chemical species concentration storage
-    let mut species = simulation
-        .make_species([args.shared.nbrow, args.shared.nbcol])
-        .expect("Failed to set up simulation grid");
+    let mut species = simulation.make_species([args.shared.nbrow, args.shared.nbcol])?;
     let mut writer = Writer::create(
         hdf5::Config {
             file_name,
@@ -70,8 +68,7 @@ fn main() {
         },
         &species,
         args.nbimage,
-    )
-    .expect("Failed to open output file");
+    )?;
 
     // Set up progress reporting
     let progress = ui::init_progress_reporting("Running simulation step", args.nbimage);
@@ -98,34 +95,29 @@ fn main() {
                 // If GPU-specific asynchronous commands are available, use them
                 #[cfg(feature = "async-gpu")]
                 {
-                    let steps = simulation
-                        .prepare_steps(simulation.now(), &mut species, args.shared.nbextrastep)
-                        .expect("Failed to prepare simulation steps");
-                    species.access_result(|v, context| {
-                        v.make_scalar_view_after(steps, context)
-                            .expect("Failed to run simulation and collect results")
-                    })
+                    let steps = simulation.prepare_steps(
+                        simulation.now(),
+                        &mut species,
+                        args.shared.nbextrastep,
+                    )?;
+                    species.access_result(|v, context| v.make_scalar_view_after(steps, context))?
                 }
 
                 // Otherwise, use synchronous commands
                 #[cfg(not(feature = "async-gpu"))]
                 {
-                    simulation
-                        .perform_steps(&mut species, args.shared.nbextrastep)
-                        .expect("Failed to compute simulation steps");
-                    species
-                        .make_result_view()
-                        .expect("Failed to extract result")
+                    simulation.perform_steps(&mut species, args.shared.nbextrastep)?;
+                    species.make_result_view()?
                 }
             };
 
             // Schedule writing the image
-            sender
-                .send(image.as_scalars().to_owned())
-                .expect("I/O thread has died");
+            sender.send(image.as_scalars().to_owned())?;
         }
-    });
+        Ok::<_, anyhow::Error>(())
+    })?;
 
     // Make sure output data is written correctly
-    writer.close().expect("Failed to close output file");
+    writer.close()?;
+    Ok(())
 }

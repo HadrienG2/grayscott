@@ -1,3 +1,4 @@
+use anyhow::Result;
 use clap::Parser;
 #[cfg(feature = "gpu")]
 use compute::gpu::SimulateGpu;
@@ -11,19 +12,15 @@ use compute_selector::Simulation;
 use data::{concentration::AsScalars, parameters::Parameters};
 use log::info;
 use std::sync::Arc;
-use thiserror::Error;
 use ui::SharedArgs;
 use vulkano::{
     device::{physical::PhysicalDevice, Device},
     format::{Format, NumericType},
     image::{ImageAspects, ImageUsage, SwapchainImage},
-    swapchain::{
-        ColorSpace, Surface, SurfaceInfo, Swapchain, SwapchainCreateInfo, SwapchainCreationError,
-    },
+    swapchain::{ColorSpace, Surface, SurfaceInfo, Swapchain, SwapchainCreateInfo},
 };
 use winit::{
     dpi::PhysicalSize,
-    error::OsError,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Theme, Window, WindowBuilder},
@@ -38,7 +35,7 @@ struct Args {
     shared: SharedArgs<Simulation>,
 }
 
-fn main() {
+fn main() -> Result<()> {
     // Enable logging to stderr
     env_logger::init();
 
@@ -46,19 +43,17 @@ fn main() {
     let args = Args::parse();
 
     // Set up an event loop and window
-    let (event_loop, window) = create_window(&args).expect("Failed to build window");
+    let (event_loop, window) = create_window(&args)?;
 
     // Set up the simulation and Vulkan context
-    let simulation_context = SimulationContext::new(&args, &window)
-        .expect("Failed to create simulation and Vulkan context");
+    let simulation_context = SimulationContext::new(&args, &window)?;
     let simulation = &simulation_context.simulation;
     let context = simulation_context.context();
     let device = &context.device;
 
     // Set up a swapchain
     let (swapchain, swapchain_images) =
-        create_swapchain(device.clone(), simulation_context.surface().clone())
-            .expect("Failed to create swapchain");
+        create_swapchain(device.clone(), simulation_context.surface().clone())?;
 
     // TODO: Create the color palette, its descriptor set, and a sampler to be
     //       directly bound to the compute pipeline.
@@ -70,8 +65,7 @@ fn main() {
     // TODO: If this is GPU storage, use it directly instead of round tripping
     let mut species = simulation_context
         .simulation
-        .make_species([args.shared.nbrow, args.shared.nbcol])
-        .expect("Failed to set up simulation grid");
+        .make_species([args.shared.nbrow, args.shared.nbcol])?;
 
     // Show window and start event loop
     window.set_visible(true);
@@ -114,11 +108,11 @@ fn main() {
             // Ignore other events
             _ => {}
         }
-    });
+    })
 }
 
 /// Set up a window and associated event loop
-fn create_window(args: &Args) -> Result<(EventLoop<()>, Arc<Window>), OsError> {
+fn create_window(args: &Args) -> Result<(EventLoop<()>, Arc<Window>)> {
     let event_loop = EventLoop::new();
     let window = Arc::new(
         WindowBuilder::new()
@@ -152,7 +146,7 @@ struct SimulationContext {
 //
 impl SimulationContext {
     /// Set up the simulation and Vulkan context
-    fn new(args: &Args, window: &Arc<Window>) -> Result<Self, SimulationContextError> {
+    fn new(args: &Args, window: &Arc<Window>) -> Result<Self> {
         // Configure simulation
         let [kill_rate, feed_rate, time_step] = ui::kill_feed_deltat(&args.shared);
         let parameters = Parameters {
@@ -176,8 +170,7 @@ impl SimulationContext {
             {
                 Simulation::new(parameters, args.shared.backend)
             }
-        }
-        .map_err(SimulationContextError::Simulation)?;
+        }?;
 
         // Create a dedicated context if the simulation is not Vulkan-based
         {
@@ -208,20 +201,13 @@ impl SimulationContext {
         }
     }
 
-    /// Get access to the rendering surface (we know that our context was
-    /// configured with a window, and should thus have set up a surface)
+    /// Get access to the rendering surface
     fn surface(&self) -> &Arc<Surface> {
-        self.context().surface.as_ref().expect("Should be there")
+        self.context()
+            .surface
+            .as_ref()
+            .expect("There should be one (window specified in VulkanConfig)")
     }
-}
-//
-#[derive(Debug, Error)]
-enum SimulationContextError {
-    #[error("failed to create simulation")]
-    Simulation(<Simulation as SimulateBase>::Error),
-
-    #[error("failed to create Vulkan context")]
-    VulkanContext(#[from] compute::gpu::Error),
 }
 
 /// Vulkan context configuration that we need
@@ -266,19 +252,17 @@ fn is_supported_format((format, colorspace): (Format, ColorSpace)) -> bool {
 fn create_swapchain(
     device: Arc<Device>,
     surface: Arc<Surface>,
-) -> Result<(Arc<Swapchain>, Vec<Arc<SwapchainImage>>), SwapchainCreationError> {
+) -> Result<(Arc<Swapchain>, Vec<Arc<SwapchainImage>>)> {
     let physical_device = device.physical_device();
 
     let surface_info = SurfaceInfo::default();
-    let surface_capabilities = physical_device
-        .surface_capabilities(&surface, surface_info.clone())
-        .expect("Failed to query surface capabilities");
+    let surface_capabilities =
+        physical_device.surface_capabilities(&surface, surface_info.clone())?;
     let (image_format, image_color_space) = physical_device
-        .surface_formats(&surface, surface_info)
-        .expect("Failed to query surface formats")
+        .surface_formats(&surface, surface_info)?
         .into_iter()
         .find(|format| is_supported_format(*format))
-        .expect("There should be at least one supported format");
+        .expect("There should be one (checked at device creation time)");
 
     let create_info = SwapchainCreateInfo {
         min_image_count: surface_capabilities.min_image_count.max(2),
@@ -289,5 +273,9 @@ fn create_swapchain(
     };
     info!("Will now create a swapchain with {create_info:#?}");
 
-    Swapchain::new(device.clone(), surface.clone(), create_info)
+    Ok(Swapchain::new(
+        device.clone(),
+        surface.clone(),
+        create_info,
+    )?)
 }
