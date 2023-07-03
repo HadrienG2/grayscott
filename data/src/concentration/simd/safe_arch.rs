@@ -189,7 +189,7 @@ mod sse2 {
             blend_varying_m128(self, other, mask)
         }
 
-        #[inline(always)]
+        #[inline]
         fn shift_left(self, offset: usize) -> Self {
             safe_arch::cast_to_m128_from_m128i(lane_shl_i32_m128i(
                 safe_arch::cast_to_m128i_from_m128(self),
@@ -197,7 +197,7 @@ mod sse2 {
             ))
         }
 
-        #[inline(always)]
+        #[inline]
         fn shift_right(self, offset: usize) -> Self {
             safe_arch::cast_to_m128_from_m128i(lane_shr_i32_m128i(
                 safe_arch::cast_to_m128i_from_m128(self),
@@ -212,7 +212,7 @@ mod sse2 {
             matrix
         }
 
-        #[inline(always)]
+        #[inline]
         fn store(self, target: &mut [f32]) {
             assert_eq!(target.len(), 4);
             // Safe due to assertion above
@@ -239,7 +239,7 @@ mod sse2 {
             blend_varying_m128d(self, other, mask)
         }
 
-        #[inline(always)]
+        #[inline]
         fn shift_left(self, offset: usize) -> Self {
             safe_arch::cast_to_m128d_from_m128i(lane_shl_i32_m128i(
                 safe_arch::cast_to_m128i_from_m128d(self),
@@ -247,7 +247,7 @@ mod sse2 {
             ))
         }
 
-        #[inline(always)]
+        #[inline]
         fn shift_right(self, offset: usize) -> Self {
             safe_arch::cast_to_m128d_from_m128i(lane_shr_i32_m128i(
                 safe_arch::cast_to_m128i_from_m128d(self),
@@ -263,7 +263,7 @@ mod sse2 {
             ]
         }
 
-        #[inline(always)]
+        #[inline]
         fn store(self, target: &mut [f64]) {
             assert_eq!(target.len(), 2);
             // Safe due to assertion above
@@ -274,7 +274,7 @@ mod sse2 {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     fn lane_shl_i32_m128i(v: m128i, offset: usize) -> m128i {
         match offset {
             0 => v,
@@ -285,7 +285,7 @@ mod sse2 {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     fn lane_shr_i32_m128i(v: m128i, offset: usize) -> m128i {
         match offset {
             0 => v,
@@ -364,7 +364,7 @@ mod avx {
             safe_arch::blend_varying_m256d(self, other, mask)
         }
 
-        #[inline(always)]
+        #[inline]
         fn shift_left(self, offset: usize) -> Self {
             let zero = safe_arch::set_splat_m256d(0.0);
             match offset {
@@ -395,7 +395,7 @@ mod avx {
             }
         }
 
-        #[inline(always)]
+        #[inline]
         fn shift_right(self, offset: usize) -> Self {
             let zero = safe_arch::set_splat_m256d(0.0);
             match offset {
@@ -441,7 +441,7 @@ mod avx {
             ]
         }
 
-        #[inline(always)]
+        #[inline]
         fn store(self, target: &mut [f64]) {
             assert_eq!(target.len(), 4);
             // Safe due to assertion above
@@ -560,7 +560,7 @@ mod avx {
             safe_arch::blend_varying_m256(self, other, mask)
         }
 
-        #[inline(always)]
+        #[inline]
         fn shift_left(self, offset: usize) -> Self {
             // For even offsets, we can reuse the work done for m256d, as far as
             // I know no x86 implementation has f32 -> f64 bypass delays
@@ -614,7 +614,7 @@ mod avx {
             }
         }
 
-        #[inline(always)]
+        #[inline]
         fn shift_right(self, offset: usize) -> Self {
             // For even offsets, we can reuse the work done for m256d, as far as
             // I know no x86 implementation has f32 -> f64 bypass delays
@@ -719,7 +719,7 @@ mod avx {
             ]
         }
 
-        #[inline(always)]
+        #[inline]
         fn store(self, target: &mut [f32]) {
             assert_eq!(target.len(), 8);
             // Safe due to assertion above
@@ -731,7 +731,7 @@ mod avx {
     }
 
     // Intrinsic interface to vpermps that was forgotten by safe_arch
-    #[inline(always)]
+    #[inline]
     #[cfg(target_feature = "avx2")]
     fn shuffle_av_f32_all_m256d(a: m256, idx: m256i) -> m256 {
         // Safe because safe_arch types are repr(transparent) wrappers

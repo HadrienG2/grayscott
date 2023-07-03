@@ -97,7 +97,7 @@ cfg_if::cfg_if! {
 pub const STENCIL_SHAPE: [usize; 2] = [3, 3];
 
 /// Offset from the top-left corner of CPUStencilWeights to its center
-#[inline(always)]
+#[inline]
 pub fn stencil_offset() -> [usize; 2] {
     STENCIL_SHAPE.map(|dim| {
         debug_assert_eq!(dim % 2, 1);

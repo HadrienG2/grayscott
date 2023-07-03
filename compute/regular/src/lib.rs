@@ -145,7 +145,7 @@ impl Simulation {
     /// Compute a pixel of the species concentration matrices
     ///
     /// This function must be inlined for the center pixel special-casing to work
-    #[inline(always)]
+    #[inline]
     fn compute_pixel(
         &self,
         win_u: ArrayView2<'_, Precision>,
