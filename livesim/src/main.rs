@@ -145,7 +145,7 @@ struct SimulationContext {
     /// Gray-Scott reaction simulation, which may have its own VulkanContext
     simulation: Simulation,
 
-    /// Custom VulkanContext if `simulation` doesn't has one
+    /// Custom VulkanContext if `simulation` doesn't have one
     #[cfg(not(feature = "gpu"))]
     context: VulkanContext,
 }
@@ -153,6 +153,7 @@ struct SimulationContext {
 impl SimulationContext {
     /// Set up the simulation and Vulkan context
     fn new(args: &Args, window: &Arc<Window>) -> Result<Self, SimulationContextError> {
+        // Configure simulation
         let [kill_rate, feed_rate, time_step] = ui::kill_feed_deltat(&args.shared);
         let parameters = Parameters {
             kill_rate,
@@ -161,6 +162,7 @@ impl SimulationContext {
             ..Default::default()
         };
 
+        // Create simulation, forwarding our context config if it's Vulkan-based
         let simulation = {
             #[cfg(feature = "gpu")]
             {
@@ -177,6 +179,7 @@ impl SimulationContext {
         }
         .map_err(SimulationContextError::Simulation)?;
 
+        // Create a dedicated context if the simulation is not Vulkan-based
         {
             #[cfg(feature = "gpu")]
             {
@@ -252,9 +255,9 @@ fn is_supported_format((format, colorspace): (Format, ColorSpace)) -> bool {
     let Some(color_type) = format.type_color() else { return false };
     format.aspects().contains(ImageAspects::COLOR)
         && format.components().iter().take(3).all(|&bits| bits > 0)
-        // This may seem surprising given that the source data is sRGB, but
-        // remember that Vulkan implicitly performs an sRGB -> linear conversion
-        // when a shader loads a texel from an sRGB image.
+        // This may seem surprising given that the source data is
+        // NumericType::SRGB, but remember that Vulkan implicitly performs an
+        // sRGB -> linear conversion when a shader loads a texel.
         && color_type == NumericType::UNORM
         && colorspace == ColorSpace::SrgbNonLinear
 }
