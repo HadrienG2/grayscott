@@ -500,10 +500,7 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
             if let Some((window, reqs)) = self.window_and_reqs {
                 let created_surface =
                     vulkano_win::create_surface_from_winit(window, instance.clone())?;
-                info!(
-                    "Created a surface from window with API {:?}",
-                    created_surface.api()
-                );
+                info!("Created a surface from {:?} window", created_surface.api());
                 surface_and_reqs = Some((created_surface, reqs));
             }
         }
@@ -790,7 +787,7 @@ impl DebuggedInstance {
             enumerate_portability,
             ..InstanceCreateInfo::application_from_cargo_toml()
         };
-        info!("Will now create a Vulkan instance with configuration {create_info:#?}");
+        info!("Will now create a Vulkan instance with {create_info:#?}");
 
         let result = if enabled_extensions.ext_debug_utils {
             type DUMS = DebugUtilsMessageSeverity;
@@ -829,6 +826,8 @@ impl DebuggedInstance {
             if cfg!(debug_assertions) {
                 debug_messenger_info.message_type |= DUMT::VALIDATION | DUMT::PERFORMANCE;
             };
+            info!("Setting up debug utils with {debug_messenger_info:#?}");
+
             let instance = unsafe {
                 // Safe because our logger does not call into Vulkan APIs
                 Instance::with_debug_utils_messengers(
@@ -1013,7 +1012,7 @@ fn create_logical_device(
         queue_create_infos,
         ..Default::default()
     };
-    info!("Will now create a logical device with configuration {create_info:#?}");
+    info!("Will now create a logical device with {create_info:#?}");
     let (device, queues) = Device::new(physical_device, create_info)?;
     Ok((device, queues.collect()))
 }

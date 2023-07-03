@@ -9,6 +9,7 @@ use compute::{
 };
 use compute_selector::Simulation;
 use data::{concentration::AsScalars, parameters::Parameters};
+use log::info;
 use std::sync::Arc;
 use thiserror::Error;
 use ui::SharedArgs;
@@ -54,15 +55,19 @@ fn main() {
     let context = simulation_context.context();
     let device = &context.device;
 
-    // Create swapchain
+    // Set up a swapchain
     let (swapchain, swapchain_images) =
         create_swapchain(device.clone(), simulation_context.surface().clone())
             .expect("Failed to create swapchain");
 
+    // TODO: Create the color palette, its descriptor set, and a sampler to be
+    //       directly bound to the compute pipeline.
+
     // TODO: Create upload buffers as necessary, pipeline, etc (this step will
-    //       change once we start sharing data with GPU contexts)
+    //       change once we start sharing data with the GPU context)
 
     // Set up chemical species concentration storage
+    // TODO: If this is GPU storage, use it directly instead of round tripping
     let mut species = simulation_context
         .simulation
         .make_species([args.shared.nbrow, args.shared.nbcol])
@@ -247,7 +252,11 @@ fn is_supported_format((format, colorspace): (Format, ColorSpace)) -> bool {
     let Some(color_type) = format.type_color() else { return false };
     format.aspects().contains(ImageAspects::COLOR)
         && format.components().iter().take(3).all(|&bits| bits > 0)
-        && color_type == NumericType::SRGB
+        // In principle, I would have preferred SRGB, which most systems
+        // advertise support for. But as I discovered, there are AMD devices out
+        // there that advertise support for SRGB, but will only accept UNORM for
+        // swapchain creation :( Whatever, UNORM is not that much more work...
+        && color_type == NumericType::UNORM
         && colorspace == ColorSpace::SrgbNonLinear
 }
 
@@ -257,6 +266,7 @@ fn create_swapchain(
     surface: Arc<Surface>,
 ) -> Result<(Arc<Swapchain>, Vec<Arc<SwapchainImage>>), SwapchainCreationError> {
     let physical_device = device.physical_device();
+
     let surface_info = SurfaceInfo::default();
     let surface_capabilities = physical_device
         .surface_capabilities(&surface, surface_info.clone())
@@ -267,15 +277,15 @@ fn create_swapchain(
         .into_iter()
         .find(|format| is_supported_format(*format))
         .expect("There should be at least one supported format");
-    Swapchain::new(
-        device.clone(),
-        surface.clone(),
-        SwapchainCreateInfo {
-            min_image_count: surface_capabilities.min_image_count.max(2),
-            image_format: Some(image_format),
-            image_color_space,
-            image_usage: ImageUsage::STORAGE,
-            ..Default::default()
-        },
-    )
+
+    let create_info = SwapchainCreateInfo {
+        min_image_count: surface_capabilities.min_image_count.max(2),
+        image_format: Some(image_format),
+        image_color_space,
+        image_usage: ImageUsage::STORAGE,
+        ..Default::default()
+    };
+    info!("Will now create a swapchain with {create_info:#?}");
+
+    Swapchain::new(device.clone(), surface.clone(), create_info)
 }
