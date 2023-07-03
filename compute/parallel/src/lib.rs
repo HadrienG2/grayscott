@@ -128,7 +128,7 @@ where
                     // Start by splitting the grid in horizontal chunks. Only
                     // split vertically if it's the only way to reach the
                     // desired granularity, because reducing the line length can
-                    // greatly harms sequential execution performance and
+                    // greatly harm sequential execution performance whereas
                     // opportunities for inter-thread data sharing are low.
                     let split_axis = if subgrid.1[0].nrows() > 1 { 0 } else { 1 };
                     let [half1, half2] = Self::split_grid(subgrid, Some(split_axis));
