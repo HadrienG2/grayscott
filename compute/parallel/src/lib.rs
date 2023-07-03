@@ -8,7 +8,7 @@ use compute::{
     cpu::{CpuGrid, SimulateCpu},
     SimulateBase, SimulateCreate,
 };
-use compute_block::{DefaultBlockSize, SingleCore};
+use compute_block::{BlockWiseSimulation, DefaultBlockSize};
 use data::{
     concentration::{Concentration, Species},
     parameters::Parameters,
@@ -19,7 +19,8 @@ use std::num::NonZeroUsize;
 use thiserror::Error;
 
 /// Gray-Scott reaction simulation
-pub type Simulation = ParallelSimulation<compute_block::Simulation>;
+pub type Simulation =
+    ParallelSimulation<BlockWiseSimulation<compute_autovec::Simulation, MultiCore>>;
 
 /// Parameters are tunable via CLI args and environment variables
 #[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
@@ -30,10 +31,13 @@ pub struct CliArgs<BackendArgs: Args> {
 
     /// Number of processed bytes per parallel task
     ///
-    /// This should be tuned somewhere between half the L1 cache size
-    /// (default for optimal cache locality in the HT regime) and the L3 per-core
-    /// cache size (will reduce work distribution overhead if the backend can
-    /// live with the reduced bandwidth and increased latency of the L3 cache).
+    /// There is a granularity compromise between exposing opportunities for
+    /// parallelism and keeping individual sequential tasks efficient. This
+    /// block size is the tuning knob that lets you fine-tune this compromise.
+    ///
+    /// On x86 CPUs, the suggested tuning range is from the per-thread L1 cache
+    /// capacity to the per-thread L3 cache capacity. By default, we tune to the
+    /// per-thread L1 cache capacity for maximal parallelism and load balancing.
     #[arg(long, env)]
     seq_block_size: Option<NonZeroUsize>,
 
@@ -63,7 +67,7 @@ impl<Backend: SimulateCpu + Sync> SimulateBase for ParallelSimulation<Backend>
 where
     Backend::Values: Send + Sync,
 {
-    type CliArgs = CliArgs<Backend::CliArgs>;
+    type CliArgs = CliArgs<<Backend as SimulateBase>::CliArgs>;
 
     type Concentration = <Backend as SimulateBase>::Concentration;
 
@@ -92,10 +96,8 @@ where
             .map(|bs| Ok::<_, Self::Error>(usize::from(bs)))
             .unwrap_or_else(|| {
                 let topology = Topology::new().map_err(Error::Hwloc)?;
-                let defaults = SingleCore::new(&topology);
-                // FIXME: Expose cache-per-thread in hwlocality so I don't need
-                //        this hardcoded factor of 2 for hyperthreading.
-                Ok(defaults.l2_block_size() / 2)
+                let defaults = MultiCore::new(&topology);
+                Ok(defaults.l1_block_size())
             })?;
         let sequential_len_threshold = seq_block_size / std::mem::size_of::<Backend::Values>();
 
@@ -131,6 +133,46 @@ where
                 self.backend.step_impl(subgrid);
             });
         });
+    }
+}
+
+/// Multi-core block size selection policy
+///
+/// Multi-core computations should mind the fact that multiple threads are
+/// sharing certain cache levels and adjust per-thread memory budgets accordingly.
+#[derive(Debug)]
+pub struct MultiCore {
+    /// Level 1 block size in bytes
+    l1_block_size: usize,
+
+    /// Level 2 block size in bytes
+    l2_block_size: usize,
+}
+//
+impl DefaultBlockSize for MultiCore {
+    fn new(topology: &Topology) -> Self {
+        let cache_stats = topology.cpu_cache_stats();
+        let cache_sizes = cache_stats.smallest_data_cache_sizes_per_thread();
+
+        let l1_block_size = cache_sizes.get(0).copied().unwrap_or(16 * 1024) as usize;
+        let l2_block_size = if cache_sizes.len() > 1 {
+            cache_sizes[1] as usize
+        } else {
+            l1_block_size
+        };
+
+        Self {
+            l1_block_size,
+            l2_block_size,
+        }
+    }
+
+    fn l1_block_size(&self) -> usize {
+        self.l1_block_size
+    }
+
+    fn l2_block_size(&self) -> usize {
+        self.l2_block_size
     }
 }
 
