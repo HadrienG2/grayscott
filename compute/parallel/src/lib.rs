@@ -35,9 +35,10 @@ pub struct CliArgs<BackendArgs: Args> {
     /// parallelism and keeping individual sequential tasks efficient. This
     /// block size is the tuning knob that lets you fine-tune this compromise.
     ///
-    /// On x86 CPUs, the suggested tuning range is from the per-thread L1 cache
-    /// capacity to the per-thread L3 cache capacity. By default, we tune to the
-    /// per-thread L1 cache capacity for maximal parallelism and load balancing.
+    /// On x86 CPUs, the suggested tuning range is from half the per-thread L1
+    /// cache capacity to the per-thread L3 cache capacity. By default, we tune
+    /// to the per-thread L1 capacity for high parallelism and load balancing,
+    /// as this is empirically worthwhile.
     #[arg(long, env)]
     seq_block_size: Option<NonZeroUsize>,
 
@@ -138,8 +139,9 @@ where
 
 /// Multi-core block size selection policy
 ///
-/// Multi-core computations should mind the fact that multiple threads are
-/// sharing certain cache levels and adjust per-thread memory budgets accordingly.
+/// Multi-core computations should mind fact that in threads can share certain
+/// cache levels, including L1 in the presence of SMT / Hyperthreading. Memory
+/// budgets should be adjusted accordingly.
 #[derive(Debug)]
 pub struct MultiCore {
     /// Level 1 block size in bytes
@@ -154,9 +156,9 @@ impl DefaultBlockSize for MultiCore {
         let cache_stats = topology.cpu_cache_stats();
         let cache_sizes = cache_stats.smallest_data_cache_sizes_per_thread();
 
-        let l1_block_size = cache_sizes.get(0).copied().unwrap_or(16 * 1024) as usize;
+        let l1_block_size = cache_sizes.get(0).copied().unwrap_or(16 * 1024) as usize / 2;
         let l2_block_size = if cache_sizes.len() > 1 {
-            cache_sizes[1] as usize
+            cache_sizes[1] as usize / 2
         } else {
             l1_block_size
         };

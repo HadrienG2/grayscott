@@ -53,9 +53,9 @@ pub struct CliArgs<BackendArgs: Args> {
     ///   active lines of inputs/outputs.
     ///
     /// This CLI parameter controls a first layer of cache blocking which cuts
-    /// lines in segments to ensure that three consecutive segments fit in
-    /// cache. This way, by the time we start processing a new line, the input
-    /// line before will still resident in cache.
+    /// lines in segments to ensure that three consecutive input segments and
+    /// one output segment fit in cache. This way, by the time we start
+    /// processing a new line, the input line before should still fit in cache.
     ///
     /// If we applied only this layer of cache blocking, the data access
     /// pattern would become this...
@@ -77,8 +77,7 @@ pub struct CliArgs<BackendArgs: Args> {
     /// after the active segment inside of the active columnar block, and `.`
     /// represents data points which will be accessed later on.
     ///
-    /// By default, the block size is tuned to the size of the CPU's L1 cache.
-    /// Lines will be cut so that that 3 line segments fit into the block size.
+    /// By default, the block size is tuned to half the CPU's L1 cache size.
     #[arg(long, env)]
     l1_block_size: Option<NonZeroUsize>,
 
@@ -118,9 +117,7 @@ pub struct CliArgs<BackendArgs: Args> {
     /// 11 12 15 16
     /// ```
     ///
-    /// By default, the block size is tuned to the size of the CPU's L2 cache.
-    /// Rectangular blocks will be cut to ensure that 2 consecutive blocks fit
-    /// into the block size.
+    /// By default, the block size is tuned to half the CPU's L2 cache size.
     #[arg(long, env)]
     l2_block_size: Option<NonZeroUsize>,
 
@@ -241,9 +238,9 @@ impl DefaultBlockSize for SingleCore {
         let cache_stats = topology.cpu_cache_stats();
         let cache_sizes = cache_stats.smallest_data_cache_sizes();
 
-        let l1_block_size = cache_sizes.get(0).copied().unwrap_or(32 * 1024) as usize;
+        let l1_block_size = cache_sizes.get(0).copied().unwrap_or(32 * 1024) as usize / 2;
         let l2_block_size = if cache_sizes.len() > 1 {
-            cache_sizes[1] as usize
+            cache_sizes[1] as usize / 2
         } else {
             l1_block_size
         };
