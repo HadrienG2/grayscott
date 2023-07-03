@@ -1142,6 +1142,7 @@ dependencies = [
  "data",
  "env_logger",
  "log",
+ "thiserror",
  "ui",
  "vulkano",
  "vulkano-win",

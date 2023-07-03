@@ -39,6 +39,7 @@ compute_selector.workspace = true
 data.workspace = true
 env_logger.workspace = true
 log.workspace = true
+thiserror.workspace = true
 ui = { workspace = true, features = ["simulation", "visualization"] }
 vulkano.workspace = true
 vulkano-win.workspace = true
