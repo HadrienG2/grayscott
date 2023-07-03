@@ -252,10 +252,9 @@ fn is_supported_format((format, colorspace): (Format, ColorSpace)) -> bool {
     let Some(color_type) = format.type_color() else { return false };
     format.aspects().contains(ImageAspects::COLOR)
         && format.components().iter().take(3).all(|&bits| bits > 0)
-        // In principle, I would have preferred SRGB, which most systems
-        // advertise support for. But as I discovered, there are AMD devices out
-        // there that advertise support for SRGB, but will only accept UNORM for
-        // swapchain creation :( Whatever, UNORM is not that much more work...
+        // This may seem surprising given that the source data is sRGB, but
+        // remember that Vulkan implicitly performs an sRGB -> linear conversion
+        // when a shader loads a texel from an sRGB image.
         && color_type == NumericType::UNORM
         && colorspace == ColorSpace::SrgbNonLinear
 }
