@@ -131,10 +131,6 @@ fn create_window(args: &Args) -> Result<(EventLoop<()>, Arc<Window>)> {
 
 /// Simulation context = Simulation + custom VulkanContext if needed, lets you
 /// borrow either the simulation or the VulkanContext
-///
-/// This needs to be a thing because we can't permanently borrow the
-/// Simulation's context, as it would prevent moving the Simulation into winit's
-/// event loop closure (as doing so would invalidate the borrow's pointer).
 struct SimulationContext {
     /// Gray-Scott reaction simulation, which may have its own VulkanContext
     simulation: Simulation,
