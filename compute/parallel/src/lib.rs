@@ -37,8 +37,7 @@ pub struct CliArgs<BackendArgs: Args> {
     ///
     /// On x86 CPUs, the suggested tuning range is from half the per-thread L1
     /// cache capacity to the per-thread L3 cache capacity. By default, we tune
-    /// to the per-thread L1 capacity for high parallelism and load balancing,
-    /// as this is empirically worthwhile.
+    /// to the per-thread L2 capacity.
     #[arg(long, env)]
     seq_block_size: Option<NonZeroUsize>,
 
@@ -98,7 +97,7 @@ where
             .unwrap_or_else(|| {
                 let topology = Topology::new().map_err(Error::Hwloc)?;
                 let defaults = MultiCore::new(&topology);
-                Ok(defaults.l1_block_size())
+                Ok(defaults.l2_block_size())
             })?;
         let sequential_len_threshold = seq_block_size / std::mem::size_of::<Backend::Values>();
 
@@ -126,7 +125,13 @@ where
                 if Self::grid_len(&subgrid) <= self.sequential_len_threshold {
                     (subgrid, None)
                 } else {
-                    let [half1, half2] = Self::split_grid(subgrid, None);
+                    // Start by splitting the grid in horizontal chunks. Only
+                    // split vertically if it's the only way to reach the
+                    // desired granularity, because reducing the line length can
+                    // greatly harms sequential execution performance and
+                    // opportunities for inter-thread data sharing are low.
+                    let split_axis = if subgrid.1[0].nrows() > 1 { 0 } else { 1 };
+                    let [half1, half2] = Self::split_grid(subgrid, Some(split_axis));
                     (half1, Some(half2))
                 }
             })
