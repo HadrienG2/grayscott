@@ -14,8 +14,8 @@ use log::info;
 use std::{num::NonZeroU32, sync::Arc};
 use ui::SharedArgs;
 use vulkano::{
-    descriptor_set::layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo},
-    device::{physical::PhysicalDevice, Device},
+    descriptor_set::layout::DescriptorSetLayoutCreateInfo,
+    device::physical::PhysicalDevice,
     format::{Format, NumericType},
     image::{ImageAspects, ImageUsage, SwapchainImage},
     pipeline::ComputePipeline,
@@ -115,12 +115,12 @@ fn main() -> Result<()> {
                     .simulation
                     .perform_steps(&mut species, steps_per_image)
                     .expect("Failed to compute simulation steps");
+
+                // TODO: Add rendering
                 species
                     .make_result_view()
                     .expect("Failed to extract result")
                     .as_scalars();
-
-                // TODO: Add rendering
 
                 // TODO: Instead of making nbextrastep a tunable of this version too,
                 //       consider making it simulate-specific, and rather starting at 1
