@@ -89,9 +89,9 @@ impl SimulateGpu for Simulation {
         }
         .setup()?;
 
-        // Load the compute shader + check shader code assumptions
-        // when we can (not all data is available)
+        // Load the compute shader
         let shader = shader::load(context.device.clone())?;
+        context.set_debug_utils_object_name(&shader, || "Simulation stepper shader".into())?;
 
         // Set up the compute pipeline, with specialization constants for all
         // simulation parameters since they are known at GPU shader compile

@@ -131,6 +131,7 @@ impl SimulateGpu for Simulation {
             "Must adjust shader.glsl to account for stencil shape change"
         );
         let shader = shader::load(context.device.clone())?;
+        context.set_debug_utils_object_name(&shader, || "Simulation stepper shader".into())?;
 
         // Set up the compute pipeline
         let pipeline = ComputePipeline::new(
