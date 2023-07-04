@@ -375,7 +375,7 @@ pub fn dispatch_size(shape: [usize; 2], work_group_size: [u32; 3]) -> [u32; 3] {
 pub fn image_device_requirements(device: &PhysicalDevice, work_group_size: [u32; 3]) -> bool {
     let properties = device.properties();
     let Ok(format_properties) = device.format_properties(ImageConcentration::format()) else {
-        return false
+        return false;
     };
 
     let num_samplers = 2;
@@ -442,10 +442,9 @@ pub fn check_image_shape_requirements(device: &PhysicalDevice, shape: [usize; 2]
 
     // Check image format properties
     let image_format_info = ImageConcentration::image_format_info(image_usage());
-    let Some(image_format_properties) =
-        device.image_format_properties(image_format_info)? else {
-            return Err(Error::UnsupportedShape);
-        };
+    let Some(image_format_properties) = device.image_format_properties(image_format_info)? else {
+        return Err(Error::UnsupportedShape);
+    };
     if image_format_properties
         .max_extent
         .into_iter()

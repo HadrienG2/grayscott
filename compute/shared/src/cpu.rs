@@ -1,9 +1,9 @@
 //! Facilities that are specific to CPU implementations
 
-use crate::{SimulateBase, SimulateCreate, Simulate};
+use crate::{Simulate, SimulateBase, SimulateCreate};
 use data::{
     array2,
-    concentration::{Species},
+    concentration::Species,
     parameters::{stencil_offset, STENCIL_SHAPE},
 };
 use ndarray::{ArrayBase, ArrayView2, ArrayViewMut2, Axis, Dimension, RawData, ShapeBuilder};
@@ -62,10 +62,7 @@ pub trait SimulateCpu: SimulateBase + SimulateCreate {
     ///
     /// This method does not check the grid for consistency, but is used to
     /// implement `step_impl` that does perform some sanity checks.
-    fn unchecked_step_impl(
-        &self,
-        grid: CpuGrid<Self::Values>,
-    );
+    fn unchecked_step_impl(&self, grid: CpuGrid<Self::Values>);
 
     /// Check that the CpuGrid seems correct
     ///
@@ -83,10 +80,7 @@ pub trait SimulateCpu: SimulateBase + SimulateCreate {
 
     /// Like `unchecked_step_impl()`, but with some sanity checks
     #[inline]
-    fn step_impl(
-        &self,
-        grid: CpuGrid<Self::Values>,
-    ) {
+    fn step_impl(&self, grid: CpuGrid<Self::Values>) {
         Self::check_grid(&grid);
         self.unchecked_step_impl(grid);
     }
@@ -122,16 +116,17 @@ pub trait SimulateCpu: SimulateBase + SimulateCreate {
 
         // Split across the longest grid axis
         let out_shape = out_u_center.shape();
-        let (axis_idx, out_length) = axis_idx.map(
-            |idx| (idx, out_shape[idx])
-        ).unwrap_or_else(||
-            out_shape
-            .iter()
-            .copied()
-            .enumerate()
-            .max_by_key(|(_idx, length)| *length)
-            .unwrap()
-        );
+        let (axis_idx, out_length) =
+            axis_idx
+                .map(|idx| (idx, out_shape[idx]))
+                .unwrap_or_else(|| {
+                    out_shape
+                        .iter()
+                        .copied()
+                        .enumerate()
+                        .max_by_key(|(_idx, length)| *length)
+                        .unwrap()
+                });
         let axis = Axis(axis_idx);
         let stencil_offset = data::parameters::stencil_offset()[axis_idx];
 
@@ -162,7 +157,10 @@ pub trait SimulateCpu: SimulateBase + SimulateCreate {
 /// Composed of the input and output concentrations of species U and V. Note
 /// that the input concentrations include a neighborhood of size
 /// [`data::parameters::stencil_offset()`] around the region of interest.
-pub type CpuGrid<'input, 'output, Values> = ([ArrayView2<'input, Values>; 2], [ArrayViewMut2<'output, Values>; 2]);
+pub type CpuGrid<'input, 'output, Values> = (
+    [ArrayView2<'input, Values>; 2],
+    [ArrayViewMut2<'output, Values>; 2],
+);
 //
 impl<T: SimulateCpu> SimulateStep for T {
     fn perform_step(&self, species: &mut Species<Self::Concentration>) -> Result<(), Self::Error> {
@@ -210,7 +208,9 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     {
         let strides = arrays[0].strides();
         assert_eq!(strides, arrays[1].strides());
-        let &[row_stride, 1] = strides else { unreachable!() };
+        let &[row_stride, 1] = strides else {
+            unreachable!()
+        };
         row_stride as usize
     }
     let out_row_stride = checked_row_stride([&out_u_center, &out_v_center]);

@@ -236,7 +236,9 @@ fn surface_requirements(device: &PhysicalDevice, surface: &Surface) -> bool {
 
 /// Supported surface formats
 fn is_supported_format((format, colorspace): (Format, ColorSpace)) -> bool {
-    let Some(color_type) = format.type_color() else { return false };
+    let Some(color_type) = format.type_color() else {
+        return false;
+    };
     format.aspects().contains(ImageAspects::COLOR)
         && format.components().iter().take(3).all(|&bits| bits > 0)
         // This may seem surprising given that the source data is
