@@ -42,6 +42,7 @@ env_logger.workspace = true
 log.workspace = true
 ui = { workspace = true, features = ["simulation", "visualization"] }
 vulkano.workspace = true
+vulkano-shaders.workspace = true
 vulkano-win.workspace = true
 winit.workspace = true
 

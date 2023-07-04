@@ -11,12 +11,15 @@ use compute::{
 use compute_selector::Simulation;
 use data::{concentration::AsScalars, parameters::Parameters};
 use log::info;
-use std::sync::Arc;
+use std::{num::NonZeroU32, sync::Arc};
 use ui::SharedArgs;
 use vulkano::{
+    descriptor_set::layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo},
     device::{physical::PhysicalDevice, Device},
     format::{Format, NumericType},
     image::{ImageAspects, ImageUsage, SwapchainImage},
+    pipeline::ComputePipeline,
+    sampler::{Filter, Sampler, SamplerCreateInfo},
     swapchain::{ColorSpace, Surface, SurfaceInfo, Swapchain, SwapchainCreateInfo},
 };
 use winit::{
@@ -26,6 +29,18 @@ use winit::{
     window::{Theme, Window, WindowBuilder},
 };
 
+/// Shader descriptor set to which input and output data are bound
+pub const INOUT_SET: u32 = 0;
+
+/// Descriptor within `INOUT_SET` for readout of simulation output
+const DATA_INPUT: u32 = 0;
+
+/// Descriptor within `INOUT_SET` for writing to screen
+const SCREEN_OUTPUT: u32 = 1;
+
+/// Shader descriptor set to which the color palette is bound
+const PALETTE_SET: u32 = 1;
+
 /// Perform Gray-Scott simulation
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -33,6 +48,14 @@ struct Args {
     /// CLI arguments shared with the "simulate" executable
     #[command(flatten)]
     shared: SharedArgs<Simulation>,
+
+    /// Number of rows processed by each GPU work group during rendering
+    #[arg(long, default_value_t = NonZeroU32::new(8).unwrap())]
+    render_work_group_rows: NonZeroU32,
+
+    /// Number of columns processed by each GPU work group during rendering
+    #[arg(long, default_value_t = NonZeroU32::new(8).unwrap())]
+    render_work_group_cols: NonZeroU32,
 }
 
 fn main() -> Result<()> {
@@ -47,18 +70,40 @@ fn main() -> Result<()> {
     // Set up an event loop and window
     let (event_loop, window) = create_window(&args)?;
 
+    // Pick work-group size
+    let work_group_size = [
+        args.render_work_group_cols.into(),
+        args.render_work_group_rows.into(),
+        1,
+    ];
+
     // Set up the simulation and Vulkan context
     let simulation_context = SimulationContext::new(&args, &window)?;
     let simulation = &simulation_context.simulation;
     let context = simulation_context.context();
-    let device = &context.device;
 
     // Set up a swapchain
     let (swapchain, swapchain_images) =
-        create_swapchain(device.clone(), simulation_context.surface().clone())?;
+        create_swapchain(context, simulation_context.surface().clone())?;
 
-    // TODO: Create the color palette, its descriptor set, and a sampler to be
-    //       directly bound to the compute pipeline.
+    // Load the rendering shader
+    let shader = shader::load(context.device.clone())?;
+    context.set_debug_utils_object_name(&shader, || "Live renderer shader".into())?;
+
+    // Set up the rendering pipeline
+    let pipeline = ComputePipeline::new(
+        context.device.clone(),
+        shader.entry_point("main").expect("Should be present"),
+        &shader::SpecializationConstants {
+            constant_0: work_group_size[0],
+            constant_1: work_group_size[1],
+        },
+        Some(context.pipeline_cache.clone()),
+        sampler_setup_callback(context)?,
+    )?;
+    context.set_debug_utils_object_name(&pipeline, || "Live renderer".into())?;
+
+    // TODO: Create the color palette, upload it, make a descriptor set.
 
     // TODO: Create upload buffers as necessary, pipeline, etc (this step will
     //       change once we start sharing data with the GPU context)
@@ -250,10 +295,10 @@ fn is_supported_format((format, colorspace): (Format, ColorSpace)) -> bool {
 
 /// Create a swapchain
 fn create_swapchain(
-    device: Arc<Device>,
+    context: &VulkanContext,
     surface: Arc<Surface>,
 ) -> Result<(Arc<Swapchain>, Vec<Arc<SwapchainImage>>)> {
-    let physical_device = device.physical_device();
+    let physical_device = context.device.physical_device();
 
     let surface_info = SurfaceInfo::default();
     let surface_capabilities =
@@ -273,5 +318,46 @@ fn create_swapchain(
     };
     info!("Will now create a swapchain with {create_info:#?}");
 
-    Ok(Swapchain::new(device, surface, create_info)?)
+    let (swapchain, swapchain_images) =
+        Swapchain::new(context.device.clone(), surface, create_info)?;
+    context.set_debug_utils_object_name(&swapchain, || "Rendering swapchain".into())?;
+    // FIXME: Name swapchain image once vulkano allows for it
+
+    Ok((swapchain, swapchain_images))
+}
+
+// Rendering shader used when data comes from the CPU
+// TODO: Use different shaders when rendering from GPU data
+mod shader {
+    vulkano_shaders::shader! {
+        ty: "compute",
+        vulkan_version: "1.0",
+        spirv_version: "1.0",
+        path: "src/cpu.comp",
+    }
+}
+
+/// Generate the callback to configure palette sampling during rendering
+/// pipeline construction
+pub fn sampler_setup_callback(
+    context: &VulkanContext,
+) -> Result<impl FnOnce(&mut [DescriptorSetLayoutCreateInfo])> {
+    let palette_sampler = Sampler::new(
+        context.device.clone(),
+        SamplerCreateInfo {
+            mag_filter: Filter::Linear,
+            min_filter: Filter::Linear,
+            ..Default::default()
+        },
+    )?;
+    context.set_debug_utils_object_name(&palette_sampler, || "Palette sampler".into())?;
+    Ok(
+        move |descriptor_sets: &mut [DescriptorSetLayoutCreateInfo]| {
+            descriptor_sets[PALETTE_SET as usize]
+                .bindings
+                .get_mut(&0)
+                .expect("Palette descriptor should be present")
+                .immutable_samplers = vec![palette_sampler];
+        },
+    )
 }

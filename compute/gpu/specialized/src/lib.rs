@@ -27,13 +27,13 @@ use vulkano::{
 /// Kernel work-group size is tunable via CLI args and environment variables
 #[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CliArgs {
-    /// Number of rows to be processed by each GPU work group
+    /// Number of rows processed by each GPU work group during simulation
     #[arg(long, env, default_value_t = NonZeroU32::new(8).unwrap())]
-    work_group_rows: NonZeroU32,
+    compute_work_group_rows: NonZeroU32,
 
-    /// Number of columns to be processed by each GPU work group
+    /// Number of columns processed by each GPU work group during simulation
     #[arg(long, env, default_value_t = NonZeroU32::new(8).unwrap())]
-    work_group_cols: NonZeroU32,
+    compute_work_group_cols: NonZeroU32,
 }
 
 /// Gray-Scott reaction simulation
@@ -77,7 +77,11 @@ impl SimulateBase for Simulation {
 impl SimulateGpu for Simulation {
     fn with_config(params: Parameters, args: CliArgs, mut config: VulkanConfig) -> Result<Self> {
         // Pick work-group size
-        let work_group_size = [args.work_group_cols.into(), args.work_group_rows.into(), 1];
+        let work_group_size = [
+            args.compute_work_group_cols.into(),
+            args.compute_work_group_rows.into(),
+            1,
+        ];
 
         // Set up Vulkan
         let context = VulkanConfig {
