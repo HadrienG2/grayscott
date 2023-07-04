@@ -144,6 +144,8 @@ impl SimulateGpu for Simulation {
         context.set_debug_utils_object_name(&pipeline, || "Simulation stepper".into())?;
 
         // Move parameters to GPU-accessible memory
+        // NOTE: This memory is not the most efficient to access from GPU.
+        //       See the `specialized` backend for a good way to address this.
         let params = Buffer::from_data(
             &context.memory_allocator,
             BufferCreateInfo {
@@ -157,12 +159,12 @@ impl SimulateGpu for Simulation {
             params.as_std140(),
         )?;
         context.set_debug_utils_object_name(params.buffer(), || "Simulation parameters".into())?;
-        let params_layout = pipeline.layout().set_layouts()[PARAMS_SET as usize].clone();
         let params = PersistentDescriptorSet::new(
             &context.descriptor_allocator,
-            params_layout,
+            pipeline.layout().set_layouts()[PARAMS_SET as usize].clone(),
             [WriteDescriptorSet::buffer(0, params)],
         )?;
+        // FIXME: Name this descriptor set once vulkano allows for it
 
         Ok(Self {
             context,
@@ -352,6 +354,7 @@ pub fn images_descriptor_set(
                     output_binding(OUT_V, out_v)?,
                 ],
             )?;
+            // FIXME: Name this descriptor set once vulkano allows for it
             Ok(vacant.insert(set).clone())
         }
     }
