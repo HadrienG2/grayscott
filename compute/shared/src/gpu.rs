@@ -17,6 +17,8 @@ use std::{
     sync::Arc,
 };
 use thiserror::Error;
+#[cfg(feature = "livesim")]
+use vulkano::swapchain::SurfaceCreationError;
 use vulkano::{
     command_buffer::allocator::{
         CommandBufferAllocator, StandardCommandBufferAllocator,
@@ -37,7 +39,7 @@ use vulkano::{
     },
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
     pipeline::cache::PipelineCache,
-    swapchain::{Surface, SurfaceCreationError, SurfaceInfo},
+    swapchain::{Surface, SurfaceInfo},
     sync::{future::NowFuture, FlushError, GpuFuture},
     ExtensionProperties, LoadingError, OomError, VulkanError, VulkanLibrary, VulkanObject,
 };
@@ -497,7 +499,7 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
             self.enumerate_portability,
         )?;
 
-        let mut surface_and_reqs = None;
+        let mut surface_and_reqs: Option<(Arc<Surface>, SurfaceRequirements)> = None;
         #[cfg(feature = "livesim")]
         {
             if let Some((window, reqs)) = self.window_and_reqs {
