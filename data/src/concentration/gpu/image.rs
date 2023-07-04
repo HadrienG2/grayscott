@@ -444,7 +444,7 @@ impl ImageContext {
             let commands = builder.build()?;
 
             if cfg!(feature = "gpu-debug-utils") {
-                let device = self.download_queue.device();
+                let device = self.upload_queue.device();
                 device.set_debug_utils_object_name(&commands, Some("Bulk concentration upload"))?;
             }
 
