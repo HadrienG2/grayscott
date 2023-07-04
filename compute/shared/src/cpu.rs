@@ -174,7 +174,7 @@ impl<T: SimulateCpu> SimulateStep for T {
 ///
 /// ```
 /// (out_u_center.iter_mut())
-///     .zip(out_v_center.iter_mut())
+///     .zip(&mut out_v_center)
 ///     .zip(in_u.windows(STENCIL_SHAPE))
 ///     .zip(in_v.windows(STENCIL_SHAPE))
 /// ```

@@ -60,7 +60,7 @@ impl SimulateStep for Simulation {
 
             // Compute diffusion gradient for u and v
             let [full_u, full_v] = (in_u.slice(stencil_slice).indexed_iter())
-                .zip(in_v.slice(stencil_slice).iter())
+                .zip(in_v.slice(stencil_slice))
                 .fold(
                     [0.; 2],
                     |[acc_u, acc_v], (((in_row, in_col), &stencil_u), &stencil_v)| {

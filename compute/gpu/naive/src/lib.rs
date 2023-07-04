@@ -384,10 +384,8 @@ pub fn image_device_requirements(device: &PhysicalDevice, work_group_size: [u32;
     properties.max_bound_descriptor_sets >= 1
         && properties.max_compute_work_group_invocations
             >= work_group_size.into_iter().product::<u32>()
-        && properties
-            .max_compute_work_group_size
-            .into_iter()
-            .zip(work_group_size.into_iter())
+        && (properties.max_compute_work_group_size.into_iter())
+            .zip(work_group_size)
             .all(|(max, req)| max >= req)
         && properties.max_descriptor_set_samplers >= num_samplers
         && properties.max_per_stage_descriptor_samplers >= num_samplers
@@ -414,9 +412,8 @@ pub fn check_image_shape_requirements(device: &PhysicalDevice, shape: [usize; 2]
     // The simple shader can't accomodate a problem size that is not a
     // multiple of the work group size
     let global_size = shape_to_global_size(shape);
-    if global_size
-        .into_iter()
-        .zip(WORK_GROUP_SIZE.into_iter())
+    if (global_size.into_iter())
+        .zip(WORK_GROUP_SIZE)
         .any(|(sh, wg)| sh % wg as usize != 0)
     {
         return Err(Error::UnsupportedShape);
@@ -428,10 +425,8 @@ pub fn check_image_shape_requirements(device: &PhysicalDevice, shape: [usize; 2]
     let num_texels = shape.into_iter().product::<usize>();
     let image_size = num_texels * std::mem::size_of::<Precision>();
     let properties = device.properties();
-    if properties
-        .max_compute_work_group_count
-        .into_iter()
-        .zip(dispatch_size.into_iter())
+    if (properties.max_compute_work_group_count.into_iter())
+        .zip(dispatch_size)
         .any(|(max, req)| (max as usize) < req)
         || (properties.max_image_dimension2_d as usize) < shape.into_iter().max().unwrap()
         || properties.max_memory_allocation_size.unwrap_or(u64::MAX) < image_size as u64
@@ -445,10 +440,8 @@ pub fn check_image_shape_requirements(device: &PhysicalDevice, shape: [usize; 2]
     let Some(image_format_properties) = device.image_format_properties(image_format_info)? else {
         return Err(Error::UnsupportedShape);
     };
-    if image_format_properties
-        .max_extent
-        .into_iter()
-        .zip(global_size.into_iter())
+    if (image_format_properties.max_extent.into_iter())
+        .zip(global_size)
         .any(|(max, req)| (max as usize) < req)
         || image_format_properties.max_resource_size < image_size as u64
     {

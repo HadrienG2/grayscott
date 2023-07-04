@@ -219,13 +219,13 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
             let shift = block_idx + 1;
             if shift < WIDTH {
                 // If so, fill that data at the bottom...
-                for (dst, src) in bottom_block.iter_mut().zip(center.iter()) {
+                for (dst, src) in bottom_block.iter_mut().zip(&center) {
                     *dst = src.shift_right(shift);
                 }
 
                 // ...and at the top
                 let top_src = center.slice(s![center.nrows() - top_block.nrows().., ..]);
-                for (dst, src) in (top_block.iter_mut()).zip(top_src.iter()) {
+                for (dst, src) in (top_block.iter_mut()).zip(&top_src) {
                     *dst = src.shift_left(shift);
                 }
             } else {
@@ -292,7 +292,7 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
 
                 // Write back this data into the scalar array
                 for (transposed_chunk, scalar_chunk) in
-                    (transposed_chunk_arr.into_iter()).zip(scalar_chunks.iter_mut())
+                    (transposed_chunk_arr.into_iter()).zip(&mut scalar_chunks)
                 {
                     transposed_chunk.store(
                         scalar_chunk
@@ -313,8 +313,7 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
 
                 // Turn SIMD vector into scalar elements and write them down
                 let simd_array: [Precision; WIDTH] = (*simd_col).into();
-                for (simd_lane, target_col) in (simd_array.into_iter()).zip(scalar_cols.into_iter())
-                {
+                for (simd_lane, target_col) in (simd_array.into_iter()).zip(scalar_cols) {
                     *target_col = simd_lane;
                 }
             }

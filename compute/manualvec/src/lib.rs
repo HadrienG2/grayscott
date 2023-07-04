@@ -81,12 +81,12 @@ impl SimulateCpu for Simulation {
 
             // Compute diffusion gradient
             let [full_u, full_v] = (win_u.rows().into_iter())
-                .zip(win_v.rows().into_iter())
-                .zip(self.params.weights.0.into_iter())
+                .zip(win_v.rows())
+                .zip(self.params.weights.0)
                 .flat_map(|((u_row, v_row), weights_row)| {
                     (u_row.into_iter().copied())
                         .zip(v_row.into_iter().copied())
-                        .zip(weights_row.into_iter())
+                        .zip(weights_row)
                 })
                 .fold(
                     [Values::splat(0.); 2],

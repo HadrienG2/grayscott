@@ -156,10 +156,9 @@ impl Simulation {
         // Check that everything's alright in debug mode
         debug_assert_eq!(win_u.shape(), win_v.shape());
         debug_assert_eq!(win_u.shape(), stencil_shape);
-        debug_assert!(stencil_offset
-            .iter()
-            .zip(stencil_shape.iter())
-            .all(|(&offset, &shape)| offset < shape));
+        debug_assert!((stencil_offset.into_iter())
+            .zip(stencil_shape)
+            .all(|(offset, shape)| offset < shape));
 
         // Access parameters and center value of u
         let u = win_u[stencil_offset];
@@ -173,12 +172,12 @@ impl Simulation {
         //       stencil should arguably stay centered on the target pixel. Then
         //       again, it's just going to result in a few weird edge pixels...
         let [full_u, full_v] = (win_u.rows().into_iter())
-            .zip(win_v.rows().into_iter())
-            .zip(self.params.weights.0.into_iter())
+            .zip(win_v.rows())
+            .zip(self.params.weights.0)
             .flat_map(|((u_row, v_row), weights_row)| {
                 (u_row.into_iter().copied())
                     .zip(v_row.into_iter().copied())
-                    .zip(weights_row.into_iter())
+                    .zip(weights_row)
             })
             .fold(
                 [0.; 2],

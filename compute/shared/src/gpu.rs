@@ -532,7 +532,7 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
             "Number of queue names doesn't match number of queues"
         );
         if cfg!(feature = "gpu-debug-utils") {
-            for (queue, name) in queues.iter().zip(queue_names.into_iter()) {
+            for (queue, name) in queues.iter().zip(queue_names) {
                 device.set_debug_utils_object_name(queue, Some(&name))?;
             }
         }
