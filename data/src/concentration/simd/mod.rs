@@ -124,6 +124,86 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vec
     fn array<T>(f: impl FnMut(usize) -> T) -> [T; WIDTH] {
         array::from_fn(f)
     }
+
+    /// Borrow-checker friendly implementation of write_scalar_view
+    ///
+    /// Assumes `validate_write()` has already been called by the caller, and
+    /// assumes `simd_center` is the `simd_center_range()` of `self.simd`.
+    fn write_scalar_view_impl(simd_center: ArrayView2<Vector>, target: ArrayViewMut2<Precision>) {
+        // Check domain size
+        let num_simd_rows = simd_center.nrows();
+        let num_simd_cols = simd_center.ncols();
+
+        // Split the scalar matrix into a number of submatrices, each
+        // corresponding to one lane of a SIMD vector (check layout description
+        // in the SIMDConcentration documentation above if you are confused)
+        let mut scalar_remainder_opt = Some(target);
+        let mut scalar_views = Self::array(move |i| {
+            let scalar_remainder = scalar_remainder_opt
+                .take()
+                .expect("Shouldn't happen because the Option is reset below");
+            if i < WIDTH - 1 {
+                let (chunk, new_remainder) = scalar_remainder.split_at(Axis(0), num_simd_rows);
+                scalar_remainder_opt = Some(new_remainder);
+                chunk
+            } else {
+                scalar_remainder
+            }
+        });
+        debug_assert!(scalar_views
+            .iter()
+            .all(|view| view.shape() == simd_center.shape()));
+
+        // Iterate over rows of the SIMD matrix and matching rows of the scalar matrices
+        let mut scalar_rows_iter =
+            array_each_mut(&mut scalar_views).map(|view| view.rows_mut().into_iter());
+        for simd_row in simd_center.rows().into_iter() {
+            let mut scalar_rows = array_each_mut(&mut scalar_rows_iter)
+                .map(|rows| rows.next().expect("Unexpected scalar row iterator end"));
+
+            // Iterate over sets of WIDTH consecutive columns of the SIMD row
+            // These correspond to sets of WIDTH consecutive columns in the
+            // scalar matrix, although interleaved across SIMD vectors.
+            let mut scalar_chunks_iter =
+                array_each_mut(&mut scalar_rows).map(|row| row.exact_chunks_mut(WIDTH).into_iter());
+            for simd_chunk in simd_row.exact_chunks(WIDTH) {
+                let mut scalar_chunks = array_each_mut(&mut scalar_chunks_iter)
+                    .map(|iter| iter.next().expect("Unexpected scalar chunk iterator end"));
+
+                // Use SIMD transpose to produce SIMD vectors that correspond to
+                // WIDTH consecutive columns of a row of the scalar matrix
+                let simd_chunk_arr = Self::array(|i| simd_chunk[i]);
+                let transposed_chunk_arr = Vector::transpose(simd_chunk_arr);
+
+                // Write back this data into the scalar array
+                for (transposed_chunk, scalar_chunk) in
+                    (transposed_chunk_arr.into_iter()).zip(&mut scalar_chunks)
+                {
+                    transposed_chunk.store(
+                        scalar_chunk
+                            .as_slice_mut()
+                            .expect("Unexpected non-contiguous scalar row chunk"),
+                    );
+                }
+            }
+
+            // Handle remainder by breaking down SIMD vectors into scalars
+            let trailing_cols_offset = (num_simd_cols / WIDTH) * WIDTH;
+            let simd_cols = simd_row.slice(s![trailing_cols_offset..]);
+            let mut scalar_cols_iter = array_each_mut(&mut scalar_rows)
+                .map(|row| row.slice_mut(s![trailing_cols_offset..]).into_iter());
+            for simd_col in simd_cols {
+                let scalar_cols = array_each_mut(&mut scalar_cols_iter)
+                    .map(|iter| iter.next().expect("Unexpected scalar columns iterator end"));
+
+                // Turn SIMD vector into scalar elements and write them down
+                let simd_array: [Precision; WIDTH] = (*simd_col).into();
+                for (simd_lane, target_col) in (simd_array.into_iter()).zip(scalar_cols) {
+                    *target_col = simd_lane;
+                }
+            }
+        }
+    }
 }
 //
 impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
@@ -240,87 +320,37 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
     type ScalarView<'a> = ArrayView2<'a, Precision>;
 
     fn make_scalar_view(&mut self, _context: &mut ()) -> Result<Self::ScalarView<'_>, Infallible> {
-        // Lazily allocate scalar data storage
+        // Lazily allocate the internal scalar data storage
         if self.scalar.is_empty() {
             self.scalar = ScalarConcentration::default(self.shape());
         }
 
-        // Access the center of the SIMD matrix, we don't need edges here
+        // Extract the center of the SIMD domain
         let [center_rows, center_cols] = self.simd_center_range();
-        let simd = self.simd.slice(s![center_rows, center_cols]);
-        let num_simd_rows = simd.nrows();
-        let num_simd_cols = simd.ncols();
+        let simd_center = self.simd.slice(s![center_rows, center_cols]);
 
-        // Split the scalar matrix into a number of submatrices, each
-        // corresponding to one lane of a SIMD vector (check layout description
-        // in the SIMDConcentration documentation above if you are confused)
-        let mut scalar_remainder_opt = Some(self.scalar.view_mut());
-        let mut scalar_views = Self::array(move |i| {
-            let scalar_remainder = scalar_remainder_opt
-                .take()
-                .expect("Shouldn't happen because the Option is reset below");
-            if i < WIDTH - 1 {
-                let (chunk, new_remainder) = scalar_remainder.split_at(Axis(0), num_simd_rows);
-                scalar_remainder_opt = Some(new_remainder);
-                chunk
-            } else {
-                scalar_remainder
-            }
-        });
-        debug_assert!(scalar_views.iter().all(|view| view.shape() == simd.shape()));
-
-        // Iterate over rows of the SIMD matrix and matching rows of the scalar matrices
-        let mut scalar_rows_iter =
-            array_each_mut(&mut scalar_views).map(|view| view.rows_mut().into_iter());
-        for simd_row in simd.rows().into_iter() {
-            let mut scalar_rows = array_each_mut(&mut scalar_rows_iter)
-                .map(|rows| rows.next().expect("Unexpected scalar row iterator end"));
-
-            // Iterate over sets of WIDTH consecutive columns of the SIMD row
-            // These correspond to sets of WIDTH consecutive columns in the
-            // scalar matrix, although interleaved across SIMD vectors.
-            let mut scalar_chunks_iter =
-                array_each_mut(&mut scalar_rows).map(|row| row.exact_chunks_mut(WIDTH).into_iter());
-            for simd_chunk in simd_row.exact_chunks(WIDTH) {
-                let mut scalar_chunks = array_each_mut(&mut scalar_chunks_iter)
-                    .map(|iter| iter.next().expect("Unexpected scalar chunk iterator end"));
-
-                // Use SIMD transpose to produce SIMD vectors that correspond to
-                // WIDTH consecutive columns of a row of the scalar matrix
-                let simd_chunk_arr = Self::array(|i| simd_chunk[i]);
-                let transposed_chunk_arr = Vector::transpose(simd_chunk_arr);
-
-                // Write back this data into the scalar array
-                for (transposed_chunk, scalar_chunk) in
-                    (transposed_chunk_arr.into_iter()).zip(&mut scalar_chunks)
-                {
-                    transposed_chunk.store(
-                        scalar_chunk
-                            .as_slice_mut()
-                            .expect("Unexpected non-contiguous scalar row chunk"),
-                    );
-                }
-            }
-
-            // Handle remainder by breaking down SIMD vectors into scalars
-            let trailing_cols_offset = (num_simd_cols / WIDTH) * WIDTH;
-            let simd_cols = simd_row.slice(s![trailing_cols_offset..]);
-            let mut scalar_cols_iter = array_each_mut(&mut scalar_rows)
-                .map(|row| row.slice_mut(s![trailing_cols_offset..]).into_iter());
-            for simd_col in simd_cols {
-                let scalar_cols = array_each_mut(&mut scalar_cols_iter)
-                    .map(|iter| iter.next().expect("Unexpected scalar columns iterator end"));
-
-                // Turn SIMD vector into scalar elements and write them down
-                let simd_array: [Precision; WIDTH] = (*simd_col).into();
-                for (simd_lane, target_col) in (simd_array.into_iter()).zip(scalar_cols) {
-                    *target_col = simd_lane;
-                }
-            }
-        }
+        // Perform the write
+        Self::write_scalar_view_impl(simd_center, self.scalar.view_mut());
 
         // Emit the scalar results
         Ok(self.scalar.view())
+    }
+
+    fn write_scalar_view(
+        &mut self,
+        _context: &mut (),
+        target: ArrayViewMut2<Precision>,
+    ) -> Result<(), Self::Error> {
+        // Check that the target dimensions are correct
+        Self::validate_write(&self, &target);
+
+        // Extract the center of the SIMD domain
+        let [center_rows, center_cols] = self.simd_center_range();
+        let simd_center = self.simd.slice(s![center_rows, center_cols]);
+
+        // Perform the write
+        Self::write_scalar_view_impl(simd_center, target);
+        Ok(())
     }
 }
 

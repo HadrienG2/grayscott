@@ -7,11 +7,16 @@ use compute::Simulate;
 use compute::{SimulateBase, SimulateCreate};
 use compute_selector::Simulation;
 use data::{
-    concentration::{AsScalars, ScalarConcentration},
+    concentration::ScalarConcentration,
     hdf5::{self, Writer},
     parameters::Parameters,
 };
-use std::{num::NonZeroUsize, path::PathBuf, sync::mpsc};
+use ndarray::Array2;
+use std::{
+    num::NonZeroUsize,
+    path::PathBuf,
+    sync::mpsc::{self, TryRecvError},
+};
 use ui::SharedArgs;
 
 /// Perform Gray-Scott simulation
@@ -77,43 +82,48 @@ fn main() -> Result<()> {
     // Set up the HDF5 writer thread
     std::thread::scope(|s| {
         // Start the writer thread
-        let (sender, receiver) =
+        let (image_send, image_recv) =
             mpsc::sync_channel::<ScalarConcentration>(args.output_buffer.into());
+        let (image_recycle_send, image_recycle_recv) = mpsc::channel();
         let writer = &mut writer;
         s.spawn(move || {
-            for result in receiver {
+            for image in image_recv {
                 writer
-                    .write(result.view())
+                    .write(image.view())
                     .expect("Failed to write down results");
+                let _ = image_recycle_send.send(image);
                 progress.inc(1);
             }
         });
 
         // Run the simulation on the main thread
         for _ in 0..args.nbimage {
-            // Move the simulation forward and collect image
-            let image = {
-                // If GPU-specific asynchronous commands are available, use them
-                #[cfg(feature = "async-gpu")]
-                {
-                    let steps = simulation.prepare_steps(
-                        simulation.now(),
-                        &mut species,
-                        steps_per_image,
-                    )?;
-                    species.access_result(|v, context| v.make_scalar_view_after(steps, context))?
-                }
-
-                // Otherwise, use synchronous commands
-                #[cfg(not(feature = "async-gpu"))]
-                {
-                    simulation.perform_steps(&mut species, steps_per_image)?;
-                    species.make_result_view()?
-                }
+            // Allocate or reuse output data storage
+            let mut image = match image_recycle_recv.try_recv() {
+                Ok(image) => image,
+                Err(TryRecvError::Empty) => Array2::from_elem(species.shape(), 0.0),
+                Err(e @ TryRecvError::Disconnected) => return Err(e.into()),
             };
 
+            // If GPU-specific asynchronous commands are available, use them
+            #[cfg(feature = "async-gpu")]
+            {
+                let steps =
+                    simulation.prepare_steps(simulation.now(), &mut species, steps_per_image)?;
+                species.access_result(|v, context| {
+                    v.write_scalar_view_after(steps, context, image.view_mut())
+                })?;
+            }
+
+            // Otherwise, use synchronous commands
+            #[cfg(not(feature = "async-gpu"))]
+            {
+                simulation.perform_steps(&mut species, steps_per_image)?;
+                species.write_scalar_view(image.view_mut())?
+            }
+
             // Schedule writing the image
-            sender.send(image.as_scalars().to_owned())?;
+            image_send.send(image)?;
         }
         Ok::<_, anyhow::Error>(())
     })?;

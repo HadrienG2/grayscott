@@ -128,6 +128,14 @@ impl Concentration for ImageConcentration {
     fn make_scalar_view(&mut self, context: &mut ImageContext) -> Result<ScalarView> {
         self.make_scalar_view_after(self.now(), context)
     }
+
+    fn write_scalar_view(
+        &mut self,
+        context: &mut ImageContext,
+        target: ArrayViewMut2<Precision>,
+    ) -> Result<()> {
+        self.write_scalar_view_after(self.now(), context, target)
+    }
 }
 //
 impl ImageConcentration {
@@ -276,6 +284,20 @@ impl ImageConcentration {
         Ok(ScalarView::new(self.cpu_buffer.read()?, |buffer| {
             ArrayView2::from_shape(self.shape(), buffer).expect("The shape should be right")
         }))
+    }
+
+    /// Version of `Concentration::write_scalar_view()` that can take place right
+    /// after simulation in a single GPU submission
+    pub fn write_scalar_view_after(
+        &mut self,
+        after: impl GpuFuture + 'static,
+        context: &mut ImageContext,
+        mut target: ArrayViewMut2<Precision>,
+    ) -> Result<()> {
+        Self::validate_write(&self, &target);
+        let view = self.make_scalar_view_after(after, context)?;
+        target.assign(&view.as_scalars());
+        Ok(())
     }
 }
 

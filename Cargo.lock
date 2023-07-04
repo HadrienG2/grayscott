@@ -1887,6 +1887,7 @@ dependencies = [
  "compute",
  "compute_selector",
  "data",
+ "ndarray",
  "ui",
 ]
 

@@ -107,11 +107,11 @@ fn main() -> Result<()> {
 
         // Main thread converts HDF5 tables to images
         for (idx, input) in hdf5_recv.into_iter().enumerate() {
-            // Try to reuse a previously created image
+            // Allocate or reuse an image
             let mut image = match image_recycle_recv.try_recv() {
                 Ok(image) => image,
                 Err(TryRecvError::Empty) => RgbImage::new(cols as u32, rows as u32),
-                Err(TryRecvError::Disconnected) => panic!("Output thread has crashed"),
+                Err(e @ TryRecvError::Disconnected) => return Err(e.into()),
             };
 
             // Generate image using multiple processing threads

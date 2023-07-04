@@ -7,7 +7,7 @@ pub mod simd;
 
 use crate::array2;
 use crate::Precision;
-use ndarray::{s, Array2, ArrayView2};
+use ndarray::{s, Array2, ArrayView2, ArrayViewMut2};
 use std::convert::Infallible;
 use std::ops::Range;
 
@@ -108,8 +108,30 @@ impl<C: Concentration> Species<C> {
     /// simulation (what gets stored to HDF5, etc). For some compute backends
     /// (SIMD, GPU...), some expensive preprocessing steps may be needed in
     /// order to get to a normal 2D view of it. This is how you get this done.
+    ///
+    /// Use `make_scalar_view` if you can directly use the borrowed data in a
+    /// zero-copy manner. If you would need to clone it to get an owned
+    /// version, prefer allocating your own storage and writing to it using
+    /// `write_scalar_view`, ideally with allocation reuse.
     pub fn make_result_view(&mut self) -> Result<C::ScalarView<'_>, C::Error> {
         self.access_result(|v, ctx| v.make_scalar_view(ctx))
+    }
+
+    /// Write down the result into an externally allocated 2D array of scalars
+    ///
+    /// The concentration of the V species is the effective result of the
+    /// simulation (what gets stored to HDF5, etc). For some compute backends
+    /// (SIMD, GPU...), some expensive preprocessing steps may be needed in
+    /// order to get to a normal 2D view of it. This is how you get this done.
+    ///
+    /// Use `write_scalar_view` if you need owned data (e.g. to send it to
+    /// another thread). If a borrow is enough, prefer `make_scalar_view`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the target does not have the same shape as this table.
+    pub fn write_scalar_view(&mut self, target: ArrayViewMut2<Precision>) -> Result<(), C::Error> {
+        self.access_result(|v, ctx| v.write_scalar_view(ctx, target))
     }
 }
 
@@ -230,18 +252,47 @@ pub trait Concentration: Sized {
         Ok(())
     }
 
-    /// Reinterpretation of the matrix as a 2D ndarray
+    /// Reinterpretation of the matrix as a 2D array of scalars
     type ScalarView<'a>: AsScalars
     where
         Self: 'a;
 
-    /// View the matrix as a 2D ndarray
+    /// Transform the table into a 2D array of scalars, or expose it as such
     ///
     /// This operation may require reshuffling data, do not use it frequently.
+    ///
+    /// Use `make_scalar_view` if you can directly use the borrowed data in a
+    /// zero-copy manner. If you would need to clone it to get an owned
+    /// version, prefer allocating your own storage and writing to it using
+    /// `write_scalar_view`, ideally with allocation reuse.
     fn make_scalar_view(
         &mut self,
         context: &mut Self::Context,
     ) -> Result<Self::ScalarView<'_>, Self::Error>;
+
+    /// Write down the data into an externally allocated 2D array of scalars
+    ///
+    /// This operation may require reshuffling data and will incur expensive
+    /// memory traffic, do not use it frequently.
+    ///
+    /// Use `write_scalar_view` if you need owned data (e.g. to send it to
+    /// another thread). If a borrow is enough, prefer `make_scalar_view`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the target does not have the same shape as this table.
+    fn write_scalar_view(
+        &mut self,
+        context: &mut Self::Context,
+        target: ArrayViewMut2<Precision>,
+    ) -> Result<(), Self::Error>;
+
+    /// Target validation for `write_scalar_view()` implementations
+    fn validate_write(&self, target: &ArrayViewMut2<Precision>) {
+        let [rows, cols] = self.shape();
+        assert_eq!(target.nrows(), rows);
+        assert_eq!(target.ncols(), cols);
+    }
 }
 //
 /// Data that can be reinterpreted as a 2D ndarray of scalar data
@@ -289,6 +340,16 @@ impl Concentration for ScalarConcentration {
 
     fn make_scalar_view(&mut self, _context: &mut ()) -> Result<Self::ScalarView<'_>, Infallible> {
         Ok(self.view())
+    }
+
+    fn write_scalar_view(
+        &mut self,
+        _context: &mut (),
+        mut target: ArrayViewMut2<Precision>,
+    ) -> Result<(), Self::Error> {
+        Self::validate_write(&self, &target);
+        target.assign(&self);
+        Ok(())
     }
 }
 //

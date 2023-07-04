@@ -34,6 +34,7 @@ clap.workspace = true
 compute.workspace = true
 compute_selector.workspace = true
 data = { workspace = true, features = ["hdf5"] }
+ndarray.workspace = true
 ui = { workspace = true, features = ["simulation", "tui"] }
 
 [dev-dependencies]
