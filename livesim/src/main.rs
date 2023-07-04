@@ -86,33 +86,19 @@ fn main() -> Result<()> {
     let (swapchain, swapchain_images) =
         create_swapchain(context, simulation_context.surface().clone())?;
 
-    // Load the rendering shader
-    let shader = shader::load(context.device.clone())?;
-    context.set_debug_utils_object_name(&shader, || "Live renderer shader".into())?;
-
     // Set up the rendering pipeline
-    let pipeline = ComputePipeline::new(
-        context.device.clone(),
-        shader.entry_point("main").expect("Should be present"),
-        &shader::SpecializationConstants {
-            constant_0: work_group_size[0],
-            constant_1: work_group_size[1],
-        },
-        Some(context.pipeline_cache.clone()),
-        sampler_setup_callback(context)?,
-    )?;
-    context.set_debug_utils_object_name(&pipeline, || "Live renderer".into())?;
+    let pipeline = create_pipeline(context, work_group_size);
 
     // TODO: Create the color palette, upload it, make a descriptor set.
-
-    // TODO: Create upload buffers as necessary, pipeline, etc (this step will
-    //       change once we start sharing data with the GPU context)
 
     // Set up chemical species concentration storage
     // TODO: If this is GPU storage, use it directly instead of round tripping
     let mut species = simulation_context
         .simulation
         .make_species([args.shared.nbrow, args.shared.nbcol])?;
+
+    // TODO: Create upload buffers as necessary, pipeline, etc (this step will
+    //       change once we start sharing data with the GPU context)
 
     // Show window and start event loop
     window.set_visible(true);
@@ -324,6 +310,30 @@ fn create_swapchain(
     // FIXME: Name swapchain image once vulkano allows for it
 
     Ok((swapchain, swapchain_images))
+}
+
+/// Create the rendering pipeline
+fn create_pipeline(
+    context: &VulkanContext,
+    work_group_size: [u32; 3],
+) -> Result<Arc<ComputePipeline>> {
+    // Load the rendering shader
+    let shader = shader::load(context.device.clone())?;
+    context.set_debug_utils_object_name(&shader, || "Live renderer shader".into())?;
+
+    // Set up the rendering pipeline
+    let pipeline = ComputePipeline::new(
+        context.device.clone(),
+        shader.entry_point("main").expect("Should be present"),
+        &shader::SpecializationConstants {
+            constant_0: work_group_size[0],
+            constant_1: work_group_size[1],
+        },
+        Some(context.pipeline_cache.clone()),
+        sampler_setup_callback(context)?,
+    )?;
+    context.set_debug_utils_object_name(&pipeline, || "Live renderer".into())?;
+    Ok(pipeline)
 }
 
 // Rendering shader used when data comes from the CPU
