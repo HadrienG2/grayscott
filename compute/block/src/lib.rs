@@ -242,7 +242,7 @@ impl DefaultBlockSize for SingleCore {
         let cache_stats = topology.cpu_cache_stats();
         let cache_sizes = cache_stats.smallest_data_cache_sizes();
 
-        let l1_block_size = cache_sizes.get(0).copied().unwrap_or(32 * 1024) as usize / 2;
+        let l1_block_size = cache_sizes.first().copied().unwrap_or(32 * 1024) as usize / 2;
         let l2_block_size = if cache_sizes.len() > 1 {
             cache_sizes[1] as usize / 2
         } else {

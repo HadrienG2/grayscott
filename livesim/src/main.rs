@@ -273,9 +273,5 @@ fn create_swapchain(
     };
     info!("Will now create a swapchain with {create_info:#?}");
 
-    Ok(Swapchain::new(
-        device.clone(),
-        surface.clone(),
-        create_info,
-    )?)
+    Ok(Swapchain::new(device, surface, create_info)?)
 }

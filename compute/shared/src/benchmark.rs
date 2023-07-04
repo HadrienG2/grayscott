@@ -20,7 +20,7 @@ pub use criterion;
 // Make sure env_logger is only initialized once
 fn init_logger() {
     static INIT_LOGGER: Once = Once::new();
-    INIT_LOGGER.call_once(|| env_logger::init());
+    INIT_LOGGER.call_once(env_logger::init);
 }
 
 /// Common criterion benchmark for all Gray-Scott reaction computations
@@ -46,7 +46,7 @@ pub fn criterion_benchmark<Simulation: Simulate>(
     };
 
     let sim = Simulation::new(black_box(Parameters::default()), black_box(args)).unwrap();
-    let mut group = c.benchmark_group(format!("{backend_name}"));
+    let mut group = c.benchmark_group(backend_name.to_owned());
     for num_steps_pow2 in 0..=8 {
         let num_steps = 2u64.pow(num_steps_pow2);
         for size_pow2 in 3..=11 {
@@ -78,7 +78,7 @@ pub fn compute_workload<Simulation: Simulate>(
     species: &mut Species<Simulation::Concentration>,
     num_steps: usize,
 ) {
-    sim.perform_steps(species, num_steps as usize).unwrap();
+    sim.perform_steps(species, num_steps).unwrap();
 }
 
 // Full simulation workload, each step being synchronous
@@ -87,7 +87,7 @@ pub fn full_sync_workload<Simulation: Simulate>(
     species: &mut Species<Simulation::Concentration>,
     num_steps: usize,
 ) {
-    sim.perform_steps(species, num_steps as usize).unwrap();
+    sim.perform_steps(species, num_steps).unwrap();
     black_box(species.make_result_view().unwrap());
 }
 

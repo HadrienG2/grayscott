@@ -139,8 +139,8 @@ pub trait SimulateCpu: SimulateBase + SimulateCreate {
         let in_split_point = out_split_point + stencil_offset;
         //
         let in_end_1 = in_split_point + stencil_offset;
-        let in_u_1 = in_u.clone().split_at(axis, in_end_1).0;
-        let in_v_1 = in_v.clone().split_at(axis, in_end_1).0;
+        let in_u_1 = in_u.split_at(axis, in_end_1).0;
+        let in_v_1 = in_v.split_at(axis, in_end_1).0;
         let result_1 = ([in_u_1, in_v_1], [out_u_1, out_v_1]);
         //
         let in_start_2 = in_split_point - stencil_offset;
@@ -164,7 +164,8 @@ pub type CpuGrid<'input, 'output, Values> = (
 //
 impl<T: SimulateCpu> SimulateStep for T {
     fn perform_step(&self, species: &mut Species<Self::Concentration>) -> Result<(), Self::Error> {
-        Ok(self.step_impl(Self::extract_grid(species)))
+        self.step_impl(Self::extract_grid(species));
+        Ok(())
     }
 }
 

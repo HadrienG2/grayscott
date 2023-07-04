@@ -55,7 +55,7 @@ impl Writer {
     }
 
     /// Write a new V species concentration to the file
-    pub fn write<'result>(&mut self, result: impl AsScalars) -> Result<()> {
+    pub fn write(&mut self, result: impl AsScalars) -> Result<()> {
         self.0
             .dataset
             .write_slice(result.as_scalars(), (self.0.position, .., ..))?;

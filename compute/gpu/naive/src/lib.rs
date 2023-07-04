@@ -5,6 +5,8 @@
 //! in the split-source model that Vulkan-based Rust code must sadly use until
 //! rust-gpu is mature enough.
 
+#![allow(clippy::result_large_err)]
+
 use compute::{
     gpu::{SimulateGpu, VulkanConfig, VulkanContext},
     NoArgs, Simulate, SimulateBase,

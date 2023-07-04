@@ -1,5 +1,7 @@
 //! Image-based GPU concentration storage
 
+#![allow(clippy::result_large_err)]
+
 use crate::{
     concentration::{AsScalars, Concentration},
     Precision,
@@ -272,7 +274,7 @@ impl ImageConcentration {
     ) -> Result<ScalarView> {
         context.download_after(after, self.gpu_image.clone(), self.cpu_buffer.clone())?;
         Ok(ScalarView::new(self.cpu_buffer.read()?, |buffer| {
-            ArrayView2::from_shape(self.shape(), &buffer).expect("The shape should be right")
+            ArrayView2::from_shape(self.shape(), buffer).expect("The shape should be right")
         }))
     }
 }

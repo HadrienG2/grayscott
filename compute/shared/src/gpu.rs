@@ -1,5 +1,7 @@
 //! Common facilities shared by all GPU compute backends
 
+#![allow(clippy::result_large_err)]
+
 use super::{SimulateBase, SimulateCreate};
 use data::{concentration::Species, parameters::Parameters};
 use directories::ProjectDirs;
@@ -76,7 +78,7 @@ where
         params: Parameters,
         args: Self::CliArgs,
         config: VulkanConfig,
-    ) -> Result<Self, Self::Error>;
+    ) -> std::result::Result<Self, Self::Error>;
 
     /// Access the Vulkan context used by the simulation
     fn context(&self) -> &VulkanContext;
@@ -102,14 +104,14 @@ where
         after: After,
         species: &mut Species<Self::Concentration>,
         steps: usize,
-    ) -> Result<Self::PrepareStepsFuture<After>, Self::Error>;
+    ) -> std::result::Result<Self::PrepareStepsFuture<After>, Self::Error>;
 
     /// Use this to implement `Simulate::perform_steps`
     fn perform_steps_impl(
         &self,
         species: &mut Species<Self::Concentration>,
         steps: usize,
-    ) -> Result<(), Self::Error> {
+    ) -> std::result::Result<(), Self::Error> {
         self.prepare_steps(
             vulkano::sync::now(self.context().device.clone()),
             species,
@@ -125,7 +127,7 @@ impl<T: SimulateGpu> SimulateCreate for T
 where
     <T as SimulateBase>::Error: From<FlushError>,
 {
-    fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error> {
+    fn new(params: Parameters, args: Self::CliArgs) -> std::result::Result<Self, Self::Error> {
         Self::with_config(params, args, VulkanConfig::default())
     }
 }
@@ -181,7 +183,7 @@ where
         &self,
         object: &Object,
         make_name: impl FnOnce() -> Cow<'static, str>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         if cfg!(feature = "gpu-debug-utils") {
             let name = make_name();
             self.device
@@ -203,6 +205,7 @@ where
 ///
 /// [`default()`]: VulkanConfig::default()
 /// [`setup()`]: VulkanConfig::setup()
+#[allow(clippy::type_complexity)]
 pub struct VulkanConfig<
     MemAlloc: MemoryAllocator = StandardMemoryAllocator,
     CommAlloc: CommandBufferAllocator = StandardCommandBufferAllocator,
@@ -398,8 +401,8 @@ pub struct VulkanConfig<
     pub descriptor_allocator: Box<dyn FnOnce(Arc<Device>) -> DescAlloc>,
 }
 //
-impl
-    VulkanConfig<
+impl Default
+    for VulkanConfig<
         StandardMemoryAllocator,
         StandardCommandBufferAllocator,
         StandardDescriptorSetAllocator,
@@ -417,7 +420,7 @@ impl
     ///     .. VulkanConfig::default()
     /// };
     /// ```
-    pub fn default() -> Self {
+    fn default() -> Self {
         let layers = Box::new(default_layers);
         let instance_extensions = Box::new(default_instance_extensions);
         let enumerate_portability = false;
@@ -473,7 +476,7 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
     /// # Ok::<(), compute::gpu::Error>(())
     /// ```
     #[allow(unused_assignments, unused_mut)]
-    pub fn setup(mut self) -> Result<VulkanContext<MemAlloc, CommAlloc>, Error> {
+    pub fn setup(mut self) -> Result<VulkanContext<MemAlloc, CommAlloc>> {
         let library = load_library()?;
 
         let mut instance_extensions = (self.instance_extensions)(&library);
@@ -508,7 +511,7 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
         let physical_device = select_physical_device(
             &instance,
             |device| {
-                let (features, extensions) = (self.device_features_extensions)(&device);
+                let (features, extensions) = (self.device_features_extensions)(device);
                 device.supported_features().contains(&features)
                     && device.supported_extensions().contains(&extensions)
                     && (self.other_device_requirements)(device)
@@ -594,6 +597,9 @@ pub enum Error {
     #[error("failed to create a surface from specified window")]
     SurfaceCreation(#[from] SurfaceCreationError),
 }
+//
+/// Result type associated with VulkanContext setup issues
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Suggested set of layers to enable
 #[allow(unused_variables)]
@@ -717,7 +723,7 @@ fn default_command_buffer_allocator(device: Arc<Device>) -> StandardCommandBuffe
 }
 
 /// Load the Vulkan library
-fn load_library() -> Result<Arc<VulkanLibrary>, Error> {
+fn load_library() -> Result<Arc<VulkanLibrary>> {
     let library = VulkanLibrary::new()?;
     info!("Loaded Vulkan library");
     trace!("- Supports Vulkan v{}", library.api_version());
@@ -771,7 +777,7 @@ impl DebuggedInstance {
         enabled_layers: Vec<String>,
         enabled_extensions: InstanceExtensions,
         enumerate_portability: bool,
-    ) -> Result<DebuggedInstance, Error> {
+    ) -> Result<DebuggedInstance> {
         let unsupported_extensions = *library.supported_extensions()
             - library
                 .supported_extensions_with_layers(enabled_layers.iter().map(String::as_ref))?;
@@ -790,18 +796,18 @@ impl DebuggedInstance {
         info!("Will now create a Vulkan instance with {create_info:#?}");
 
         let result = if enabled_extensions.ext_debug_utils {
-            type DUMS = DebugUtilsMessageSeverity;
-            type DUMT = DebugUtilsMessageType;
+            type DUMSeverity = DebugUtilsMessageSeverity;
+            type DUMType = DebugUtilsMessageType;
             let mut debug_messenger_info = DebugUtilsMessengerCreateInfo {
-                message_severity: DUMS::empty(),
-                message_type: DUMT::GENERAL,
+                message_severity: DUMSeverity::empty(),
+                message_type: DUMType::GENERAL,
                 ..DebugUtilsMessengerCreateInfo::user_callback(Arc::new(|message: &Message| {
                     // SAFETY: This callback must not call into Vulkan APIs
                     let level = match message.severity {
-                        DUMS::ERROR => log::Level::Error,
-                        DUMS::WARNING => log::Level::Warn,
-                        DUMS::INFO => log::Level::Debug,
-                        DUMS::VERBOSE => log::Level::Trace,
+                        DUMSeverity::ERROR => log::Level::Error,
+                        DUMSeverity::WARNING => log::Level::Warn,
+                        DUMSeverity::INFO => log::Level::Debug,
+                        DUMSeverity::VERBOSE => log::Level::Trace,
                         _ => log::Level::Info,
                     };
                     let target = message
@@ -812,19 +818,19 @@ impl DebuggedInstance {
                 }))
             };
             if log::STATIC_MAX_LEVEL >= log::Level::Error {
-                debug_messenger_info.message_severity |= DUMS::ERROR;
+                debug_messenger_info.message_severity |= DUMSeverity::ERROR;
             }
             if log::STATIC_MAX_LEVEL >= log::Level::Warn {
-                debug_messenger_info.message_severity |= DUMS::WARNING;
+                debug_messenger_info.message_severity |= DUMSeverity::WARNING;
             }
             if log::STATIC_MAX_LEVEL >= log::Level::Debug {
-                debug_messenger_info.message_severity |= DUMS::INFO;
+                debug_messenger_info.message_severity |= DUMSeverity::INFO;
             }
             if log::STATIC_MAX_LEVEL >= log::Level::Trace {
-                debug_messenger_info.message_severity |= DUMS::VERBOSE;
+                debug_messenger_info.message_severity |= DUMSeverity::VERBOSE;
             }
             if cfg!(debug_assertions) {
-                debug_messenger_info.message_type |= DUMT::VALIDATION | DUMT::PERFORMANCE;
+                debug_messenger_info.message_type |= DUMType::VALIDATION | DUMType::PERFORMANCE;
             };
             info!("Setting up debug utils with {debug_messenger_info:#?}");
 
@@ -891,17 +897,17 @@ fn select_physical_device(
         Arc<Surface>,
         impl FnMut(&PhysicalDevice, &Surface) -> bool,
     )>,
-) -> Result<Arc<PhysicalDevice>, Error> {
+) -> Result<Arc<PhysicalDevice>> {
     let selected_device = instance
         .enumerate_physical_devices()?
         .filter(|device| {
             info!("Found physical device {}", device.properties().device_name);
-            log_device_description(&device, surface_and_reqs.as_ref().map(|t| t.0.deref()));
+            log_device_description(device, surface_and_reqs.as_ref().map(|t| t.0.deref()));
 
             let mut can_use = requirements(device);
             if let Some((surface, requirements)) = &mut surface_and_reqs {
                 can_use |=
-                    device_supports_surface(device, &surface) && requirements(device, &surface);
+                    device_supports_surface(device, surface) && requirements(device, surface);
             }
             if can_use {
                 info!("=> Device meets requirements");
@@ -1000,12 +1006,13 @@ fn device_supports_surface(device: &PhysicalDevice, surface: &Surface) -> bool {
 /// for async data transfers than the one you use for compute). You can use
 /// [`suggested_queue()`] as your starting point, which tries to picks the main
 /// queue of the device.
+#[allow(clippy::type_complexity)]
 fn create_logical_device(
     physical_device: Arc<PhysicalDevice>,
     enabled_features: Features,
     enabled_extensions: DeviceExtensions,
     queue_create_infos: Vec<QueueCreateInfo>,
-) -> Result<(Arc<Device>, Box<[Arc<Queue>]>), Error> {
+) -> Result<(Arc<Device>, Box<[Arc<Queue>]>)> {
     let create_info = DeviceCreateInfo {
         enabled_features,
         enabled_extensions,
@@ -1028,7 +1035,7 @@ pub struct PersistentPipelineCache {
 //
 impl PersistentPipelineCache {
     /// Attempt to load the pipeline cache from disk, otherwise create a new one
-    fn new(dirs: &ProjectDirs, device: Arc<Device>) -> Result<Self, Error> {
+    fn new(dirs: &ProjectDirs, device: Arc<Device>) -> Result<Self> {
         let path = dirs.cache_dir().join("gpu_pipelines.bin");
 
         // TODO: Consider treating some I/O errors as fatal and others as okay
@@ -1045,7 +1052,7 @@ impl PersistentPipelineCache {
     }
 
     /// Write the pipeline cache back to disk
-    fn write(&self) -> Result<(), Error> {
+    fn write(&self) -> Result<()> {
         let data = self.cache.get_data()?;
 
         let dir = self
@@ -1109,7 +1116,7 @@ mod tests {
     }
 
     #[test]
-    fn setup_vulkan() -> Result<(), Error> {
+    fn setup_vulkan() -> Result<()> {
         init_logger();
         VulkanConfig {
             enumerate_portability: true,
