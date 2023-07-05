@@ -436,9 +436,6 @@ fn is_supported_format((format, colorspace): (Format, ColorSpace)) -> bool {
     };
     format.aspects().contains(ImageAspects::COLOR)
         && format.components().iter().take(3).all(|&bits| bits > 0)
-        // This may seem surprising given that the source data is
-        // NumericType::SRGB, but remember that Vulkan implicitly performs an
-        // sRGB -> linear conversion when a shader loads a texel.
         && color_type == NumericType::UNORM
         && colorspace == ColorSpace::SrgbNonLinear
 }
