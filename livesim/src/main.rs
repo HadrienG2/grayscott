@@ -124,14 +124,16 @@ fn main() -> Result<()> {
         // Process incoming events
         match event {
             // Render when all events have been processed
+            // TODO: Add fast/async path for GPU backends
             Event::MainEventsCleared => {
                 frames
                     .process_frame(&context, &pipeline, |upload_buffer, inout_set| {
-                        // Synchronously run the simulation and upload output
-                        // TODO: Add fast/async path for GPU backends
+                        // Synchronously run the simulation
                         context
                             .simulation()
                             .perform_steps(&mut species, steps_per_image)?;
+
+                        // Make the simulation output available to the GPU
                         input::fill_upload_buffer(upload_buffer, &mut species)?;
 
                         // Record rendering commands
