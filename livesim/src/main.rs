@@ -247,9 +247,8 @@ fn main() -> Result<()> {
                 let device = &simulation_context.vulkan_context().device;
                 let frame_future = frame_futures[image_idx]
                     .take()
-                    .map(|mut future| {
+                    .map(|future| {
                         future.wait(None).expect("Failed to await render");
-                        future.cleanup_finished();
                         future.boxed()
                     })
                     .unwrap_or_else(|| vulkano::sync::now(device.clone()).boxed());
