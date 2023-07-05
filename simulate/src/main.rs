@@ -119,7 +119,7 @@ fn main() -> Result<()> {
             #[cfg(not(feature = "async-gpu"))]
             {
                 simulation.perform_steps(&mut species, steps_per_image)?;
-                species.write_scalar_view(image.view_mut())?
+                species.write_result_view(image.view_mut())?
             }
 
             // Schedule writing the image
