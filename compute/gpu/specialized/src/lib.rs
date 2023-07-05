@@ -13,7 +13,7 @@ use compute::{
     gpu::{SimulateGpu, VulkanConfig, VulkanContext},
     Simulate, SimulateBase,
 };
-use compute_gpu_naive::{Error, Result, Species, IMAGES_SET};
+use compute_gpu_naive::{images::IMAGES_SET, Error, Result, Species};
 use data::{
     concentration::gpu::image::{ImageConcentration, ImageContext},
     parameters::Parameters,
@@ -22,7 +22,6 @@ use std::sync::Arc;
 use vulkano::{
     command_buffer::{AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage},
     device::Queue,
-    image::ImageUsage,
     pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
     sync::GpuFuture,
 };
@@ -47,9 +46,10 @@ impl SimulateBase for Simulation {
     type Error = Error;
 
     fn make_species(&self, shape: [usize; 2]) -> Result<Species> {
-        compute_gpu_naive::check_image_shape_requirements(
+        compute_gpu_naive::requirements::check_image_shape(
             self.context.device.physical_device(),
             shape,
+            self.work_group_size,
         )?;
         Ok(Species::new(
             ImageContext::new(
@@ -58,7 +58,7 @@ impl SimulateBase for Simulation {
                 self.queue().clone(),
                 self.queue().clone(),
                 [],
-                ImageUsage::SAMPLED | ImageUsage::STORAGE,
+                compute_gpu_naive::requirements::image_usage(),
             )?,
             shape,
         )?)
@@ -82,7 +82,7 @@ impl SimulateGpu for Simulation {
         let context = VulkanConfig {
             other_device_requirements: Box::new(move |device| {
                 (config.other_device_requirements)(device)
-                    && compute_gpu_naive::image_device_requirements(device, work_group_size)
+                    && compute_gpu_naive::requirements::device_filter(device, work_group_size)
             }),
             ..config
         }
@@ -100,7 +100,7 @@ impl SimulateGpu for Simulation {
             shader.entry_point("main").expect("Should be present"),
             &specialization::constants(parameters, work_group_size),
             Some(context.pipeline_cache.clone()),
-            compute_gpu_naive::sampler_setup_callback(&context)?,
+            compute_gpu_naive::images::sampler_setup_callback(&context)?,
         )?;
         context.set_debug_utils_object_name(&pipeline, || "Simulation stepper".into())?;
 
@@ -140,7 +140,7 @@ impl SimulateGpu for Simulation {
         for _ in 0..steps {
             // Set up a descriptor set for the input and output images
             let images =
-                compute_gpu_naive::images_descriptor_set(&self.context, &self.pipeline, species)?;
+                compute_gpu_naive::images::descriptor_set(&self.context, &self.pipeline, species)?;
 
             // Attach the images and run the simulation
             builder
@@ -156,7 +156,7 @@ impl SimulateGpu for Simulation {
             species.flip()?;
         }
 
-        // Synchronously execute the simulation steps
+        // Enqueue the simulation steps
         let commands = builder.build()?;
         self.context
             .set_debug_utils_object_name(&commands, || "Compute simulation steps".into())?;
