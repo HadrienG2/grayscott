@@ -131,25 +131,10 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vec
     /// assumes `simd_center` is the `simd_center_range()` of `self.simd`.
     fn write_scalar_view_impl(simd_center: ArrayView2<Vector>, target: ArrayViewMut2<Precision>) {
         // Check domain size
-        let num_simd_rows = simd_center.nrows();
         let num_simd_cols = simd_center.ncols();
 
-        // Split the scalar matrix into a number of submatrices, each
-        // corresponding to one lane of a SIMD vector (check layout description
-        // in the SIMDConcentration documentation above if you are confused)
-        let mut scalar_remainder_opt = Some(target);
-        let mut scalar_views = Self::array(move |i| {
-            let scalar_remainder = scalar_remainder_opt
-                .take()
-                .expect("Shouldn't happen because the Option is reset below");
-            if i < WIDTH - 1 {
-                let (chunk, new_remainder) = scalar_remainder.split_at(Axis(0), num_simd_rows);
-                scalar_remainder_opt = Some(new_remainder);
-                chunk
-            } else {
-                scalar_remainder
-            }
-        });
+        // Split output matrix into one submatrix per SIMD vector lane
+        let mut scalar_views = Self::split_scalar_matrix(target);
         debug_assert!(scalar_views
             .iter()
             .all(|view| view.shape() == simd_center.shape()));
@@ -172,8 +157,7 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vec
 
                 // Use SIMD transpose to produce SIMD vectors that correspond to
                 // WIDTH consecutive columns of a row of the scalar matrix
-                let simd_chunk_arr = Self::array(|i| simd_chunk[i]);
-                let transposed_chunk_arr = Vector::transpose(simd_chunk_arr);
+                let transposed_chunk_arr = Vector::transpose(Self::array(|i| simd_chunk[i]));
 
                 // Write back this data into the scalar array
                 for (transposed_chunk, scalar_chunk) in
@@ -203,6 +187,26 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vec
                 }
             }
         }
+    }
+
+    /// Split the scalar matrix into a number of submatrices, each
+    /// corresponding to one lane of a SIMD vector (check layout description
+    /// in the SIMDConcentration documentation above if you are confused)
+    fn split_scalar_matrix(scalars: ArrayViewMut2<Precision>) -> [ArrayViewMut2<Precision>; WIDTH] {
+        let num_simd_rows = scalars.nrows() / WIDTH;
+        let mut remainder_opt = Some(scalars);
+        Self::array(move |i| {
+            let remainder = remainder_opt
+                .take()
+                .expect("Shouldn't happen because the Option is reset below");
+            if i < WIDTH - 1 {
+                let (chunk, new_remainder) = remainder.split_at(Axis(0), num_simd_rows);
+                remainder_opt = Some(new_remainder);
+                chunk
+            } else {
+                remainder
+            }
+        })
     }
 }
 //
@@ -255,7 +259,7 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
         let mut current_row =
             Vector::Indices::from_idx_array(Self::array(|i| row(num_simd_rows * i)));
 
-        // Update relevant rows and columns of the SIMD arraythe simd array
+        // Update relevant rows and columns of the SIMD array
         let all_false = Vector::Mask::splat(false);
         let value = Vector::splat(value);
         for simd_row in 0..num_simd_rows {
