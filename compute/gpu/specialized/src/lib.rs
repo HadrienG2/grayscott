@@ -6,6 +6,7 @@
 //! parameters, and also makes it a lot easier to keep CPU and GPU code in sync.
 
 mod args;
+mod specialization;
 
 use self::args::GpuSpecializedArgs;
 use compute::{
@@ -15,7 +16,7 @@ use compute::{
 use compute_gpu_naive::{Error, Result, Species, IMAGES_SET};
 use data::{
     concentration::gpu::image::{ImageConcentration, ImageContext},
-    parameters::{Parameters, StencilWeights},
+    parameters::Parameters,
 };
 use std::sync::Arc;
 use vulkano::{
@@ -66,7 +67,7 @@ impl SimulateBase for Simulation {
 //
 impl SimulateGpu for Simulation {
     fn with_config(
-        params: Parameters,
+        parameters: Parameters,
         args: GpuSpecializedArgs,
         mut config: VulkanConfig,
     ) -> Result<Self> {
@@ -94,41 +95,10 @@ impl SimulateGpu for Simulation {
         // Set up the compute pipeline, with specialization constants for all
         // simulation parameters since they are known at GPU shader compile
         // time and won't change afterwards.
-        //
-        // By using struct patterns, we ensure that a large number of possible
-        // mismatches between CPU and GPU expectations can be detected.
-        let Parameters {
-            weights:
-                StencilWeights(
-                    [[weight00, weight10, weight20], [weight01, weight11, weight21], [weight02, weight12, weight22]],
-                ),
-            diffusion_rate_u,
-            diffusion_rate_v,
-            feed_rate,
-            kill_rate,
-            time_step,
-        } = params;
         let pipeline = ComputePipeline::new(
             context.device.clone(),
             shader.entry_point("main").expect("Should be present"),
-            &shader::SpecializationConstants {
-                weight00,
-                weight01,
-                weight02,
-                weight10,
-                weight11,
-                weight12,
-                weight20,
-                weight21,
-                weight22,
-                diffusion_rate_u,
-                diffusion_rate_v,
-                feed_rate,
-                kill_rate,
-                time_step,
-                constant_0: work_group_size[0],
-                constant_1: work_group_size[1],
-            },
+            &specialization::constants(parameters, work_group_size),
             Some(context.pipeline_cache.clone()),
             compute_gpu_naive::sampler_setup_callback(&context)?,
         )?;
@@ -207,6 +177,7 @@ impl Simulation {
     }
 }
 
+/// Compute shader used for GPU-side simulation
 mod shader {
     vulkano_shaders::shader! {
         ty: "compute",
