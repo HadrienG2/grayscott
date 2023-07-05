@@ -104,7 +104,7 @@ fn main() -> Result<()> {
     // Set up the rendering pipeline
     let pipeline = create_pipeline(&simulation_context, work_group_size)?;
 
-    // Create the color palette and prepare to upload it
+    // Create the color palette and prepare to upload it to the GPU
     let (upload_future, palette) = create_color_palette(
         &simulation_context,
         &pipeline,
