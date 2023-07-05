@@ -9,13 +9,14 @@ use compute::{
     Simulate, SimulateBase,
 };
 use compute_selector::Simulation;
-use data::{concentration::AsScalars, parameters::Parameters, Precision};
+use data::{parameters::Parameters, Precision};
 use log::info;
+use ndarray::ArrayViewMut2;
 use std::{num::NonZeroU32, sync::Arc};
 use ui::SharedArgs;
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
-    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage},
+    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer},
     descriptor_set::{
         layout::DescriptorSetLayoutCreateInfo, PersistentDescriptorSet, WriteDescriptorSet,
     },
@@ -27,10 +28,13 @@ use vulkano::{
         SwapchainImage,
     },
     memory::allocator::{AllocationCreateInfo, MemoryUsage},
-    pipeline::{ComputePipeline, Pipeline},
+    pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
     sampler::{Filter, Sampler, SamplerCreateInfo},
-    swapchain::{ColorSpace, Surface, SurfaceInfo, Swapchain, SwapchainCreateInfo},
-    sync::GpuFuture,
+    swapchain::{
+        self, AcquireError, ColorSpace, Surface, SurfaceInfo, Swapchain, SwapchainCreateInfo,
+        SwapchainPresentInfo,
+    },
+    sync::{future::FenceSignalFuture, FlushError, GpuFuture},
 };
 use winit::{
     dpi::PhysicalSize,
@@ -60,10 +64,14 @@ struct Args {
     shared: SharedArgs<Simulation>,
 
     /// Number of rows processed by each GPU work group during rendering
+    ///
+    /// The number of simulated rows must be a multiple of this.
     #[arg(long, default_value_t = NonZeroU32::new(8).unwrap())]
     render_work_group_rows: NonZeroU32,
 
     /// Number of columns processed by each GPU work group during rendering
+    ///
+    /// The number of simulated columns must be a multiple of this.
     #[arg(long, default_value_t = NonZeroU32::new(8).unwrap())]
     render_work_group_cols: NonZeroU32,
 
@@ -85,7 +93,12 @@ fn main() -> Result<()> {
 
     // Parse CLI arguments and handle clap-incompatible defaults
     let args = Args::parse();
-    // TODO: Autotune this, or at least autotune from this
+    // TODO: Instead of making nbextrastep a tunable of this version too,
+    //       consider making it simulate-specific, and rather starting at 1
+    //       step/frame, then monitoring the VSync'd framerate and
+    //       autotuning the number of simulation steps to fit a frame nicely
+    //       with some margin, with 1 step/frame as the minimum for slow
+    //       backends.
     let steps_per_image = args.shared.nbextrastep.unwrap_or(1);
 
     // Set up an event loop and window
@@ -98,6 +111,20 @@ fn main() -> Result<()> {
         1,
     ];
 
+    // Pick domain shape and deduce dispatch size
+    let shape = [args.shared.nbrow, args.shared.nbcol];
+    let global_size = [shape[1], shape[0], 1];
+    let dispatch_size = std::array::from_fn(|i| {
+        let shape = global_size[i];
+        let work_group_size = work_group_size[i] as usize;
+        assert_eq!(
+            shape % work_group_size,
+            0,
+            "Simulation shape must be a multiple of the work group size"
+        );
+        u32::try_from(shape / work_group_size).expect("Simulation is too large for a GPU")
+    });
+
     // Set up the simulation and Vulkan context
     let simulation_context = SimulationContext::new(&args, &window)?;
 
@@ -105,7 +132,7 @@ fn main() -> Result<()> {
     let pipeline = create_pipeline(&simulation_context, work_group_size)?;
 
     // Create the color palette and prepare to upload it to the GPU
-    let (upload_future, palette) = create_color_palette(
+    let (upload_future, palette_set) = create_color_palette(
         &simulation_context,
         &pipeline,
         args.color_palette_resolution,
@@ -116,29 +143,36 @@ fn main() -> Result<()> {
     let upload_future = upload_future.then_signal_fence_and_flush()?;
 
     // Set up a swapchain
-    let (swapchain, swapchain_images) = create_swapchain(&simulation_context)?;
+    let (mut swapchain, swapchain_images) = create_swapchain(&simulation_context)?;
 
     // Set up chemical species concentration storage
-    let mut species = simulation_context
-        .simulation
-        .make_species([args.shared.nbrow, args.shared.nbcol])?;
+    let mut species = simulation_context.simulation.make_species(shape)?;
 
     // Set up buffers to upload simulation results to the GPU
     // TODO: If the simulation backend is GPU-based, directly access simulation
     //       storage instead (will require a different rendering pipeline).
-    let upload_buffers = create_upload_buffers(
+    let frames_in_flight = swapchain_images.len();
+    let upload_buffers = create_upload_buffers(&simulation_context, shape, frames_in_flight)?;
+
+    // Set up input and output descriptor sets
+    let mut inout_sets = create_inout_sets(
         &simulation_context,
         &pipeline,
-        species.shape(),
-        swapchain_images.len(),
+        &upload_buffers[..],
+        swapchain_images,
     )?;
 
-    // TODO: Other per-frame state + current frame tracking
+    // Set up futures to track the rendering of each swapchain image
+    let mut frame_futures = (0..frames_in_flight)
+        .map(|_| None)
+        .collect::<Vec<Option<FenceSignalFuture<_>>>>();
 
     // Wait for GPU-side initialization tasks to finish
     upload_future.wait(None)?;
+    std::mem::drop(upload_future);
 
     // Show window and start event loop
+    let mut recreate_swapchain = false;
     window.set_visible(true);
     event_loop.run(move |event, _, control_flow| {
         // Continuously run even if no events have been incoming
@@ -148,24 +182,109 @@ fn main() -> Result<()> {
         match event {
             // Render when all events have been processed
             Event::MainEventsCleared => {
+                // Recreate the swapchain and dependent state as needed
+                if recreate_swapchain {
+                    recreate_swapchain = false;
+                    let (new_swapchain, new_images) = swapchain
+                        .recreate(swapchain.create_info())
+                        .expect("Failed to recreate swapchain");
+                    swapchain = new_swapchain;
+                    inout_sets = create_inout_sets(
+                        &simulation_context,
+                        &pipeline,
+                        &upload_buffers[..],
+                        new_images,
+                    )
+                    .expect("Failed to recreate I/O descriptor sets");
+                }
+
+                // Acquire the next swapchain image
+                let (image_idx, suboptimal, acquire_future) =
+                    match swapchain::acquire_next_image(swapchain.clone(), None) {
+                        Ok(r) => r,
+                        Err(AcquireError::OutOfDate) => {
+                            recreate_swapchain = true;
+                            return;
+                        }
+                        Err(e) => panic!("Failed to acquire next image: {e}"),
+                    };
+                let image_idx_usize = image_idx as usize;
+                if suboptimal {
+                    recreate_swapchain = true;
+                }
+
+                // Run the simulation
                 // TODO: Add fast/async path for GPU backends
                 simulation_context
                     .simulation
                     .perform_steps(&mut species, steps_per_image)
                     .expect("Failed to compute simulation steps");
 
-                // TODO: Add rendering, use write_result_view instead
-                species
-                    .make_result_view()
-                    .expect("Failed to extract result")
-                    .as_scalars();
+                // Write simulation output to upload buffer
+                {
+                    let mut upload_lock = upload_buffers[image_idx_usize]
+                        .write()
+                        .expect("Failed to acquire write lock on upload buffer");
+                    let upload_scalars =
+                        ArrayViewMut2::from_shape(species.shape(), &mut upload_lock)
+                            .expect("Should not fail (shape should be right)");
+                    species
+                        .write_result_view(upload_scalars)
+                        .expect("Failed to write results to buffer");
+                }
 
-                // TODO: Instead of making nbextrastep a tunable of this version too,
-                //       consider making it simulate-specific, and rather starting at 1
-                //       step/frame, then monitoring the VSync'd framerate and
-                //       autotuning the number of simulation steps to fit a frame nicely
-                //       with some margin, with 1 step/frame as the minimum for slow
-                //       backends.
+                // Record rendering commands
+                let commands = record_render_commands(
+                    &simulation_context,
+                    &pipeline,
+                    inout_sets[image_idx_usize].clone(),
+                    palette_set.clone(),
+                    dispatch_size,
+                )
+                .expect("Failed to record rendering commands");
+
+                // Acquire future associated with previous render to this image
+                let device = &simulation_context.vulkan_context().device;
+                let frame_future = frame_futures[image_idx_usize]
+                    .take()
+                    .map(|mut future| {
+                        future.wait(None).expect("Failed to await render");
+                        future.cleanup_finished();
+                        future.boxed()
+                    })
+                    .unwrap_or_else(|| vulkano::sync::now(device.clone()).boxed());
+
+                // Schedule rendering to this image after previous render is done
+                let queue = simulation_context.queue();
+                let schedule_result = frame_future
+                    .join(acquire_future)
+                    .then_execute(queue.clone(), commands)
+                    .expect("Failed to enqueue rendering commands")
+                    .then_swapchain_present(
+                        queue.clone(),
+                        SwapchainPresentInfo::swapchain_image_index(swapchain.clone(), image_idx),
+                    )
+                    .then_signal_fence_and_flush();
+
+                // Handle swapchain invalidation during rendering
+                match schedule_result {
+                    Ok(future) => frame_futures[image_idx_usize] = Some(future),
+                    Err(FlushError::OutOfDate) => recreate_swapchain = true,
+                    Err(e) => panic!("Failed to schedule render: {e}"),
+                }
+            }
+
+            // This program can't handle window resize because the mapping from
+            // old to new simulation data points would be unclear.
+            Event::WindowEvent {
+                event: WindowEvent::Resized(PhysicalSize { width, height }),
+                ..
+            } => {
+                assert_eq!(
+                    [height as usize, width as usize],
+                    shape,
+                    "Window resize is not supported (and should be disabled)"
+                );
             }
 
             // Exit when the window is closed
@@ -188,8 +307,8 @@ fn create_window(args: &Args) -> Result<(EventLoop<()>, Arc<Window>)> {
     let window = Arc::new(
         WindowBuilder::new()
             .with_inner_size(PhysicalSize::new(
-                args.shared.nbcol as u32,
-                args.shared.nbrow as u32,
+                u32::try_from(args.shared.nbcol)?,
+                u32::try_from(args.shared.nbrow)?,
             ))
             .with_resizable(false)
             .with_title("Gray-Scott reaction")
@@ -339,6 +458,7 @@ fn create_pipeline(
         &shader::SpecializationConstants {
             constant_0: work_group_size[0],
             constant_1: work_group_size[1],
+            amplitude_scale: ui::AMPLITUDE_SCALE,
         },
         Some(context.pipeline_cache.clone()),
         sampler_setup_callback(context)?,
@@ -416,7 +536,7 @@ fn create_color_palette(
             array_layers: 1,
         },
         MipmapsCount::One,
-        Format::B8G8R8A8_SRGB,
+        Format::B8G8R8A8_UNORM,
         &mut upload_builder,
     )?;
     context.set_debug_utils_object_name(&palette_image.inner().image, || "Color palette".into())?;
@@ -475,28 +595,21 @@ fn create_swapchain(
     let (swapchain, swapchain_images) =
         Swapchain::new(context.device.clone(), surface.clone(), create_info)?;
     context.set_debug_utils_object_name(&swapchain, || "Rendering swapchain".into())?;
-    // FIXME: Name swapchain image once vulkano allows for it
 
     Ok((swapchain, swapchain_images))
 }
 
 /// Create buffers for upload of simulation output to the GPU
-///
-/// Returns the buffers along with persistent descriptor sets for binding them
-/// to the rendering pipeline.
-//
-// TODO: Disable this function in optimized GPU mode
 fn create_upload_buffers(
     simulation_context: &SimulationContext,
-    pipeline: &ComputePipeline,
     shape: [usize; 2],
     count: usize,
-) -> Result<Vec<(Subbuffer<[Precision]>, Arc<PersistentDescriptorSet>)>> {
+) -> Result<Vec<Subbuffer<[Precision]>>> {
     let context = simulation_context.vulkan_context();
     let buffer_len = shape.into_iter().product::<usize>();
     (0..count)
-        .map(|_| {
-            let buffer = Buffer::new_slice::<Precision>(
+        .map(|idx| {
+            let sub_buffer = Buffer::new_slice::<Precision>(
                 &context.memory_allocator,
                 BufferCreateInfo {
                     usage: BufferUsage::STORAGE_BUFFER,
@@ -508,12 +621,85 @@ fn create_upload_buffers(
                 },
                 buffer_len as u64,
             )?;
-            let descriptor_set = PersistentDescriptorSet::new(
-                &context.descriptor_allocator,
-                pipeline.layout().set_layouts()[INOUT_SET as usize].clone(),
-                [WriteDescriptorSet::buffer(DATA_INPUT, buffer.clone())],
-            )?;
-            Ok((buffer, descriptor_set))
+            context.set_debug_utils_object_name(sub_buffer.buffer(), || {
+                format!("Upload buffer #{idx}").into()
+            })?;
+            Ok(sub_buffer)
         })
         .collect()
+}
+
+/// Create descriptor sets for each (upload buffer, swapchain image) pair
+fn create_inout_sets(
+    simulation_context: &SimulationContext,
+    pipeline: &ComputePipeline,
+    upload_buffers: &[Subbuffer<[Precision]>],
+    swapchain_images: Vec<Arc<SwapchainImage>>,
+) -> Result<Vec<Arc<PersistentDescriptorSet>>> {
+    assert_eq!(upload_buffers.len(), swapchain_images.len());
+    // FIXME: Name swapchain images once vulkano allows for it
+    let descriptor_allocator = &simulation_context.vulkan_context().descriptor_allocator;
+    upload_buffers
+        .iter()
+        .zip(swapchain_images.into_iter())
+        .map(|(buffer, swapchain_image)| {
+            let descriptor_set = PersistentDescriptorSet::new(
+                descriptor_allocator,
+                pipeline.layout().set_layouts()[INOUT_SET as usize].clone(),
+                [
+                    WriteDescriptorSet::buffer(DATA_INPUT, buffer.clone()),
+                    WriteDescriptorSet::image_view(
+                        SCREEN_OUTPUT,
+                        ImageView::new(
+                            swapchain_image.clone(),
+                            ImageViewCreateInfo {
+                                usage: ImageUsage::STORAGE,
+                                ..ImageViewCreateInfo::from_image(&swapchain_image)
+                            },
+                        )?,
+                    ),
+                ],
+            )?;
+            // FIXME: Name descriptor set once vulkano allows for it
+            Ok(descriptor_set)
+        })
+        .collect()
+}
+
+// Record rendering commands
+fn record_render_commands(
+    simulation_context: &SimulationContext,
+    pipeline: &Arc<ComputePipeline>,
+    inout_set: Arc<PersistentDescriptorSet>,
+    palette_set: Arc<PersistentDescriptorSet>,
+    dispatch_size: [u32; 3],
+) -> Result<PrimaryAutoCommandBuffer> {
+    let context = simulation_context.vulkan_context();
+    let queue = simulation_context.queue();
+
+    let mut builder = AutoCommandBufferBuilder::primary(
+        &context.command_allocator,
+        queue.queue_family_index(),
+        CommandBufferUsage::OneTimeSubmit,
+    )?;
+
+    builder
+        .bind_pipeline_compute(pipeline.clone())
+        .bind_descriptor_sets(
+            PipelineBindPoint::Compute,
+            pipeline.layout().clone(),
+            INOUT_SET,
+            inout_set,
+        )
+        .bind_descriptor_sets(
+            PipelineBindPoint::Compute,
+            pipeline.layout().clone(),
+            PALETTE_SET,
+            palette_set,
+        )
+        .dispatch(dispatch_size)?;
+
+    let commands = builder.build()?;
+    context.set_debug_utils_object_name(&commands, || "Render to screen".into())?;
+    Ok(commands)
 }

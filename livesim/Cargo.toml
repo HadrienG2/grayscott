@@ -40,6 +40,7 @@ compute_selector.workspace = true
 data.workspace = true
 env_logger.workspace = true
 log.workspace = true
+ndarray.workspace = true
 ui = { workspace = true, features = ["simulation", "visualization"] }
 vulkano.workspace = true
 vulkano-shaders.workspace = true

@@ -9,7 +9,7 @@
 perf.data*
 
 # VKtracer traces
-Gray-Scott.vktracer
+*.vktracer
 /traces
 
 # GpuVis traces

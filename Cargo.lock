@@ -1160,6 +1160,7 @@ dependencies = [
  "data",
  "env_logger",
  "log",
+ "ndarray",
  "ui",
  "vulkano",
  "vulkano-shaders",
