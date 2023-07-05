@@ -130,7 +130,7 @@ impl<C: Concentration> Species<C> {
     /// # Panics
     ///
     /// Panics if the target does not have the same shape as this table.
-    pub fn write_scalar_view(&mut self, target: ArrayViewMut2<Precision>) -> Result<(), C::Error> {
+    pub fn write_result_view(&mut self, target: ArrayViewMut2<Precision>) -> Result<(), C::Error> {
         self.access_result(|v, ctx| v.write_scalar_view(ctx, target))
     }
 }

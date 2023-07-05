@@ -24,7 +24,7 @@ pub type Simulation =
 
 /// Parameters are tunable via CLI args and environment variables
 #[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
-pub struct CliArgs<BackendArgs: Args> {
+pub struct ParallelArgs<BackendArgs: Args> {
     /// Number of processing threads
     #[arg(short = 'j', long, env)]
     num_threads: Option<NonZeroUsize>,
@@ -67,7 +67,7 @@ impl<Backend: SimulateCpu + Sync> SimulateBase for ParallelSimulation<Backend>
 where
     Backend::Values: Send + Sync,
 {
-    type CliArgs = CliArgs<<Backend as SimulateBase>::CliArgs>;
+    type CliArgs = ParallelArgs<<Backend as SimulateBase>::CliArgs>;
 
     type Concentration = <Backend as SimulateBase>::Concentration;
 

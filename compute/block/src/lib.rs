@@ -147,7 +147,7 @@ pub struct BlockWiseSimulation<Backend: SimulateCpu, BlockSize: DefaultBlockSize
 impl<Backend: SimulateCpu, BlockSize: DefaultBlockSize> SimulateBase
     for BlockWiseSimulation<Backend, BlockSize>
 {
-    type CliArgs = CliArgs<Backend::CliArgs>;
+    type CliArgs = BlockArgs<Backend::CliArgs>;
 
     type Concentration = <Backend as SimulateBase>::Concentration;
 

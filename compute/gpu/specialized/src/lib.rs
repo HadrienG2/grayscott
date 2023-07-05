@@ -26,12 +26,16 @@ use vulkano::{
 
 /// Kernel work-group size is tunable via CLI args and environment variables
 #[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
-pub struct CliArgs {
+pub struct GpuSpecializedArgs {
     /// Number of rows processed by each GPU work group during simulation
+    ///
+    /// The number of simulated rows must be a multiple of this.
     #[arg(long, env, default_value_t = NonZeroU32::new(8).unwrap())]
     compute_work_group_rows: NonZeroU32,
 
     /// Number of columns processed by each GPU work group during simulation
+    ///
+    /// The number of simulated columns must be a multiple of this.
     #[arg(long, env, default_value_t = NonZeroU32::new(8).unwrap())]
     compute_work_group_cols: NonZeroU32,
 }
@@ -49,7 +53,7 @@ pub struct Simulation {
 }
 //
 impl SimulateBase for Simulation {
-    type CliArgs = CliArgs;
+    type CliArgs = GpuSpecializedArgs;
 
     type Concentration = ImageConcentration;
 
@@ -75,7 +79,11 @@ impl SimulateBase for Simulation {
 }
 //
 impl SimulateGpu for Simulation {
-    fn with_config(params: Parameters, args: CliArgs, mut config: VulkanConfig) -> Result<Self> {
+    fn with_config(
+        params: Parameters,
+        args: GpuSpecializedArgs,
+        mut config: VulkanConfig,
+    ) -> Result<Self> {
         // Pick work-group size
         let work_group_size = [
             args.compute_work_group_cols.into(),
