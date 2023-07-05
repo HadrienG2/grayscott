@@ -17,7 +17,7 @@ use compute::{
 };
 use crevice::std140::AsStd140;
 use data::{
-    concentration::gpu::image::{ImageConcentration, ImageContext},
+    concentration::gpu::image::{context::ImageContext, ImageConcentration},
     parameters::Parameters,
 };
 use std::sync::Arc;

@@ -15,7 +15,7 @@ use compute::{
 };
 use compute_gpu_naive::{images::IMAGES_SET, Error, Result, Species};
 use data::{
-    concentration::gpu::image::{ImageConcentration, ImageContext},
+    concentration::gpu::image::{context::ImageContext, ImageConcentration},
     parameters::Parameters,
 };
 use std::sync::Arc;
