@@ -101,8 +101,8 @@ pub const GRADIENT: colorous::Gradient = colorous::INFERNO;
 
 /// Amplitude scale
 #[cfg(feature = "visualization")]
-pub const MAX_AMPLITUDE: Precision = 0.6;
+pub const MAX_AMPLITUDE: Precision = 0.5;
 
-/// Amplitude rescaling factor associated with MAX_AMPLITUDE
+/// Amplitude rescaling factor so MAX_AMPLITUDE matches the end of GRADIENT
 #[cfg(feature = "visualization")]
 pub const AMPLITUDE_SCALE: Precision = 1.0 / MAX_AMPLITUDE;
