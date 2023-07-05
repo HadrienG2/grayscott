@@ -101,7 +101,7 @@ pub fn descriptor_set(
             let layout =
                 pipeline.layout().set_layouts()[usize::try_from(IMAGES_SET).unwrap()].clone();
             let set = PersistentDescriptorSet::new(
-                &context.descriptor_allocator,
+                &context.descriptor_set_allocator,
                 layout,
                 [
                     input_binding(IN_U, in_u)?,

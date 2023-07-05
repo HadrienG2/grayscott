@@ -12,7 +12,7 @@ pub mod requirements;
 
 use self::images::IMAGES_SET;
 use compute::{
-    gpu::{SimulateGpu, VulkanConfig, VulkanContext},
+    gpu::{config::VulkanConfig, SimulateGpu, VulkanContext},
     NoArgs, Simulate, SimulateBase,
 };
 use crevice::std140::AsStd140;
@@ -135,7 +135,7 @@ impl SimulateGpu for Simulation {
         context
             .set_debug_utils_object_name(parameters.buffer(), || "Simulation parameters".into())?;
         let parameters = PersistentDescriptorSet::new(
-            &context.descriptor_allocator,
+            &context.descriptor_set_allocator,
             pipeline.layout().set_layouts()[PARAMS_SET as usize].clone(),
             [WriteDescriptorSet::buffer(0, parameters)],
         )?;

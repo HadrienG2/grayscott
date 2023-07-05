@@ -5,7 +5,7 @@ use compute::gpu::SimulateGpu;
 #[cfg(not(feature = "gpu"))]
 use compute::SimulateCreate;
 use compute::{
-    gpu::{VulkanConfig, VulkanContext},
+    gpu::{config::VulkanConfig, VulkanContext},
     Simulate, SimulateBase,
 };
 use compute_selector::Simulation;
@@ -542,7 +542,7 @@ fn create_color_palette(
 
     // Create palette descriptor set
     let palette = PersistentDescriptorSet::new(
-        &context.descriptor_allocator,
+        &context.descriptor_set_allocator,
         pipeline.layout().set_layouts()[PALETTE_SET as usize].clone(),
         [WriteDescriptorSet::image_view(
             0,
@@ -637,13 +637,13 @@ fn create_inout_sets(
 ) -> Result<Vec<Arc<PersistentDescriptorSet>>> {
     assert_eq!(upload_buffers.len(), swapchain_images.len());
     // FIXME: Name swapchain images once vulkano allows for it
-    let descriptor_allocator = &simulation_context.vulkan_context().descriptor_allocator;
+    let descriptor_set_allocator = &simulation_context.vulkan_context().descriptor_set_allocator;
     upload_buffers
         .iter()
         .zip(swapchain_images.into_iter())
         .map(|(buffer, swapchain_image)| {
             let descriptor_set = PersistentDescriptorSet::new(
-                descriptor_allocator,
+                descriptor_set_allocator,
                 pipeline.layout().set_layouts()[INOUT_SET as usize].clone(),
                 [
                     WriteDescriptorSet::buffer(DATA_INPUT, buffer.clone()),

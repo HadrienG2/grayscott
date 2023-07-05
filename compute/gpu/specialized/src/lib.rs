@@ -10,7 +10,7 @@ mod specialization;
 
 use self::args::GpuSpecializedArgs;
 use compute::{
-    gpu::{SimulateGpu, VulkanConfig, VulkanContext},
+    gpu::{config::VulkanConfig, SimulateGpu, VulkanContext},
     Simulate, SimulateBase,
 };
 use compute_gpu_naive::{images::IMAGES_SET, Error, Result, Species};
