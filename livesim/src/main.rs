@@ -199,7 +199,7 @@ fn main() -> Result<()> {
                 }
 
                 // Acquire the next swapchain image
-                let (image_idx, suboptimal, acquire_future) =
+                let (image_idx_u32, suboptimal, acquire_future) =
                     match swapchain::acquire_next_image(swapchain.clone(), None) {
                         Ok(r) => r,
                         Err(AcquireError::OutOfDate) => {
@@ -208,7 +208,7 @@ fn main() -> Result<()> {
                         }
                         Err(e) => panic!("Failed to acquire next image: {e}"),
                     };
-                let image_idx_usize = image_idx as usize;
+                let image_idx = image_idx_u32 as usize;
                 if suboptimal {
                     recreate_swapchain = true;
                 }
@@ -222,7 +222,7 @@ fn main() -> Result<()> {
 
                 // Write simulation output to upload buffer
                 {
-                    let mut upload_lock = upload_buffers[image_idx_usize]
+                    let mut upload_lock = upload_buffers[image_idx]
                         .write()
                         .expect("Failed to acquire write lock on upload buffer");
                     let upload_scalars =
@@ -237,7 +237,7 @@ fn main() -> Result<()> {
                 let commands = record_render_commands(
                     &simulation_context,
                     &pipeline,
-                    inout_sets[image_idx_usize].clone(),
+                    inout_sets[image_idx].clone(),
                     palette_set.clone(),
                     dispatch_size,
                 )
@@ -245,7 +245,7 @@ fn main() -> Result<()> {
 
                 // Acquire future associated with previous render to this image
                 let device = &simulation_context.vulkan_context().device;
-                let frame_future = frame_futures[image_idx_usize]
+                let frame_future = frame_futures[image_idx]
                     .take()
                     .map(|mut future| {
                         future.wait(None).expect("Failed to await render");
@@ -262,13 +262,16 @@ fn main() -> Result<()> {
                     .expect("Failed to enqueue rendering commands")
                     .then_swapchain_present(
                         queue.clone(),
-                        SwapchainPresentInfo::swapchain_image_index(swapchain.clone(), image_idx),
+                        SwapchainPresentInfo::swapchain_image_index(
+                            swapchain.clone(),
+                            image_idx_u32,
+                        ),
                     )
                     .then_signal_fence_and_flush();
 
                 // Handle swapchain invalidation during rendering
                 match schedule_result {
-                    Ok(future) => frame_futures[image_idx_usize] = Some(future),
+                    Ok(future) => frame_futures[image_idx] = Some(future),
                     Err(FlushError::OutOfDate) => recreate_swapchain = true,
                     Err(e) => panic!("Failed to schedule render: {e}"),
                 }
