@@ -3,48 +3,26 @@
 //! This crates implements a parallel version of the Gray-Scott simulation based
 //! on domain decomposition and fork-join parallelism.
 
-use clap::Args;
+mod args;
+mod block;
+
+use self::{args::ParallelArgs, block::MultiCore};
 use compute::{
     cpu::{CpuGrid, SimulateCpu},
     SimulateBase, SimulateCreate,
 };
-use compute_block::{BlockWiseSimulation, DefaultBlockSize};
+use compute_block::{default::DefaultBlockSize, BlockWiseSimulation};
 use data::{
     concentration::{Concentration, Species},
     parameters::Parameters,
 };
 use hwlocality::{errors::RawHwlocError, Topology};
 use rayon::{prelude::*, ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
-use std::num::NonZeroUsize;
 use thiserror::Error;
 
 /// Gray-Scott reaction simulation
 pub type Simulation =
     ParallelSimulation<BlockWiseSimulation<compute_autovec::Simulation, MultiCore>>;
-
-/// Parameters are tunable via CLI args and environment variables
-#[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
-pub struct ParallelArgs<BackendArgs: Args> {
-    /// Number of processing threads
-    #[arg(short = 'j', long, env)]
-    num_threads: Option<NonZeroUsize>,
-
-    /// Number of processed bytes per parallel task
-    ///
-    /// There is a granularity compromise between exposing opportunities for
-    /// parallelism and keeping individual sequential tasks efficient. This
-    /// block size is the tuning knob that lets you fine-tune this compromise.
-    ///
-    /// On x86 CPUs, the suggested tuning range is from half the per-thread L1
-    /// cache capacity to the per-thread L3 cache capacity. By default, we tune
-    /// to the per-thread L2 capacity.
-    #[arg(long, env)]
-    seq_block_size: Option<NonZeroUsize>,
-
-    /// Expose backend arguments too
-    #[command(flatten)]
-    backend: BackendArgs,
-}
 
 /// Gray-Scott simulation wrapper that enforces parallel iteration
 #[derive(Debug)]
@@ -139,47 +117,6 @@ where
                 self.backend.step_impl(subgrid);
             });
         });
-    }
-}
-
-/// Multi-core block size selection policy
-///
-/// Multi-core computations should mind fact that in threads can share certain
-/// cache levels, including L1 in the presence of SMT / Hyperthreading. Memory
-/// budgets should be adjusted accordingly.
-#[derive(Debug)]
-pub struct MultiCore {
-    /// Level 1 block size in bytes
-    l1_block_size: usize,
-
-    /// Level 2 block size in bytes
-    l2_block_size: usize,
-}
-//
-impl DefaultBlockSize for MultiCore {
-    fn new(topology: &Topology) -> Self {
-        let cache_stats = topology.cpu_cache_stats();
-        let cache_sizes = cache_stats.smallest_data_cache_sizes_per_thread();
-
-        let l1_block_size = cache_sizes.first().copied().unwrap_or(16 * 1024) as usize / 2;
-        let l2_block_size = if cache_sizes.len() > 1 {
-            cache_sizes[1] as usize / 2
-        } else {
-            l1_block_size
-        };
-
-        Self {
-            l1_block_size,
-            l2_block_size,
-        }
-    }
-
-    fn l1_block_size(&self) -> usize {
-        self.l1_block_size
-    }
-
-    fn l2_block_size(&self) -> usize {
-        self.l2_block_size
     }
 }
 

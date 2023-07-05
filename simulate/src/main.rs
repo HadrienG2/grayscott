@@ -79,9 +79,9 @@ fn main() -> Result<()> {
     // Set up progress reporting
     let progress = ui::init_progress_reporting("Running simulation step", args.nbimage);
 
-    // Set up the HDF5 writer thread
+    // Set up the I/O thread
     std::thread::scope(|s| {
-        // Start the writer thread
+        // HDF5 writer thread writes down simulated data to HDF5
         let (image_send, image_recv) =
             mpsc::sync_channel::<ScalarConcentration>(args.output_buffer.into());
         let (image_recycle_send, image_recycle_recv) = mpsc::channel();

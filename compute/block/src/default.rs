@@ -1,5 +1,7 @@
 //! Default block size selection policy
 
+use hwlocality::Topology;
+
 /// Default block size selection policy, in absence of explicit user setting
 pub trait DefaultBlockSize {
     /// Acquire required data from the hwloc topology

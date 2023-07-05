@@ -1,7 +1,9 @@
+mod split;
+
 use anyhow::Result;
 use clap::Parser;
 use data::hdf5::{Config, Reader};
-use image::{ImageBuffer, Rgb, RgbImage};
+use image::{Rgb, RgbImage};
 use ndarray::Axis;
 use rayon::prelude::*;
 use std::{
@@ -89,6 +91,7 @@ fn main() -> Result<()> {
             let (image_recycle_send, image_recycle_recv) = mpsc::channel();
             let output_dir = &args.output_dir;
             let progress = &progress;
+
             for _ in 0..args.output_threads.into() {
                 let image_recv = image_recv.clone();
                 let image_recycle_send = image_recycle_send.clone();
@@ -102,6 +105,7 @@ fn main() -> Result<()> {
                     }
                 });
             }
+
             (image_send, image_recycle_recv)
         };
 
@@ -116,13 +120,13 @@ fn main() -> Result<()> {
 
             // Generate image using multiple processing threads
             rayon::iter::split(
-                (input.view(), image_view(&mut image)),
+                (input.view(), split::image_view(&mut image)),
                 |(subinput, subimage)| {
                     let num_rows = subinput.nrows();
                     if num_rows > 1 {
                         let midpoint = num_rows / 2;
                         let (input1, input2) = subinput.split_at(Axis(0), midpoint);
-                        let [image1, image2] = vsplit_image(subimage, midpoint);
+                        let [image1, image2] = split::vsplit_image(subimage, midpoint);
                         ((input1, image1), Some((input2, image2)))
                     } else {
                         ((subinput, subimage), None)
@@ -140,31 +144,5 @@ fn main() -> Result<()> {
             image_send.send((idx, image))?;
         }
         Ok::<_, anyhow::Error>(())
-    })
-}
-
-// Unfortunately, the image crate does not currently have view types and
-// splitting operations, so we need to implement these ourselves...
-
-// Mutable view of an image
-type RgbImageView<'a> = ImageBuffer<Rgb<u8>, &'a mut [u8]>;
-
-// Produce a mutable view of an image
-fn image_view(image: &mut RgbImage) -> RgbImageView {
-    let width = image.width();
-    let height = image.height();
-    let subpixels: &mut [u8] = image;
-    RgbImageView::from_raw(width, height, subpixels).expect("Should never fail")
-}
-
-// Vertically split an image view
-fn vsplit_image(image: RgbImageView, row: usize) -> [RgbImageView; 2] {
-    let width = image.width();
-    let subpixels_per_row = image.sample_layout().height_stride;
-    let subpixels = image.into_raw();
-    let (subpixels1, subpixels2) = subpixels.split_at_mut(subpixels_per_row * row);
-    [subpixels1, subpixels2].map(|subpixels| {
-        let height = (subpixels.len() / subpixels_per_row) as u32;
-        RgbImageView::from_raw(width, height, subpixels).expect("Should never fail")
     })
 }

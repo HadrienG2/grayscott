@@ -5,7 +5,9 @@
 //! allows the GPU compiler to optimize code specifically for the simulation
 //! parameters, and also makes it a lot easier to keep CPU and GPU code in sync.
 
-use clap::Args;
+mod args;
+
+use self::args::GpuSpecializedArgs;
 use compute::{
     gpu::{SimulateGpu, VulkanConfig, VulkanContext},
     Simulate, SimulateBase,
@@ -15,7 +17,7 @@ use data::{
     concentration::gpu::image::{ImageConcentration, ImageContext},
     parameters::{Parameters, StencilWeights},
 };
-use std::{num::NonZeroU32, sync::Arc};
+use std::sync::Arc;
 use vulkano::{
     command_buffer::{AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage},
     device::Queue,
@@ -23,22 +25,6 @@ use vulkano::{
     pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
     sync::GpuFuture,
 };
-
-/// Kernel work-group size is tunable via CLI args and environment variables
-#[derive(Args, Copy, Clone, Debug, Eq, Hash, PartialEq)]
-pub struct GpuSpecializedArgs {
-    /// Number of rows processed by each GPU work group during simulation
-    ///
-    /// The number of simulated rows must be a multiple of this.
-    #[arg(long, env, default_value_t = NonZeroU32::new(8).unwrap())]
-    compute_work_group_rows: NonZeroU32,
-
-    /// Number of columns processed by each GPU work group during simulation
-    ///
-    /// The number of simulated columns must be a multiple of this.
-    #[arg(long, env, default_value_t = NonZeroU32::new(8).unwrap())]
-    compute_work_group_cols: NonZeroU32,
-}
 
 /// Gray-Scott reaction simulation
 pub struct Simulation {
