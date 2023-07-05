@@ -9,18 +9,28 @@ use compute::{
     Simulate, SimulateBase,
 };
 use compute_selector::Simulation;
-use data::{concentration::AsScalars, parameters::Parameters};
+use data::{concentration::AsScalars, parameters::Parameters, Precision};
 use log::info;
 use std::{num::NonZeroU32, sync::Arc};
 use ui::SharedArgs;
 use vulkano::{
-    descriptor_set::layout::DescriptorSetLayoutCreateInfo,
-    device::physical::PhysicalDevice,
+    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
+    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage},
+    descriptor_set::{
+        layout::DescriptorSetLayoutCreateInfo, PersistentDescriptorSet, WriteDescriptorSet,
+    },
+    device::{physical::PhysicalDevice, Queue},
     format::{Format, NumericType},
-    image::{ImageAspects, ImageUsage, SwapchainImage},
-    pipeline::ComputePipeline,
+    image::{
+        view::{ImageView, ImageViewCreateInfo},
+        ImageAccess, ImageAspects, ImageDimensions, ImageUsage, ImmutableImage, MipmapsCount,
+        SwapchainImage,
+    },
+    memory::allocator::{AllocationCreateInfo, MemoryUsage},
+    pipeline::{ComputePipeline, Pipeline},
     sampler::{Filter, Sampler, SamplerCreateInfo},
     swapchain::{ColorSpace, Surface, SurfaceInfo, Swapchain, SwapchainCreateInfo},
+    sync::GpuFuture,
 };
 use winit::{
     dpi::PhysicalSize,
@@ -56,6 +66,17 @@ struct Args {
     /// Number of columns processed by each GPU work group during rendering
     #[arg(long, default_value_t = NonZeroU32::new(8).unwrap())]
     render_work_group_cols: NonZeroU32,
+
+    /// Color palette resolution
+    ///
+    /// There is a spectrum between producing a live color output that is a
+    /// pixel-perfect clone of the `data-to-pics` images' on one end, and
+    /// maximizing the efficiency/portability of the GPU code on the other end.
+    /// This tuning parameter lets you control this compromise.
+    ///
+    /// Must be at least 2. Higher is more accurate/expensive and less portable.
+    #[arg(long, default_value_t = 256)]
+    color_palette_resolution: u32,
 }
 
 fn main() -> Result<()> {
@@ -79,26 +100,43 @@ fn main() -> Result<()> {
 
     // Set up the simulation and Vulkan context
     let simulation_context = SimulationContext::new(&args, &window)?;
-    let simulation = &simulation_context.simulation;
-    let context = simulation_context.context();
-
-    // Set up a swapchain
-    let (swapchain, swapchain_images) =
-        create_swapchain(context, simulation_context.surface().clone())?;
 
     // Set up the rendering pipeline
-    let pipeline = create_pipeline(context, work_group_size);
+    let pipeline = create_pipeline(&simulation_context, work_group_size)?;
 
-    // TODO: Create the color palette, upload it, make a descriptor set.
+    // Create the color palette and prepare to upload it
+    let (upload_future, palette) = create_color_palette(
+        &simulation_context,
+        &pipeline,
+        args.color_palette_resolution,
+    )?;
+
+    // Since we have no other initialization work to submit to the GPU, start
+    // uploading the color palette right away
+    let upload_future = upload_future.then_signal_fence_and_flush()?;
+
+    // Set up a swapchain
+    let (swapchain, swapchain_images) = create_swapchain(&simulation_context)?;
 
     // Set up chemical species concentration storage
-    // TODO: If this is GPU storage, use it directly instead of round tripping
     let mut species = simulation_context
         .simulation
         .make_species([args.shared.nbrow, args.shared.nbcol])?;
 
-    // TODO: Create upload buffers as necessary, pipeline, etc (this step will
-    //       change once we start sharing data with the GPU context)
+    // Set up buffers to upload simulation results to the GPU
+    // TODO: If the simulation backend is GPU-based, directly access simulation
+    //       storage instead (will require a different rendering pipeline).
+    let upload_buffers = create_upload_buffers(
+        &simulation_context,
+        &pipeline,
+        species.shape(),
+        swapchain_images.len(),
+    )?;
+
+    // TODO: Other per-frame state + current frame tracking
+
+    // Wait for GPU-side initialization tasks to finish
+    upload_future.wait(None)?;
 
     // Show window and start event loop
     window.set_visible(true);
@@ -110,13 +148,13 @@ fn main() -> Result<()> {
         match event {
             // Render when all events have been processed
             Event::MainEventsCleared => {
-                // TODO: Add fast path for GPU backends
+                // TODO: Add fast/async path for GPU backends
                 simulation_context
                     .simulation
                     .perform_steps(&mut species, steps_per_image)
                     .expect("Failed to compute simulation steps");
 
-                // TODO: Add rendering
+                // TODO: Add rendering, use write_result_view instead
                 species
                     .make_result_view()
                     .expect("Failed to extract result")
@@ -219,7 +257,7 @@ impl SimulationContext {
     }
 
     /// Get access to the vulkan context
-    fn context(&self) -> &VulkanContext {
+    fn vulkan_context(&self) -> &VulkanContext {
         #[cfg(feature = "gpu")]
         {
             self.simulation.context()
@@ -232,10 +270,15 @@ impl SimulationContext {
 
     /// Get access to the rendering surface
     fn surface(&self) -> &Arc<Surface> {
-        self.context()
+        self.vulkan_context()
             .surface
             .as_ref()
             .expect("There should be one (window specified in VulkanConfig)")
+    }
+
+    /// Get access to the rendering queue (only queue currently used)
+    fn queue(&self) -> &Arc<Queue> {
+        &self.vulkan_context().queues[0]
     }
 }
 
@@ -279,45 +322,13 @@ fn is_supported_format((format, colorspace): (Format, ColorSpace)) -> bool {
         && colorspace == ColorSpace::SrgbNonLinear
 }
 
-/// Create a swapchain
-fn create_swapchain(
-    context: &VulkanContext,
-    surface: Arc<Surface>,
-) -> Result<(Arc<Swapchain>, Vec<Arc<SwapchainImage>>)> {
-    let physical_device = context.device.physical_device();
-
-    let surface_info = SurfaceInfo::default();
-    let surface_capabilities =
-        physical_device.surface_capabilities(&surface, surface_info.clone())?;
-    let (image_format, image_color_space) = physical_device
-        .surface_formats(&surface, surface_info)?
-        .into_iter()
-        .find(|format| is_supported_format(*format))
-        .expect("There should be one (checked at device creation time)");
-
-    let create_info = SwapchainCreateInfo {
-        min_image_count: surface_capabilities.min_image_count.max(2),
-        image_format: Some(image_format),
-        image_color_space,
-        image_usage: ImageUsage::STORAGE,
-        ..Default::default()
-    };
-    info!("Will now create a swapchain with {create_info:#?}");
-
-    let (swapchain, swapchain_images) =
-        Swapchain::new(context.device.clone(), surface, create_info)?;
-    context.set_debug_utils_object_name(&swapchain, || "Rendering swapchain".into())?;
-    // FIXME: Name swapchain image once vulkano allows for it
-
-    Ok((swapchain, swapchain_images))
-}
-
 /// Create the rendering pipeline
 fn create_pipeline(
-    context: &VulkanContext,
+    simulation_context: &SimulationContext,
     work_group_size: [u32; 3],
 ) -> Result<Arc<ComputePipeline>> {
     // Load the rendering shader
+    let context = simulation_context.vulkan_context();
     let shader = shader::load(context.device.clone())?;
     context.set_debug_utils_object_name(&shader, || "Live renderer shader".into())?;
 
@@ -360,14 +371,149 @@ pub fn sampler_setup_callback(
             ..Default::default()
         },
     )?;
-    context.set_debug_utils_object_name(&palette_sampler, || "Palette sampler".into())?;
+    context.set_debug_utils_object_name(&palette_sampler, || "Color palette sampler".into())?;
     Ok(
         move |descriptor_sets: &mut [DescriptorSetLayoutCreateInfo]| {
             descriptor_sets[PALETTE_SET as usize]
                 .bindings
                 .get_mut(&0)
-                .expect("Palette descriptor should be present")
+                .expect("Color palette descriptor should be present")
                 .immutable_samplers = vec![palette_sampler];
         },
     )
+}
+
+/// Create the color palette used for data -> color translation
+///
+/// Returns a GPU future that will be signaled once the palette has been
+/// uploaded to the GPU, along with a descriptor set that can be used in order
+/// to bind the palette to the rendering pipeline.
+fn create_color_palette(
+    simulation_context: &SimulationContext,
+    pipeline: &ComputePipeline,
+    width: u32,
+) -> Result<(impl GpuFuture, Arc<PersistentDescriptorSet>)> {
+    // Prepare to upload color palette
+    assert!(width >= 2, "Color palette must have at least two endpoints");
+    let context = simulation_context.vulkan_context();
+    let upload_queue = simulation_context.queue();
+    let mut upload_builder = AutoCommandBufferBuilder::primary(
+        &context.command_allocator,
+        upload_queue.queue_family_index(),
+        CommandBufferUsage::OneTimeSubmit,
+    )?;
+
+    // Create color palette, record upload commands
+    let palette_image = ImmutableImage::from_iter(
+        &context.memory_allocator,
+        (0..width).map(|idx| {
+            let position = idx as f64 / (width - 1) as f64;
+            let color = ui::GRADIENT.eval_continuous(position);
+            [color.b, color.g, color.r, 255]
+        }),
+        ImageDimensions::Dim1d {
+            width,
+            array_layers: 1,
+        },
+        MipmapsCount::One,
+        Format::B8G8R8A8_SRGB,
+        &mut upload_builder,
+    )?;
+    context.set_debug_utils_object_name(&palette_image.inner().image, || "Color palette".into())?;
+
+    // Create palette descriptor set
+    let palette = PersistentDescriptorSet::new(
+        &context.descriptor_allocator,
+        pipeline.layout().set_layouts()[PALETTE_SET as usize].clone(),
+        [WriteDescriptorSet::image_view(
+            0,
+            ImageView::new(
+                palette_image.clone(),
+                ImageViewCreateInfo {
+                    usage: ImageUsage::SAMPLED,
+                    ..ImageViewCreateInfo::from_image(&palette_image)
+                },
+            )?,
+        )],
+    )?;
+    // FIXME: Name this descriptor set once vulkano allows for it
+
+    // Schedule upload
+    let upload = upload_builder.build()?;
+    context.set_debug_utils_object_name(&upload, || "Color palette upload".into())?;
+    let upload_future =
+        vulkano::sync::now(context.device.clone()).then_execute(upload_queue.clone(), upload)?;
+    Ok((upload_future, palette))
+}
+
+/// Create a swapchain
+fn create_swapchain(
+    simulation_context: &SimulationContext,
+) -> Result<(Arc<Swapchain>, Vec<Arc<SwapchainImage>>)> {
+    let context = simulation_context.vulkan_context();
+    let physical_device = context.device.physical_device();
+    let surface = simulation_context.surface();
+
+    let surface_info = SurfaceInfo::default();
+    let surface_capabilities =
+        physical_device.surface_capabilities(surface, surface_info.clone())?;
+    let (image_format, image_color_space) = physical_device
+        .surface_formats(surface, surface_info)?
+        .into_iter()
+        .find(|format| is_supported_format(*format))
+        .expect("There should be one (checked at device creation time)");
+
+    let create_info = SwapchainCreateInfo {
+        min_image_count: surface_capabilities.min_image_count.max(2),
+        image_format: Some(image_format),
+        image_color_space,
+        image_usage: ImageUsage::STORAGE,
+        ..Default::default()
+    };
+    info!("Will now create a swapchain with {create_info:#?}");
+
+    let (swapchain, swapchain_images) =
+        Swapchain::new(context.device.clone(), surface.clone(), create_info)?;
+    context.set_debug_utils_object_name(&swapchain, || "Rendering swapchain".into())?;
+    // FIXME: Name swapchain image once vulkano allows for it
+
+    Ok((swapchain, swapchain_images))
+}
+
+/// Create buffers for upload of simulation output to the GPU
+///
+/// Returns the buffers along with persistent descriptor sets for binding them
+/// to the rendering pipeline.
+//
+// TODO: Disable this function in optimized GPU mode
+fn create_upload_buffers(
+    simulation_context: &SimulationContext,
+    pipeline: &ComputePipeline,
+    shape: [usize; 2],
+    count: usize,
+) -> Result<Vec<(Subbuffer<[Precision]>, Arc<PersistentDescriptorSet>)>> {
+    let context = simulation_context.vulkan_context();
+    let buffer_len = shape.into_iter().product::<usize>();
+    (0..count)
+        .map(|_| {
+            let buffer = Buffer::new_slice::<Precision>(
+                &context.memory_allocator,
+                BufferCreateInfo {
+                    usage: BufferUsage::STORAGE_BUFFER,
+                    ..Default::default()
+                },
+                AllocationCreateInfo {
+                    usage: MemoryUsage::Upload,
+                    ..Default::default()
+                },
+                buffer_len as u64,
+            )?;
+            let descriptor_set = PersistentDescriptorSet::new(
+                &context.descriptor_allocator,
+                pipeline.layout().set_layouts()[INOUT_SET as usize].clone(),
+                [WriteDescriptorSet::buffer(DATA_INPUT, buffer.clone())],
+            )?;
+            Ok((buffer, descriptor_set))
+        })
+        .collect()
 }
