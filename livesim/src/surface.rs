@@ -1,7 +1,7 @@
 //! Rendering surface management
 
 use crate::{context::SimulationContext, input::Input, palette, pipeline, Args, Result};
-use compute::gpu::VulkanContext;
+use compute::gpu::context::VulkanContext;
 use log::info;
 use std::sync::Arc;
 use vulkano::{

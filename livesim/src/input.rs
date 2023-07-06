@@ -1,7 +1,7 @@
 //! Handling of input data from simulation
 
 use crate::{pipeline, Result};
-use compute::{gpu::VulkanContext, SimulateBase};
+use compute::{gpu::context::VulkanContext, SimulateBase};
 use compute_selector::Simulation;
 use data::{concentration::Species, Precision};
 use ndarray::ArrayViewMut2;

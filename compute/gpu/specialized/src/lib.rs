@@ -10,7 +10,7 @@ mod specialization;
 
 use self::args::GpuSpecializedArgs;
 use compute::{
-    gpu::{config::VulkanConfig, SimulateGpu, VulkanContext},
+    gpu::{config::VulkanConfig, context::VulkanContext, SimulateGpu},
     Simulate, SimulateBase,
 };
 use compute_gpu_naive::{images::IMAGES_SET, Error, Result, Species};
@@ -86,7 +86,7 @@ impl SimulateGpu for Simulation {
             }),
             ..config
         }
-        .setup()?;
+        .build()?;
 
         // Load the compute shader
         let shader = shader::load(context.device.clone())?;

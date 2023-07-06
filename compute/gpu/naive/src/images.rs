@@ -1,7 +1,7 @@
 //! Resource setup related to image sampling and storage
 
 use crate::{Result, Species};
-use compute::gpu::VulkanContext;
+use compute::gpu::context::VulkanContext;
 use std::{collections::hash_map::Entry, sync::Arc};
 use vulkano::{
     descriptor_set::{

@@ -4,9 +4,10 @@ mod defaults;
 
 use super::{
     cache::PersistentPipelineCache,
+    context::VulkanContext,
     device,
     instance::{self, DebuggedInstance},
-    library, Error, Result, VulkanContext,
+    library, Error, Result,
 };
 use directories::ProjectDirs;
 #[allow(unused_imports)]
@@ -34,11 +35,11 @@ pub type DeviceSurfaceRequirements = Box<dyn FnMut(&PhysicalDevice, &Surface) ->
 /// to adjust the configuration, check out their documentation to see what their
 /// default behavior is.
 ///
-/// Once you're satisfied with the configuration, used the [`setup()`] method
+/// Once you're satisfied with the configuration, used the [`build()`] method
 /// to set up the Vulkan context.
 ///
 /// [`default()`]: VulkanConfig::default()
-/// [`setup()`]: VulkanConfig::setup()
+/// [`build()`]: VulkanConfig::build()
 #[allow(clippy::type_complexity)]
 pub struct VulkanConfig<
     MemAlloc: MemoryAllocator = StandardMemoryAllocator,
@@ -216,18 +217,21 @@ impl Default
     }
 }
 //
-impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
-    VulkanConfig<MemAlloc, CommAlloc>
+impl<
+        MemAlloc: MemoryAllocator,
+        CommAlloc: CommandBufferAllocator,
+        DescAlloc: DescriptorSetAllocator,
+    > VulkanConfig<MemAlloc, CommAlloc, DescAlloc>
 {
     /// Set up a Vulkan compute context with this configuration
     ///
     /// ```
     /// # use compute::gpu::VulkanConfig;
-    /// let context = VulkanConfig::default().setup()?;
+    /// let context = VulkanConfig::default().build()?;
     /// # Ok::<(), compute::gpu::Error>(())
     /// ```
     #[allow(unused_assignments, unused_mut)]
-    pub fn setup(mut self) -> Result<VulkanContext<MemAlloc, CommAlloc>> {
+    pub fn build(mut self) -> Result<VulkanContext<MemAlloc, CommAlloc, DescAlloc>> {
         // Load vulkan library
         let library = library::load()?;
 
@@ -238,7 +242,7 @@ impl<MemAlloc: MemoryAllocator, CommAlloc: CommandBufferAllocator>
             self.window_and_reqs.is_some(),
         );
         let layers = (self.layers)(&library);
-        let instance = DebuggedInstance::setup(
+        let instance = DebuggedInstance::new(
             library,
             layers,
             instance_extensions,

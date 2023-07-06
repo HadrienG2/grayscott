@@ -5,7 +5,7 @@ use crate::{
     input::{self, Input},
     pipeline, surface, Result,
 };
-use compute::gpu::VulkanContext;
+use compute::gpu::context::VulkanContext;
 use std::sync::Arc;
 use vulkano::{
     command_buffer::{CommandBufferExecFuture, PrimaryAutoCommandBuffer},

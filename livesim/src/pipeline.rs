@@ -1,7 +1,7 @@
 //! Rendering pipeline
 
 use crate::{input::Input, palette, Result, SimulationContext};
-use compute::gpu::VulkanContext;
+use compute::gpu::context::VulkanContext;
 use std::sync::Arc;
 use vulkano::{
     buffer::BufferUsage,

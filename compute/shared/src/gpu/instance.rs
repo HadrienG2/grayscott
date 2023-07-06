@@ -57,7 +57,7 @@ impl DebuggedInstance {
     /// on macOS and iOS, but in that case your device requirements and preferences
     /// must account for the associated [non-conforming
     /// behavior](https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VK_KHR_portability_subset.html).
-    pub fn setup(
+    pub fn new(
         library: Arc<VulkanLibrary>,
         enabled_layers: Vec<String>,
         enabled_extensions: InstanceExtensions,

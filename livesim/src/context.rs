@@ -3,7 +3,7 @@
 use crate::{surface, Args, Result};
 #[cfg(feature = "gpu")]
 use compute::gpu::SimulateGpu;
-use compute::gpu::{config::VulkanConfig, VulkanContext};
+use compute::gpu::{config::VulkanConfig, context::VulkanContext};
 #[cfg(not(feature = "gpu"))]
 use compute::SimulateCreate;
 use compute_selector::Simulation;
@@ -62,7 +62,7 @@ impl SimulationContext {
             #[cfg(not(feature = "gpu"))]
             {
                 info!("Rendering will use its own Vulkan context");
-                let context = Self::vulkan_config(window.clone()).setup()?;
+                let context = Self::vulkan_config(window.clone()).build()?;
                 Ok(Self {
                     simulation,
                     context,

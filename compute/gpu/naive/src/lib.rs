@@ -12,7 +12,7 @@ pub mod requirements;
 
 use self::images::IMAGES_SET;
 use compute::{
-    gpu::{config::VulkanConfig, SimulateGpu, VulkanContext},
+    gpu::{config::VulkanConfig, context::VulkanContext, SimulateGpu},
     NoArgs, Simulate, SimulateBase,
 };
 use crevice::std140::AsStd140;
@@ -101,7 +101,7 @@ impl SimulateGpu for Simulation {
             }),
             ..config
         }
-        .setup()?;
+        .build()?;
 
         // Load the compute shader
         let shader = shader::load(context.device.clone())?;
