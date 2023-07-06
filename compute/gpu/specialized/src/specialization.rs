@@ -1,12 +1,13 @@
 //! Specialization constants
 
 use crate::shader::SpecializationConstants;
-use data::parameters::{Parameters, StencilWeights};
+use data::{
+    concentration::gpu::shape::Shape,
+    parameters::{Parameters, StencilWeights},
+};
 
 /// Generate GPU specialization constants
-pub fn constants(parameters: Parameters, work_group_size: [u32; 3]) -> SpecializationConstants {
-    assert_eq!(work_group_size[2], 1, "This is not a 3D simulation!");
-
+pub fn constants(parameters: Parameters, work_group_shape: Shape) -> SpecializationConstants {
     // By using struct patterns as done here, we ensure that many possible
     // mismatches between CPU and GPU expectations can be detected.
     let Parameters {
@@ -35,7 +36,7 @@ pub fn constants(parameters: Parameters, work_group_size: [u32; 3]) -> Specializ
         feed_rate,
         kill_rate,
         time_step,
-        constant_0: work_group_size[0],
-        constant_1: work_group_size[1],
+        constant_0: work_group_shape.width(),
+        constant_1: work_group_shape.height(),
     }
 }

@@ -50,7 +50,7 @@ fn main() -> Result<()> {
 
     // Parse CLI arguments and handle clap-incompatible defaults
     let args = Args::parse();
-    let [kill_rate, feed_rate, time_step] = ui::kill_feed_deltat(&args.shared);
+    let [kill_rate, feed_rate, time_step] = args.shared.kill_feed_deltat();
     let steps_per_image = args.shared.nbextrastep.unwrap_or(34);
     let file_name = ui::simulation_output_path(args.output);
 
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
     )?;
 
     // Set up chemical species concentration storage
-    let mut species = simulation.make_species([args.shared.nbrow, args.shared.nbcol])?;
+    let mut species = simulation.make_species(args.shared.domain_shape())?;
     let mut writer = Writer::create(
         hdf5::Config {
             file_name,

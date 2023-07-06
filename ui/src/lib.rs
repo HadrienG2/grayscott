@@ -28,11 +28,11 @@ pub struct SharedArgs<Simulation: SimulateBase> {
 
     /// Number of rows of the images to be created
     #[arg(short = 'r', long, default_value_t = 1080)]
-    pub nbrow: usize,
+    pub nbrow: u32,
 
     /// Number of columns of the images to be created
     #[arg(short = 'c', long, default_value_t = 1920)]
-    pub nbcol: usize,
+    pub nbcol: u32,
 
     /// Simulated time interval on each simulation step
     #[arg(short = 't', long)]
@@ -42,15 +42,22 @@ pub struct SharedArgs<Simulation: SimulateBase> {
     #[command(flatten)]
     pub backend: Simulation::CliArgs,
 }
-
-/// Argument defaults for killrate, feedrate and deltat that clap can't handle
+//
 #[cfg(feature = "simulation")]
-pub fn kill_feed_deltat(args: &SharedArgs<impl SimulateBase>) -> [Precision; 3] {
-    let default_params = data::parameters::Parameters::default();
-    let kill_rate = args.killrate.unwrap_or(default_params.kill_rate);
-    let feed_rate = args.feedrate.unwrap_or(default_params.feed_rate);
-    let time_step = args.deltat.unwrap_or(default_params.time_step);
-    [kill_rate, feed_rate, time_step]
+impl<Simulation: SimulateBase> SharedArgs<Simulation> {
+    /// Argument defaults for killrate, feedrate and deltat that clap can't handle
+    pub fn kill_feed_deltat(&self) -> [Precision; 3] {
+        let default_params = data::parameters::Parameters::default();
+        let kill_rate = self.killrate.unwrap_or(default_params.kill_rate);
+        let feed_rate = self.feedrate.unwrap_or(default_params.feed_rate);
+        let time_step = self.deltat.unwrap_or(default_params.time_step);
+        [kill_rate, feed_rate, time_step]
+    }
+
+    /// Domain shape
+    pub fn domain_shape(&self) -> [usize; 2] {
+        [self.nbrow as usize, self.nbcol as usize]
+    }
 }
 
 /// Default simulation output file name

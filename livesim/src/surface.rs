@@ -1,7 +1,8 @@
 //! Rendering surface management
 
-use crate::{context::SimulationContext, input::Input, palette, pipeline, Args, Result};
+use crate::{context::SimulationContext, input::Input, palette, pipeline, Result};
 use compute::gpu::context::VulkanContext;
+use data::concentration::gpu::shape::Shape;
 use log::info;
 use std::sync::Arc;
 use vulkano::{
@@ -18,14 +19,11 @@ use winit::{
 };
 
 /// Set up a window and associated event loop
-pub fn create_window(args: &Args) -> Result<(EventLoop<()>, Arc<Window>)> {
+pub fn create_window(shape: Shape) -> Result<(EventLoop<()>, Arc<Window>)> {
     let event_loop = EventLoop::new();
     let window = Arc::new(
         WindowBuilder::new()
-            .with_inner_size(PhysicalSize::new(
-                u32::try_from(args.shared.nbcol)?,
-                u32::try_from(args.shared.nbrow)?,
-            ))
+            .with_inner_size(PhysicalSize::new(shape.width(), shape.height()))
             .with_resizable(false)
             .with_title("Gray-Scott reaction")
             .with_visible(false)

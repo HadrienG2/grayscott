@@ -1,6 +1,6 @@
 //! Basic Vulkan context and simulation engine initialization
 
-use crate::{surface, Args, Result};
+use crate::{surface, Result};
 #[cfg(feature = "gpu")]
 use compute::gpu::SimulateGpu;
 use compute::gpu::{config::VulkanConfig, context::VulkanContext};
@@ -10,6 +10,7 @@ use compute_selector::Simulation;
 use data::parameters::Parameters;
 use log::info;
 use std::sync::Arc;
+use ui::SharedArgs;
 use vulkano::{device::Queue, swapchain::Surface};
 use winit::window::Window;
 
@@ -26,9 +27,9 @@ pub struct SimulationContext {
 //
 impl SimulationContext {
     /// Set up the simulation and Vulkan context
-    pub fn new(args: &Args, window: &Arc<Window>) -> Result<Self> {
+    pub fn new(args: &SharedArgs<Simulation>, window: &Arc<Window>) -> Result<Self> {
         // Configure simulation
-        let [kill_rate, feed_rate, time_step] = ui::kill_feed_deltat(&args.shared);
+        let [kill_rate, feed_rate, time_step] = args.kill_feed_deltat();
         let parameters = Parameters {
             kill_rate,
             feed_rate,
@@ -43,13 +44,13 @@ impl SimulationContext {
                 info!("Rendering will share the simulation's Vulkan context");
                 Simulation::with_config(
                     parameters,
-                    args.shared.backend,
+                    args.backend,
                     Self::vulkan_config(window.clone()),
                 )
             }
             #[cfg(not(feature = "gpu"))]
             {
-                Simulation::new(parameters, args.shared.backend)
+                Simulation::new(parameters, args.backend)
             }
         }?;
 

@@ -15,7 +15,7 @@ use compute::{
 };
 use compute_gpu_naive::{images::IMAGES_SET, Error, Result, Species};
 use data::{
-    concentration::gpu::image::{context::ImageContext, ImageConcentration},
+    concentration::gpu::{image::ImageConcentration, shape::Shape},
     parameters::Parameters,
 };
 use std::sync::Arc;
@@ -35,7 +35,7 @@ pub struct Simulation {
     pipeline: Arc<ComputePipeline>,
 
     /// Work-group size
-    work_group_size: [u32; 3],
+    work_group_shape: Shape,
 }
 //
 impl SimulateBase for Simulation {
@@ -46,22 +46,12 @@ impl SimulateBase for Simulation {
     type Error = Error;
 
     fn make_species(&self, shape: [usize; 2]) -> Result<Species> {
-        compute_gpu_naive::requirements::check_image_shape(
-            self.context.device.physical_device(),
+        compute_gpu_naive::make_species(
+            &self.context,
             shape,
-            self.work_group_size,
-        )?;
-        Ok(Species::new(
-            ImageContext::new(
-                self.context.memory_allocator.clone(),
-                self.context.command_allocator.clone(),
-                self.queue().clone(),
-                self.queue().clone(),
-                [],
-                compute_gpu_naive::requirements::image_usage(),
-            )?,
-            shape,
-        )?)
+            self.work_group_shape,
+            self.queue().clone(),
+        )
     }
 }
 //
@@ -72,17 +62,16 @@ impl SimulateGpu for Simulation {
         mut config: VulkanConfig,
     ) -> Result<Self> {
         // Pick work-group size
-        let work_group_size = [
-            args.compute_work_group_cols.into(),
+        let work_group_shape = Shape::new([
             args.compute_work_group_rows.into(),
-            1,
-        ];
+            args.compute_work_group_cols.into(),
+        ]);
 
         // Set up Vulkan
         let context = VulkanConfig {
             other_device_requirements: Box::new(move |device| {
                 (config.other_device_requirements)(device)
-                    && compute_gpu_naive::requirements::device_filter(device, work_group_size)
+                    && compute_gpu_naive::requirements::device_filter(device, work_group_shape)
             }),
             ..config
         }
@@ -98,7 +87,7 @@ impl SimulateGpu for Simulation {
         let pipeline = ComputePipeline::new(
             context.device.clone(),
             shader.entry_point("main").expect("Should be present"),
-            &specialization::constants(parameters, work_group_size),
+            &specialization::constants(parameters, work_group_shape),
             Some(context.pipeline_cache.clone()),
             compute_gpu_naive::images::sampler_setup_callback(&context)?,
         )?;
@@ -107,7 +96,7 @@ impl SimulateGpu for Simulation {
         Ok(Self {
             context,
             pipeline,
-            work_group_size,
+            work_group_shape,
         })
     }
 
@@ -134,7 +123,7 @@ impl SimulateGpu for Simulation {
         builder.bind_pipeline_compute(self.pipeline.clone());
 
         // Determine the GPU dispatch size
-        let dispatch_size = compute_gpu_naive::dispatch_size(species.shape(), self.work_group_size);
+        let dispatch_size = compute_gpu_naive::dispatch_size(&species, self.work_group_shape);
 
         // Record the simulation steps
         for _ in 0..steps {

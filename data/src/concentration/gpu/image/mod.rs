@@ -6,7 +6,10 @@ pub mod context;
 
 use self::context::{ImageContext, MemAlloc};
 use crate::{
-    concentration::{AsScalars, Concentration},
+    concentration::{
+        gpu::shape::{Shape, ShapeConvertError},
+        AsScalars, Concentration,
+    },
     Precision,
 };
 use ndarray::{s, ArrayView2, ArrayViewMut2};
@@ -20,8 +23,8 @@ use vulkano::{
     device::DeviceOwned,
     format::{Format, FormatFeatures},
     image::{
-        ImageAccess, ImageCreateFlags, ImageDimensions, ImageError, ImageFormatInfo, ImageTiling,
-        ImageType, ImageUsage, StorageImage,
+        ImageAccess, ImageCreateFlags, ImageError, ImageFormatInfo, ImageTiling, ImageType,
+        ImageUsage, StorageImage,
     },
     memory::allocator::{AllocationCreateInfo, MemoryAllocatePreference, MemoryUsage},
     sync::{future::NowFuture, FlushError, GpuFuture, Sharing},
@@ -76,10 +79,9 @@ impl Concentration for ImageConcentration {
     }
 
     fn shape(&self) -> [usize; 2] {
-        let ImageDimensions::Dim2d { width, height, .. } = self.gpu_image.dimensions() else {
-             unreachable!()
-        };
-        [height.try_into().unwrap(), width.try_into().unwrap()]
+        Shape::try_from(self.gpu_image.dimensions())
+            .expect("Can't fail (checked at construction time)")
+            .ndarray()
     }
 
     fn fill_slice(
@@ -241,6 +243,7 @@ impl ImageConcentration {
         ) -> std::result::Result<CpuBuffer, BufferError>,
         owner: Owner,
     ) -> Result<Self> {
+        let shape = Shape::try_from(shape)?;
         let gpu_image = Self::make_image(context, shape)?;
         let cpu_buffer = Self::make_buffer(context, shape, buffer_constructor)?;
 
@@ -259,18 +262,11 @@ impl ImageConcentration {
     }
 
     /// Image construction logic
-    fn make_image(
-        context: &mut ImageContext,
-        [rows, cols]: [usize; 2],
-    ) -> Result<Arc<StorageImage>> {
+    fn make_image(context: &mut ImageContext, shape: Shape) -> Result<Arc<StorageImage>> {
         let image_format_info = Self::image_format_info(context.client_image_usage());
         let image = StorageImage::with_usage(
             context.memory_allocator(),
-            ImageDimensions::Dim2d {
-                width: cols.try_into().unwrap(),
-                height: rows.try_into().unwrap(),
-                array_layers: 1,
-            },
+            shape.image(),
             Self::format(),
             image_format_info.usage,
             image_format_info.flags,
@@ -282,7 +278,7 @@ impl ImageConcentration {
     /// Buffer construction logic
     fn make_buffer(
         context: &mut ImageContext,
-        shape: [usize; 2],
+        shape: Shape,
         constructor: impl FnOnce(
             &MemAlloc,
             BufferCreateInfo,
@@ -290,7 +286,6 @@ impl ImageConcentration {
             DeviceSize,
         ) -> std::result::Result<CpuBuffer, BufferError>,
     ) -> Result<CpuBuffer> {
-        let num_texels = shape.into_iter().product::<usize>();
         let buffer = constructor(
             context.memory_allocator(),
             BufferCreateInfo {
@@ -307,7 +302,9 @@ impl ImageConcentration {
                 allocate_preference: MemoryAllocatePreference::Unknown,
                 ..Default::default()
             },
-            num_texels.try_into().unwrap(),
+            shape
+                .buffer_size()
+                .expect("Shouldn't happen if image allocation succeded"),
         )?;
         Ok(buffer)
     }
@@ -369,6 +366,9 @@ pub enum Error {
 
     #[error("ran out of memory")]
     OutOfMemory(#[from] OomError),
+
+    #[error("bad domain shape")]
+    BadShape(#[from] ShapeConvertError),
 }
 //
 pub type Result<T> = std::result::Result<T, Error>;

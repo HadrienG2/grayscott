@@ -17,7 +17,10 @@ use compute::{
 };
 use crevice::std140::AsStd140;
 use data::{
-    concentration::gpu::image::{context::ImageContext, ImageConcentration},
+    concentration::gpu::{
+        image::{context::ImageContext, ImageConcentration},
+        shape::{self, Shape},
+    },
     parameters::Parameters,
 };
 use std::sync::Arc;
@@ -50,7 +53,7 @@ pub type Species = data::concentration::Species<ImageConcentration>;
 const PARAMS_SET: u32 = 1;
 
 /// Work-group size used by the shader (must be keep in sync with shader!)
-const WORK_GROUP_SIZE: [u32; 3] = [8, 8, 1];
+const WORK_GROUP_SHAPE: Shape = Shape::from_width_height([8, 8]);
 
 /// Gray-Scott reaction simulation
 pub struct Simulation {
@@ -72,22 +75,7 @@ impl SimulateBase for Simulation {
     type Error = Error;
 
     fn make_species(&self, shape: [usize; 2]) -> Result<Species> {
-        requirements::check_image_shape(
-            self.context.device.physical_device(),
-            shape,
-            WORK_GROUP_SIZE,
-        )?;
-        Ok(Species::new(
-            ImageContext::new(
-                self.context.memory_allocator.clone(),
-                self.context.command_allocator.clone(),
-                self.queue().clone(),
-                self.queue().clone(),
-                [],
-                requirements::image_usage(),
-            )?,
-            shape,
-        )?)
+        make_species(&self.context, shape, WORK_GROUP_SHAPE, self.queue().clone())
     }
 }
 //
@@ -178,7 +166,7 @@ impl SimulateGpu for Simulation {
             );
 
         // Determine the GPU dispatch size
-        let dispatch_size = dispatch_size(species.shape(), WORK_GROUP_SIZE);
+        let dispatch_size = dispatch_size(&species, WORK_GROUP_SHAPE);
 
         // Record the simulation steps
         for _ in 0..steps {
@@ -227,7 +215,7 @@ impl Simulation {
         let num_storage_images = 2;
         let num_uniforms = 1;
 
-        requirements::device_filter(device, WORK_GROUP_SIZE)
+        requirements::device_filter(device, WORK_GROUP_SHAPE)
             && properties.max_bound_descriptor_sets >= 2
             && properties.max_descriptor_set_uniform_buffers >= num_uniforms
             && properties.max_per_stage_descriptor_uniform_buffers >= num_uniforms
@@ -250,20 +238,43 @@ mod shader {
     }
 }
 
-/// Convert an ImageConcentration shape into a global workload size
-pub fn shape_to_global_size([rows, cols]: [usize; 2]) -> [usize; 3] {
-    [cols, rows, 1]
+/// Reusable implementation of SimulateBase::make_species
+pub fn make_species(
+    context: &VulkanContext,
+    domain_shape: [usize; 2],
+    work_group_shape: Shape,
+    queue: Arc<Queue>,
+) -> Result<Species> {
+    requirements::check_image_shape(
+        context.device.physical_device(),
+        domain_shape
+            .try_into()
+            .map_err(|_| Error::UnsupportedShape)?,
+        work_group_shape,
+    )?;
+    Ok(Species::new(
+        ImageContext::new(
+            context.memory_allocator.clone(),
+            context.command_allocator.clone(),
+            queue.clone(),
+            queue,
+            [],
+            requirements::image_usage(),
+        )?,
+        domain_shape,
+    )?)
 }
 
 /// Convert an ImageConcentration shape into a compute dispatch size
-pub fn dispatch_size(shape: [usize; 2], work_group_size: [u32; 3]) -> [u32; 3] {
-    let global_size = shape_to_global_size(shape);
-    std::array::from_fn(|i| {
-        let shape = global_size[i];
-        let work_group_size = usize::try_from(work_group_size[i]).unwrap();
-        debug_assert_eq!(shape % work_group_size, 0, "Checked by make_species");
-        u32::try_from(shape / work_group_size).unwrap()
-    })
+pub fn dispatch_size(species: &Species, work_group_shape: Shape) -> [u32; 3] {
+    shape::full_dispatch_size(
+        species
+            .shape()
+            .try_into()
+            .expect("Cannot fail (checked at construction time)"),
+        work_group_shape,
+    )
+    .expect("Cannot fail (checked at construction time)")
 }
 
 /// Errors that can occur during this computation

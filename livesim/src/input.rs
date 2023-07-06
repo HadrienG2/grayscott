@@ -3,7 +3,10 @@
 use crate::{pipeline, Result};
 use compute::{gpu::context::VulkanContext, SimulateBase};
 use compute_selector::Simulation;
-use data::{concentration::Species, Precision};
+use data::{
+    concentration::{gpu::shape::Shape, Species},
+    Precision,
+};
 use ndarray::ArrayViewMut2;
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, Subbuffer},
@@ -16,10 +19,10 @@ pub type Input = Subbuffer<[Precision]>;
 /// Create buffers for upload of simulation output to the GPU
 pub fn create_upload_buffers(
     vulkan: &VulkanContext,
-    shape: [usize; 2],
+    shape: Shape,
     count: usize,
 ) -> Result<Vec<Input>> {
-    let buffer_len = shape.into_iter().product::<usize>();
+    let buffer_len = shape.buffer_len()?;
     (0..count)
         .map(|idx| {
             let sub_buffer = Buffer::new_slice::<Precision>(
@@ -32,7 +35,7 @@ pub fn create_upload_buffers(
                     usage: MemoryUsage::Upload,
                     ..Default::default()
                 },
-                buffer_len as u64,
+                buffer_len,
             )?;
             vulkan.set_debug_utils_object_name(sub_buffer.buffer(), || {
                 format!("Upload buffer #{idx}").into()

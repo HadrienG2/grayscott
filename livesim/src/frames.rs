@@ -6,6 +6,7 @@ use crate::{
     pipeline, surface, Result,
 };
 use compute::gpu::context::VulkanContext;
+use data::concentration::gpu::shape::Shape;
 use std::sync::Arc;
 use vulkano::{
     command_buffer::{CommandBufferExecFuture, PrimaryAutoCommandBuffer},
@@ -49,8 +50,7 @@ impl Frames {
         // TODO: If the simulation backend is GPU-based, directly access simulation
         //       storage instead (will require a different rendering pipeline).
         let vulkan = context.vulkan();
-        let extent = swapchain.image_extent();
-        let shape = [extent[1] as usize, extent[0] as usize];
+        let shape = Shape::from_width_height(swapchain.image_extent());
         let frames_in_flight = swapchain_images.len();
         let upload_buffers = input::create_upload_buffers(vulkan, shape, frames_in_flight)?;
 

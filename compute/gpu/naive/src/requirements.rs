@@ -2,11 +2,15 @@
 //! used by this backend impose on the GPU.
 
 use crate::{Error, Result};
-use data::{concentration::gpu::image::ImageConcentration, Precision};
+use data::concentration::gpu::{
+    image::ImageConcentration,
+    shape::{self, Shape},
+};
 use vulkano::{device::physical::PhysicalDevice, format::FormatFeatures, image::ImageUsage};
 
 /// Device requirements
-pub fn device_filter(device: &PhysicalDevice, work_group_size: [u32; 3]) -> bool {
+pub fn device_filter(device: &PhysicalDevice, work_group_shape: Shape) -> bool {
+    let Ok(work_group_invocations) = work_group_shape.invocations() else { return false };
     let properties = device.properties();
     let Ok(format_properties) = device.format_properties(ImageConcentration::format()) else {
         return false;
@@ -16,10 +20,9 @@ pub fn device_filter(device: &PhysicalDevice, work_group_size: [u32; 3]) -> bool
     let num_storage_images = 2;
 
     properties.max_bound_descriptor_sets >= 1
-        && properties.max_compute_work_group_invocations
-            >= work_group_size.into_iter().product::<u32>()
+        && properties.max_compute_work_group_invocations >= work_group_invocations
         && (properties.max_compute_work_group_size.into_iter())
-            .zip(work_group_size)
+            .zip(work_group_shape.vulkan())
             .all(|(max, req)| max >= req)
         && properties.max_descriptor_set_samplers >= num_samplers
         && properties.max_per_stage_descriptor_samplers >= num_samplers
@@ -44,31 +47,26 @@ pub fn image_usage() -> ImageUsage {
 /// Problem size requirements that are present no matter how parameters are passed
 pub fn check_image_shape(
     device: &PhysicalDevice,
-    shape: [usize; 2],
-    work_group_size: [u32; 3],
+    domain_shape: Shape,
+    work_group_shape: Shape,
 ) -> Result<()> {
     // The simple shader can't accomodate a problem size that is not a
     // multiple of the work group size
-    let global_size = crate::shape_to_global_size(shape);
-    if (global_size.into_iter())
-        .zip(work_group_size)
-        .any(|(sh, wg)| sh % wg as usize != 0)
-    {
-        return Err(Error::UnsupportedShape);
-    }
-    let dispatch_size: [usize; 3] =
-        std::array::from_fn(|i| global_size[i] / work_group_size[i] as usize);
+    let dispatch_shape = shape::full_dispatch_size(domain_shape, work_group_shape)
+        .map_err(|_| Error::UnsupportedShape)?;
 
     // Check device properties
-    let num_texels = shape.into_iter().product::<usize>();
-    let image_size = num_texels * std::mem::size_of::<Precision>();
+    let image_shape = domain_shape.vulkan();
+    let image_size = domain_shape
+        .buffer_size()
+        .map_err(|_| Error::UnsupportedShape)?;
     let properties = device.properties();
     if (properties.max_compute_work_group_count.into_iter())
-        .zip(dispatch_size)
-        .any(|(max, req)| (max as usize) < req)
-        || (properties.max_image_dimension2_d as usize) < shape.into_iter().max().unwrap()
-        || properties.max_memory_allocation_size.unwrap_or(u64::MAX) < image_size as u64
-        || properties.max_buffer_size.unwrap_or(u64::MAX) < image_size as u64
+        .zip(dispatch_shape)
+        .any(|(max, req)| max < req)
+        || properties.max_image_dimension2_d < image_shape.into_iter().max().unwrap()
+        || properties.max_memory_allocation_size.unwrap_or(u64::MAX) < image_size
+        || properties.max_buffer_size.unwrap_or(u64::MAX) < image_size
     {
         return Err(Error::UnsupportedShape);
     }
@@ -79,9 +77,9 @@ pub fn check_image_shape(
         return Err(Error::UnsupportedShape);
     };
     if (image_format_properties.max_extent.into_iter())
-        .zip(global_size)
-        .any(|(max, req)| (max as usize) < req)
-        || image_format_properties.max_resource_size < image_size as u64
+        .zip(image_shape)
+        .any(|(max, req)| max < req)
+        || image_format_properties.max_resource_size < image_size
     {
         return Err(Error::UnsupportedShape);
     }

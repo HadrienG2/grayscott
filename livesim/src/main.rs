@@ -9,6 +9,7 @@ use self::{context::SimulationContext, frames::Frames};
 use clap::Parser;
 use compute::{Simulate, SimulateBase};
 use compute_selector::Simulation;
+use data::concentration::gpu::shape::{self, Shape};
 use std::num::NonZeroU32;
 use ui::SharedArgs;
 use vulkano::sync::GpuFuture;
@@ -24,7 +25,7 @@ pub use anyhow::Result;
 /// Perform Gray-Scott simulation
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
-pub struct Args {
+struct Args {
     /// CLI arguments shared with the "simulate" executable
     #[command(flatten)]
     shared: SharedArgs<Simulation>,
@@ -59,6 +60,13 @@ fn main() -> Result<()> {
 
     // Parse CLI arguments and handle clap-incompatible defaults
     let args = Args::parse();
+    let domain_shape = Shape::new([args.shared.nbrow, args.shared.nbcol]);
+    let work_group_shape = Shape::new([
+        args.render_work_group_rows.into(),
+        args.render_work_group_cols.into(),
+    ]);
+    let dispatch_size = shape::full_dispatch_size(domain_shape, work_group_shape)
+        .expect("Simulation shape must be a multiple of the work group size");
     // TODO: Instead of making nbextrastep a tunable of this version too,
     //       consider making it simulate-specific, and rather starting at 1
     //       step/frame, then monitoring the VSync'd framerate and
@@ -68,34 +76,13 @@ fn main() -> Result<()> {
     let steps_per_image = args.shared.nbextrastep.unwrap_or(1);
 
     // Set up an event loop and window
-    let (event_loop, window) = surface::create_window(&args)?;
-
-    // Pick work-group size
-    let work_group_size = [
-        args.render_work_group_cols.into(),
-        args.render_work_group_rows.into(),
-        1,
-    ];
-
-    // Pick domain shape and deduce dispatch size
-    let shape = [args.shared.nbrow, args.shared.nbcol];
-    let global_size = [shape[1], shape[0], 1];
-    let dispatch_size = std::array::from_fn(|i| {
-        let shape = global_size[i];
-        let work_group_size = work_group_size[i] as usize;
-        assert_eq!(
-            shape % work_group_size,
-            0,
-            "Simulation shape must be a multiple of the work group size"
-        );
-        u32::try_from(shape / work_group_size).expect("Simulation is too large for a GPU")
-    });
+    let (event_loop, window) = surface::create_window(domain_shape)?;
 
     // Set up the simulation and Vulkan context
-    let context = SimulationContext::new(&args, &window)?;
+    let context = SimulationContext::new(&args.shared, &window)?;
 
     // Set up the rendering pipeline
-    let pipeline = pipeline::create(context.vulkan(), work_group_size)?;
+    let pipeline = pipeline::create(context.vulkan(), work_group_shape)?;
 
     // Create the color palette and prepare to upload it to the GPU
     let (upload_future, palette_set) =
@@ -106,7 +93,7 @@ fn main() -> Result<()> {
     let upload_future = upload_future.then_signal_fence_and_flush()?;
 
     // Set up chemical species concentration storage
-    let mut species = context.simulation().make_species(shape)?;
+    let mut species = context.simulation().make_species(domain_shape.ndarray())?;
 
     // Set up per-frame state
     let mut frames = Frames::new(&context, &pipeline)?;
@@ -156,8 +143,8 @@ fn main() -> Result<()> {
             } => {
                 assert_eq!(
                     [height as usize, width as usize],
-                    shape,
-                    "Window resize is not supported (and should be disabled)"
+                    domain_shape.ndarray(),
+                    "Window resize is not supported (and should have been disabled)"
                 );
             }
 

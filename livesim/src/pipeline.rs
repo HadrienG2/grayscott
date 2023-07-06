@@ -2,6 +2,7 @@
 
 use crate::{input::Input, palette, Result, SimulationContext};
 use compute::gpu::context::VulkanContext;
+use data::concentration::gpu::shape::Shape;
 use std::sync::Arc;
 use vulkano::{
     buffer::BufferUsage,
@@ -18,7 +19,7 @@ use vulkano::{
 };
 
 /// Create the rendering pipeline
-pub fn create(vulkan: &VulkanContext, work_group_size: [u32; 3]) -> Result<Arc<ComputePipeline>> {
+pub fn create(vulkan: &VulkanContext, work_group_shape: Shape) -> Result<Arc<ComputePipeline>> {
     // Load the rendering shader
     let shader = shader::load(vulkan.device.clone())?;
     vulkan.set_debug_utils_object_name(&shader, || "Live renderer shader".into())?;
@@ -28,8 +29,8 @@ pub fn create(vulkan: &VulkanContext, work_group_size: [u32; 3]) -> Result<Arc<C
         vulkan.device.clone(),
         shader.entry_point("main").expect("Should be present"),
         &shader::SpecializationConstants {
-            constant_0: work_group_size[0],
-            constant_1: work_group_size[1],
+            constant_0: work_group_shape.width(),
+            constant_1: work_group_shape.height(),
             amplitude_scale: ui::AMPLITUDE_SCALE,
         },
         Some(vulkan.pipeline_cache.clone()),
