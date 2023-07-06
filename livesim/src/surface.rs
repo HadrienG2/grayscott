@@ -18,6 +18,27 @@ use winit::{
     window::{Theme, Window, WindowBuilder},
 };
 
+/// Minimum number of swapchain images
+const MIN_SWAPCHAIN_IMAGES: u32 = 2;
+
+/// Surface-dependent device requirements
+pub fn requirements(device: &PhysicalDevice, surface: &Surface) -> bool {
+    let surface_info = SurfaceInfo::default();
+    device
+        .surface_formats(surface, surface_info.clone())
+        .map(|vec| vec.into_iter().any(palette::is_supported_surface_format))
+        .unwrap_or(false)
+        && device
+            .surface_capabilities(surface, surface_info)
+            .map(|caps| {
+                caps.max_image_count.unwrap_or(u32::MAX) >= MIN_SWAPCHAIN_IMAGES
+                    && caps
+                        .supported_usage_flags
+                        .contains(pipeline::output_usage())
+            })
+            .unwrap_or(false)
+}
+
 /// Set up a window and associated event loop
 pub fn create_window(shape: Shape) -> Result<(EventLoop<()>, Arc<Window>)> {
     let event_loop = EventLoop::new();
@@ -31,24 +52,6 @@ pub fn create_window(shape: Shape) -> Result<(EventLoop<()>, Arc<Window>)> {
             .build(&event_loop)?,
     );
     Ok((event_loop, window))
-}
-
-/// Surface-dependent device requirements
-pub fn requirements(device: &PhysicalDevice, surface: &Surface) -> bool {
-    let surface_info = SurfaceInfo::default();
-    device
-        .surface_formats(surface, surface_info.clone())
-        .map(|vec| vec.into_iter().any(palette::is_supported_surface_format))
-        .unwrap_or(false)
-        && device
-            .surface_capabilities(surface, surface_info)
-            .map(|caps| {
-                caps.max_image_count.unwrap_or(u32::MAX) >= 2
-                    && caps
-                        .supported_usage_flags
-                        .contains(pipeline::output_usage())
-            })
-            .unwrap_or(false)
 }
 
 /// Create a swapchain
@@ -66,10 +69,12 @@ pub fn create_swapchain(
         .surface_formats(surface, surface_info)?
         .into_iter()
         .find(|format| palette::is_supported_surface_format(*format))
-        .expect("There should be one (checked at device creation time)");
+        .expect("There should be one valid format (checked at device creation time)");
 
     let create_info = SwapchainCreateInfo {
-        min_image_count: surface_capabilities.min_image_count.max(2),
+        min_image_count: surface_capabilities
+            .min_image_count
+            .max(MIN_SWAPCHAIN_IMAGES),
         image_format: Some(image_format),
         image_color_space,
         image_usage: pipeline::output_usage(),

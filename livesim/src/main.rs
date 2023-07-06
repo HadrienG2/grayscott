@@ -75,13 +75,9 @@ fn main() -> Result<()> {
     //       backends.
     let steps_per_image = args.shared.nbextrastep.unwrap_or(1);
 
-    // Set up an event loop and window
+    // Set up basic rendering infrastructure
     let (event_loop, window) = surface::create_window(domain_shape)?;
-
-    // Set up the simulation and Vulkan context
     let context = SimulationContext::new(&args.shared, &window)?;
-
-    // Set up the rendering pipeline
     let pipeline = pipeline::create(context.vulkan(), work_group_shape)?;
 
     // Create the color palette and prepare to upload it to the GPU
@@ -92,10 +88,8 @@ fn main() -> Result<()> {
     // uploading the color palette right away
     let upload_future = upload_future.then_signal_fence_and_flush()?;
 
-    // Set up chemical species concentration storage
+    // Set up simulation domain and associated rendering state
     let mut species = context.simulation().make_species(domain_shape.ndarray())?;
-
-    // Set up per-frame state
     let mut frames = Frames::new(&context, &pipeline)?;
 
     // Wait for GPU-side initialization tasks to finish
@@ -135,8 +129,16 @@ fn main() -> Result<()> {
                     .expect("Failed to process simulation frame")
             }
 
-            // This program can't handle window resize because the mapping from
-            // old to new simulation data points would be unclear.
+            // Exit when the window is closed
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
+            }
+
+            // The easiest way to support resize would probably be to copy
+            // simulation data to an image and interpolate using a sampler.
             Event::WindowEvent {
                 event: WindowEvent::Resized(PhysicalSize { width, height }),
                 ..
@@ -144,16 +146,8 @@ fn main() -> Result<()> {
                 assert_eq!(
                     [height as usize, width as usize],
                     domain_shape.ndarray(),
-                    "Window resize is not supported (and should have been disabled)"
+                    "Window resize is not supported yet (and should have been disabled)"
                 );
-            }
-
-            // Exit when the window is closed
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => {
-                *control_flow = ControlFlow::Exit;
             }
 
             // Ignore other events

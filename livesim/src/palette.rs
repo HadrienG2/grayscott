@@ -17,6 +17,17 @@ use vulkano::{
     sync::GpuFuture,
 };
 
+/// Surface formats that this color palette is compatible with
+pub fn is_supported_surface_format((format, colorspace): (Format, ColorSpace)) -> bool {
+    let Some(color_type) = format.type_color() else {
+        return false;
+    };
+    format.aspects().contains(ImageAspects::COLOR)
+        && format.components().iter().take(3).all(|&bits| bits > 0)
+        && color_type == NumericType::UNORM
+        && colorspace == ColorSpace::SrgbNonLinear
+}
+
 /// Create the color palette used for data -> color translation
 ///
 /// Returns a GPU future that will be signaled once the palette has been
@@ -41,6 +52,7 @@ pub fn create(
     )?;
 
     // Create color palette, record upload commands
+    // FIXME: Expose requirements
     let palette_image = ImmutableImage::from_iter(
         &vulkan.memory_allocator,
         colors(resolution),
@@ -65,17 +77,8 @@ pub fn create(
     Ok((upload_future, palette))
 }
 
-/// Generate color palette for a given resolution
-fn colors(resolution: u32) -> impl Iterator<Item = [u8; 4]> + ExactSizeIterator {
-    (0..resolution).map(move |idx| {
-        let position = idx as f64 / (resolution - 1) as f64;
-        let color = ui::GRADIENT.eval_continuous(position);
-        [color.b, color.g, color.r, 255]
-    })
-}
-
 /// Desired sampler configuration
-pub fn sampler_info() -> SamplerCreateInfo {
+pub fn sampler_conig() -> SamplerCreateInfo {
     SamplerCreateInfo {
         mag_filter: Filter::Linear,
         min_filter: Filter::Linear,
@@ -83,13 +86,11 @@ pub fn sampler_info() -> SamplerCreateInfo {
     }
 }
 
-/// Surface formats that this color palette is compatible with
-pub fn is_supported_surface_format((format, colorspace): (Format, ColorSpace)) -> bool {
-    let Some(color_type) = format.type_color() else {
-        return false;
-    };
-    format.aspects().contains(ImageAspects::COLOR)
-        && format.components().iter().take(3).all(|&bits| bits > 0)
-        && color_type == NumericType::UNORM
-        && colorspace == ColorSpace::SrgbNonLinear
+/// Generate color palette for a given resolution
+fn colors(resolution: u32) -> impl Iterator<Item = [u8; 4]> + ExactSizeIterator {
+    (0..resolution).map(move |idx| {
+        let position = idx as f64 / (resolution - 1) as f64;
+        let color = ui::GRADIENT.eval_continuous(position);
+        [color.b, color.g, color.r, 255]
+    })
 }

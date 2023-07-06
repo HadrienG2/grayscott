@@ -136,10 +136,10 @@ pub fn record_render_commands(
 }
 
 /// Callback to configure palette sampling during pipeline construction
-pub fn sampler_setup_callback(
+fn sampler_setup_callback(
     vulkan: &VulkanContext,
 ) -> Result<impl FnOnce(&mut [DescriptorSetLayoutCreateInfo])> {
-    let palette_sampler = Sampler::new(vulkan.device.clone(), palette::sampler_info())?;
+    let palette_sampler = Sampler::new(vulkan.device.clone(), palette::sampler_conig())?;
     vulkan.set_debug_utils_object_name(&palette_sampler, || "Color palette sampler".into())?;
     Ok(
         move |descriptor_sets: &mut [DescriptorSetLayoutCreateInfo]| {

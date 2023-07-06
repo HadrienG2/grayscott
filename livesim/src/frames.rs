@@ -22,7 +22,7 @@ use vulkano::{
     },
 };
 
-/// State associated with the processing of multiple frames
+/// State associated with the processing of multiple on-screen frames
 pub struct Frames {
     /// Swapchain that indicates which frame should be processed next
     swapchain: Arc<Swapchain>,
@@ -99,7 +99,7 @@ impl Frames {
         }
 
         // Render the selected frame
-        self.render(context, image_idx, acquire_future, record_commands)
+        self.schedule_render(context, image_idx, acquire_future, record_commands)
     }
 
     /// Recreate swapchain and dependent state if need be
@@ -123,7 +123,7 @@ impl Frames {
     }
 
     /// Schedule a rendering command buffer for execution
-    fn render(
+    fn schedule_render(
         &mut self,
         context: &SimulationContext,
         image_idx_u32: u32,
@@ -142,7 +142,7 @@ impl Frames {
 
         // Schedule rendering once swapchain image is ready
         let queue = context.queue();
-        let schedule_result = (self.image_future(image_idx))
+        let schedule_result = (self.image_future(image_idx)?)
             .join(acquire_future)
             .then_execute(queue.clone(), commands)?
             .then_swapchain_present(
@@ -161,14 +161,17 @@ impl Frames {
     }
 
     /// Prepare a future that's ready once a swapchain image can be reused
-    fn image_future(&mut self, image_idx: usize) -> Box<dyn GpuFuture> {
+    fn image_future(&mut self, image_idx: usize) -> Result<Box<dyn GpuFuture>> {
         self.frame_futures[image_idx]
             .take()
             .map(|future| {
-                future.wait(None).expect("Failed to await render");
-                future.boxed()
+                future.wait(None)?;
+                Ok(future.boxed())
             })
-            .unwrap_or_else(|| vulkano::sync::now(self.swapchain.device().clone()).boxed())
+            .unwrap_or_else(|| {
+                let future = vulkano::sync::now(self.swapchain.device().clone());
+                Ok(future.boxed())
+            })
     }
 }
 
