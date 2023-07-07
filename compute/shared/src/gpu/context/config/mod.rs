@@ -138,6 +138,16 @@ pub struct VulkanConfig<
     /// This should be enough to disambiguate all common multi-device scenarios,
     /// but edge cases like machines with heterogeneous GPUs plugged in will
     /// require better preference criteria.
+    ///
+    /// Furthermore, this default logic is also tunable through the
+    /// `GRAYSCOTT_PREFER_DEVICE` environment variable, which sets a preferred
+    /// device type that overrides the default precedence order :
+    ///
+    /// - "discrete" is the default setting : prefer discrete GPUs.
+    /// - "integrated" = prefer integrated GPUs
+    /// - "virtual" = prefer virtual GPUs
+    /// - "cpu" = prefer CPUs
+    /// - "other" = prefer other things
     pub device_preference: Box<dyn FnMut(&PhysicalDevice, &PhysicalDevice) -> Ordering>,
 
     /// Configure command queues

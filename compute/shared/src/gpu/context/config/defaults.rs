@@ -3,7 +3,7 @@
 use super::VulkanConfig;
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
-use std::{borrow::Cow, cmp::Ordering, sync::Arc};
+use std::{borrow::Cow, cmp::Ordering, env::VarError, sync::Arc};
 use vulkano::{
     command_buffer::allocator::{
         StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,
@@ -114,7 +114,22 @@ pub fn other_device_requirements(device: &PhysicalDevice) -> bool {
 
 /// Suggested device preference
 pub fn device_preference(device1: &PhysicalDevice, device2: &PhysicalDevice) -> Ordering {
+    let preferred_device_type = match std::env::var("GRAYSCOTT_PREFER_DEVICE") {
+        Ok(string) => match string.as_str() {
+            "" | "discrete" => PhysicalDeviceType::DiscreteGpu,
+            "integrated" => PhysicalDeviceType::IntegratedGpu,
+            "virtual" => PhysicalDeviceType::VirtualGpu,
+            "cpu" => PhysicalDeviceType::Cpu,
+            "other" => PhysicalDeviceType::Other,
+            unknown => panic!("GRAYSCOTT_PREFER_DEVICE contains unknown device type {unknown}"),
+        },
+        Err(VarError::NotPresent) => PhysicalDeviceType::DiscreteGpu,
+        Err(VarError::NotUnicode(s)) => {
+            panic!("GRAYSCOTT_PREFER_DEVICE contains non-unicode data : {s:?}")
+        }
+    };
     let device_type_score = |device: &PhysicalDevice| match device.properties().device_type {
+        x if x == preferred_device_type => 6,
         PhysicalDeviceType::DiscreteGpu => 5,
         PhysicalDeviceType::VirtualGpu => 4,
         PhysicalDeviceType::IntegratedGpu => 3,
