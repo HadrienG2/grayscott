@@ -16,5 +16,5 @@ pub fn for_work_group(properties: &Properties, work_group_shape: Shape) -> bool 
 pub fn for_dispatch(properties: &Properties, dispatch_size: [u32; 3]) -> bool {
     (properties.max_compute_work_group_count.into_iter())
         .zip(dispatch_size)
-        .any(|(max, req)| max < req)
+        .all(|(max, req)| max >= req)
 }
