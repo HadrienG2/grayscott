@@ -9,7 +9,7 @@ use self::{context::SimulationContext, frames::Frames};
 use clap::Parser;
 use compute::{Simulate, SimulateBase};
 use compute_selector::Simulation;
-use data::concentration::gpu::shape::{self, Shape};
+use data::concentration::gpu::shape::Shape;
 use std::num::NonZeroU32;
 use ui::SharedArgs;
 use vulkano::sync::GpuFuture;
@@ -45,9 +45,9 @@ struct Args {
     /// Color palette resolution
     ///
     /// There is a spectrum between producing a live color output that is a
-    /// pixel-perfect clone of the `data-to-pics` images' on one end, and
+    /// pixel-perfect clone of the `data-to-pics` images on one end, and
     /// maximizing the efficiency/portability of the GPU code on the other end.
-    /// This tuning parameter lets you control this compromise.
+    /// This tuning parameter lets you control this tradeoff.
     ///
     /// Must be at least 2. Higher is more accurate/expensive and less portable.
     #[arg(long, default_value_t = 256)]
@@ -65,8 +65,7 @@ fn main() -> Result<()> {
         args.render_work_group_rows.into(),
         args.render_work_group_cols.into(),
     ]);
-    let dispatch_size = shape::full_dispatch_size(domain_shape, work_group_shape)
-        .expect("Simulation shape must be a multiple of the work group size");
+    let dispatch_size = pipeline::dispatch_size(domain_shape, work_group_shape)?;
     // TODO: Instead of making nbextrastep a tunable of this version too,
     //       consider making it simulate-specific, and rather starting at 1
     //       step/frame, then monitoring the VSync'd framerate and

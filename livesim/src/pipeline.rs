@@ -2,7 +2,7 @@
 
 use crate::{input::Input, palette, Result, SimulationContext};
 use compute::gpu::context::VulkanContext;
-use data::concentration::gpu::shape::Shape;
+use data::concentration::gpu::shape::{self, PartialWorkGroupError, Shape};
 use std::sync::Arc;
 use vulkano::{
     buffer::BufferUsage,
@@ -17,6 +17,15 @@ use vulkano::{
     pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
     sampler::Sampler,
 };
+
+/// Dispatch size required by this rendering pipeline, for a certain
+/// simulation domain and work-group shape
+pub fn dispatch_size(
+    domain_shape: Shape,
+    work_group_shape: Shape,
+) -> Result<[u32; 3], PartialWorkGroupError> {
+    shape::full_dispatch_size(domain_shape, work_group_shape)
+}
 
 /// Create the rendering pipeline
 pub fn create(vulkan: &VulkanContext, work_group_shape: Shape) -> Result<Arc<ComputePipeline>> {

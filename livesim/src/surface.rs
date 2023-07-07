@@ -90,7 +90,7 @@ pub fn create_swapchain(
 }
 
 /// Recreate the swapchain if it went invalid, along with the I/O descriptor
-/// sets associated with the swapchain images
+/// sets associated with the inputs and swapchain images
 pub fn recreate_swapchain(
     vulkan: &VulkanContext,
     pipeline: &ComputePipeline,
