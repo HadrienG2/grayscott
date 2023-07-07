@@ -13,6 +13,8 @@ use vulkano::{
     memory::allocator::{AllocationCreateInfo, MemoryUsage},
 };
 
+// TODO: Expose device requirements
+
 /// GPU-accessible type from which simulation data is fetched
 pub type Input = Subbuffer<[Precision]>;
 

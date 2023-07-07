@@ -1,4 +1,4 @@
-//! Rendering surface management
+//! Rendering surface management and swapchain creation
 
 use crate::{context::SimulationContext, input::Input, palette, pipeline, Result};
 use compute::gpu::context::VulkanContext;
@@ -17,9 +17,6 @@ use winit::{
     event_loop::EventLoop,
     window::{Theme, Window, WindowBuilder},
 };
-
-/// Minimum number of swapchain images
-const MIN_SWAPCHAIN_IMAGES: u32 = 2;
 
 /// Surface-dependent device requirements
 pub fn requirements(device: &PhysicalDevice, surface: &Surface) -> bool {
@@ -101,3 +98,6 @@ pub fn recreate_swapchain(
     let inout_sets = pipeline::new_inout_sets(vulkan, &pipeline, upload_buffers, images)?;
     Ok((swapchain, inout_sets))
 }
+
+/// Minimum number of swapchain images
+const MIN_SWAPCHAIN_IMAGES: u32 = 2;

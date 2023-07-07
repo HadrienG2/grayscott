@@ -27,20 +27,7 @@ pub fn dispatch_size(
     shape::full_dispatch_size(domain_shape, work_group_shape)
 }
 
-/// Manner in which the input is used
-pub fn input_usage() -> BufferUsage {
-    BufferUsage::STORAGE_BUFFER
-}
-
-/// Manner in which the rendering surface is used
-pub fn output_usage() -> ImageUsage {
-    ImageUsage::STORAGE
-}
-
-/// Manner in which the color palette is used
-pub fn palette_usage() -> ImageUsage {
-    ImageUsage::SAMPLED
-}
+// TODO: Expose requirements
 
 /// Create the pipeline
 pub fn create(vulkan: &VulkanContext, work_group_shape: Shape) -> Result<Arc<ComputePipeline>> {
@@ -64,6 +51,11 @@ pub fn create(vulkan: &VulkanContext, work_group_shape: Shape) -> Result<Arc<Com
     Ok(pipeline)
 }
 
+/// Manner in which the color palette is used
+pub fn palette_usage() -> ImageUsage {
+    ImageUsage::SAMPLED
+}
+
 /// Create the color palette descriptor set
 pub fn new_palette_set(
     vulkan: &VulkanContext,
@@ -84,6 +76,16 @@ pub fn new_palette_set(
     )?;
     // FIXME: Name this descriptor set once vulkano allows for it
     Ok(palette)
+}
+
+/// Manner in which the input is used
+pub fn input_usage() -> BufferUsage {
+    BufferUsage::STORAGE_BUFFER
+}
+
+/// Manner in which the rendering surface is used
+pub fn output_usage() -> ImageUsage {
+    ImageUsage::STORAGE
 }
 
 /// Create descriptor sets for each (upload buffer, swapchain image) pair

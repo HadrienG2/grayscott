@@ -17,6 +17,8 @@ use vulkano::{
     sync::GpuFuture,
 };
 
+// TODO: Expose device requirements
+
 /// Surface formats that this color palette is compatible with
 pub fn is_supported_surface_format((format, colorspace): (Format, ColorSpace)) -> bool {
     let Some(color_type) = format.type_color() else {
