@@ -27,7 +27,7 @@ pub fn dispatch_size(
     shape::full_dispatch_size(domain_shape, work_group_shape)
 }
 
-// TODO: Expose requirements
+// TODO: Expose device requirements
 
 /// Create the pipeline
 pub fn create(vulkan: &VulkanContext, work_group_shape: Shape) -> Result<Arc<ComputePipeline>> {
