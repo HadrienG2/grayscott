@@ -11,15 +11,11 @@ use std::sync::Arc;
 use vulkano::{
     command_buffer::{CommandBufferExecFuture, PrimaryAutoCommandBuffer},
     descriptor_set::PersistentDescriptorSet,
-    device::DeviceOwned,
     pipeline::ComputePipeline,
     swapchain::{
         self, AcquireError, PresentFuture, Swapchain, SwapchainAcquireFuture, SwapchainPresentInfo,
     },
-    sync::{
-        future::{FenceSignalFuture, JoinFuture},
-        FlushError, GpuFuture,
-    },
+    sync::{future::FenceSignalFuture, FlushError, GpuFuture},
 };
 
 /// State associated with the processing of multiple on-screen frames
@@ -133,8 +129,15 @@ impl Frames {
             Arc<PersistentDescriptorSet>,
         ) -> Result<PrimaryAutoCommandBuffer>,
     ) -> Result<()> {
-        // Let the user build a command buffer for their rendering
+        // Wait for the previous render to this surface to terminate so we
+        // can safely write to the upload buffer
+        // TODO : In GPU mode, do not wait and just join the frame_future or
+        //        now() with the acquire future in scheduling below.
+        //        See tag `joined-futures` for reference.
         let image_idx = image_idx_u32 as usize;
+        self.await_upload(image_idx)?;
+
+        // Let the user build a command buffer for their rendering
         let commands = record_commands(
             &mut self.upload_buffers[image_idx],
             self.inout_sets[image_idx].clone(),
@@ -142,8 +145,7 @@ impl Frames {
 
         // Schedule rendering once swapchain image is ready
         let queue = context.queue();
-        let schedule_result = (self.image_future(image_idx)?)
-            .join(acquire_future)
+        let schedule_result = acquire_future
             .then_execute(queue.clone(), commands)?
             .then_swapchain_present(
                 queue.clone(),
@@ -160,18 +162,12 @@ impl Frames {
         Ok(())
     }
 
-    /// Prepare a future that's ready once a swapchain image can be reused
-    fn image_future(&mut self, image_idx: usize) -> Result<Box<dyn GpuFuture>> {
-        self.frame_futures[image_idx]
-            .take()
-            .map(|future| {
-                future.wait(None)?;
-                Ok(future.boxed())
-            })
-            .unwrap_or_else(|| {
-                let future = vulkano::sync::now(self.swapchain.device().clone());
-                Ok(future.boxed())
-            })
+    /// Wait for the GPU to be done with one of the upload buffers
+    fn await_upload(&mut self, image_idx: usize) -> Result<()> {
+        if let Some(future) = self.frame_futures[image_idx].take() {
+            future.wait(None)?;
+        }
+        Ok(())
     }
 }
 
@@ -182,4 +178,4 @@ type FrameFuture = FenceSignalFuture<PresentFuture<RenderFuture>>;
 type RenderFuture = CommandBufferExecFuture<AcquireFuture>;
 
 /// Future of swapchain image acquisition
-type AcquireFuture = JoinFuture<Box<dyn GpuFuture>, SwapchainAcquireFuture>;
+type AcquireFuture = SwapchainAcquireFuture;
