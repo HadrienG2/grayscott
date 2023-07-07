@@ -13,7 +13,10 @@ pub mod species;
 
 use self::{pipeline::WORK_GROUP_SHAPE, species::Species};
 use compute::{
-    gpu::{config::VulkanConfig, context::VulkanContext, SimulateGpu},
+    gpu::{
+        context::{config::VulkanConfig, ContextBuildError, VulkanContext},
+        SimulateGpu,
+    },
     NoArgs, Simulate, SimulateBase,
 };
 use data::{
@@ -150,7 +153,7 @@ impl Simulation {
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("failed to initialize the Vulkan API")]
-    ContextBuild(#[from] compute::gpu::ContextBuildError),
+    ContextBuild(#[from] ContextBuildError),
 
     #[error("failed to create the compute shader")]
     ShaderCreation(#[from] ShaderCreationError),

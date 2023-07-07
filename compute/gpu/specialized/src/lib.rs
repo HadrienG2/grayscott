@@ -11,7 +11,10 @@ mod pipeline;
 
 use self::args::GpuSpecializedArgs;
 use compute::{
-    gpu::{config::VulkanConfig, context::VulkanContext, SimulateGpu},
+    gpu::{
+        context::{config::VulkanConfig, VulkanContext},
+        SimulateGpu,
+    },
     Simulate, SimulateBase,
 };
 use compute_gpu_naive::{

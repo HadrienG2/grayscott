@@ -2,27 +2,14 @@
 
 #![allow(clippy::result_large_err)]
 
-mod cache;
-pub mod config;
 pub mod context;
-mod device;
-mod instance;
-mod library;
 
-use self::{config::VulkanConfig, context::VulkanContext};
+use self::context::{config::VulkanConfig, VulkanContext};
 use crate::{SimulateBase, SimulateCreate};
 use data::{concentration::Species, parameters::Parameters};
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
-use thiserror::Error;
-#[cfg(feature = "livesim")]
-use vulkano::swapchain::SurfaceCreationError;
-use vulkano::{
-    device::DeviceCreationError,
-    instance::{debug::DebugUtilsMessengerCreationError, InstanceCreationError},
-    sync::{future::NowFuture, FlushError, GpuFuture},
-    ExtensionProperties, LoadingError, OomError, VulkanError,
-};
+use vulkano::sync::{future::NowFuture, FlushError, GpuFuture};
 
 /// Lower-level, asynchronous interface to a GPU compute backend
 ///
@@ -112,55 +99,6 @@ where
     }
 }
 
-/// Things that can go wrong while setting up a VulkanContext
-#[derive(Debug, Error)]
-pub enum ContextBuildError {
-    #[error("failed to load the Vulkan library")]
-    Loading(#[from] LoadingError),
-
-    #[error("failed to create a Vulkan instance")]
-    InstanceCreation(#[from] InstanceCreationError),
-
-    #[error("failed to create a debug utils messenger")]
-    DebugUtilsMessengerCreation(#[from] DebugUtilsMessengerCreationError),
-
-    #[cfg(feature = "livesim")]
-    #[error("failed to create a surface from specified window")]
-    SurfaceCreation(#[from] SurfaceCreationError),
-
-    #[error("no physical device matches requirements")]
-    NoMatchingDevice,
-
-    #[error("failed to create a logical device")]
-    DeviceCreation(#[from] DeviceCreationError),
-
-    #[error("ran out of memory")]
-    Oom(#[from] OomError),
-
-    #[error("encountered a Vulkan runtime error")]
-    Vulkan(#[from] VulkanError),
-
-    #[error("did not find home directory")]
-    HomeDirNotFound,
-
-    #[error("failed to read or write on-disk pipeline cache")]
-    PipelineCacheIo(#[from] std::io::Error),
-}
-//
-/// Result type associated with VulkanContext setup issues
-pub type ContextBuildResult<T> = std::result::Result<T, ContextBuildError>;
-
-/// Format Vulkan extension properties for display
-fn format_extension_properties(extension_properties: &[ExtensionProperties]) -> String {
-    format!(
-        "{:#?}",
-        extension_properties
-            .iter()
-            .map(|ext| format!("{} v{}", ext.extension_name, ext.spec_version))
-            .collect::<Vec<_>>()
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,7 +110,7 @@ mod tests {
     }
 
     #[test]
-    fn setup_vulkan() -> ContextBuildResult<()> {
+    fn setup_vulkan() -> context::ContextBuildResult<()> {
         init_logger();
         VulkanConfig {
             enumerate_portability: true,

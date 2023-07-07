@@ -1,9 +1,9 @@
 //! Basic Vulkan context and simulation engine initialization
 
 use crate::{surface, Result};
+use compute::gpu::context::{config::VulkanConfig, VulkanContext};
 #[cfg(feature = "gpu")]
 use compute::gpu::SimulateGpu;
-use compute::gpu::{config::VulkanConfig, context::VulkanContext};
 #[cfg(not(feature = "gpu"))]
 use compute::SimulateCreate;
 use compute_selector::Simulation;

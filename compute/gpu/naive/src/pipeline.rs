@@ -1,7 +1,7 @@
 //! Simulation pipeline
 
 use crate::{parameters::GpuParameters, Result};
-use compute::gpu::{config::requirements, context::VulkanContext};
+use compute::gpu::context::{config::requirements, VulkanContext};
 use data::concentration::gpu::{
     image::ImageConcentration,
     shape::{self, Shape},

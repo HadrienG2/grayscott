@@ -5,10 +5,9 @@ pub mod requirements;
 
 use super::{
     cache::PersistentPipelineCache,
-    context::VulkanContext,
     device,
     instance::{self, DebuggedInstance},
-    library, ContextBuildError, ContextBuildResult,
+    library, ContextBuildError, ContextBuildResult, VulkanContext,
 };
 use directories::ProjectDirs;
 #[allow(unused_imports)]

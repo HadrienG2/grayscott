@@ -1,7 +1,7 @@
 //! Simulation domain aka "Species"
 
 use crate::{pipeline, Error, Result};
-use compute::gpu::{config::requirements, context::VulkanContext};
+use compute::gpu::context::{config::requirements, VulkanContext};
 use data::concentration::gpu::{
     image::{context::ImageContext, ImageConcentration},
     shape::Shape,
