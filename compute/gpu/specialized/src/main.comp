@@ -1,7 +1,5 @@
 #version 460
 
-#include "../../naive/src/image.glsl"
-
 // === CPU/GPU interface ===
 //
 // Any modification to the following declarations may call for matching
@@ -31,6 +29,8 @@ layout(constant_id = 12) const float diffusion_rate_v = 0.05;
 layout(constant_id = 13) const float feed_rate = 0.014;
 layout(constant_id = 14) const float kill_rate = 0.054;
 layout(constant_id = 15) const float time_step = 1.0;
+
+#include "../../naive/src/image.glsl"
 
 // === GPU-side code ===
 
