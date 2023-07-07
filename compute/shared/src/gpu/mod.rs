@@ -45,7 +45,7 @@ where
         params: Parameters,
         args: Self::CliArgs,
         config: VulkanConfig,
-    ) -> std::result::Result<Self, Self::Error>;
+    ) -> Result<Self, Self::Error>;
 
     /// Access the Vulkan context used by the simulation
     fn context(&self) -> &VulkanContext;
@@ -71,14 +71,14 @@ where
         after: After,
         species: &mut Species<Self::Concentration>,
         steps: usize,
-    ) -> std::result::Result<Self::PrepareStepsFuture<After>, Self::Error>;
+    ) -> Result<Self::PrepareStepsFuture<After>, Self::Error>;
 
     /// Use this to implement `Simulate::perform_steps`
     fn perform_steps_impl(
         &self,
         species: &mut Species<Self::Concentration>,
         steps: usize,
-    ) -> std::result::Result<(), Self::Error> {
+    ) -> Result<(), Self::Error> {
         self.prepare_steps(
             vulkano::sync::now(self.context().device.clone()),
             species,
@@ -94,7 +94,7 @@ impl<T: SimulateGpu> SimulateCreate for T
 where
     <T as SimulateBase>::Error: From<FlushError>,
 {
-    fn new(params: Parameters, args: Self::CliArgs) -> std::result::Result<Self, Self::Error> {
+    fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error> {
         Self::with_config(params, args, VulkanConfig::default())
     }
 }
