@@ -47,8 +47,8 @@ pub fn image_requirements(device: &PhysicalDevice, work_group_shape: Shape) -> b
     let Ok(format_properties) = device.format_properties(ImageConcentration::format()) else {
         return false;
     };
-    properties.max_bound_descriptor_sets >= 1
-        && requirements::for_work_group(properties, work_group_shape)
+    requirements::for_work_group(properties, work_group_shape)
+        && properties.max_bound_descriptor_sets >= 1
         && properties.max_per_stage_descriptor_samplers >= NUM_SAMPLED_IMAGES
         && properties.max_per_stage_descriptor_sampled_images >= NUM_SAMPLED_IMAGES
         && properties.max_per_stage_descriptor_storage_images >= NUM_STORAGE_IMAGES
@@ -162,7 +162,7 @@ pub fn dispatch_size(domain_shape: Shape, work_group_shape: Shape) -> Result<[u3
 }
 
 /// Create a descriptor set for a particular (in_u, in_v, out_u, out_v) configuration
-pub fn new_inout_set(
+pub fn new_images_set(
     context: &VulkanContext,
     pipeline: &ComputePipeline,
     [in_u, in_v, out_u, out_v]: [Arc<StorageImage>; 4],

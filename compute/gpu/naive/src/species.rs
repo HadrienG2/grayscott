@@ -15,7 +15,7 @@ use vulkano::{
 /// Chosen concentration type
 pub type Species = data::concentration::Species<ImageConcentration>;
 
-/// Manner in which images are used
+/// Manner in which images are used, in the context of Species' multi-buffering
 pub fn image_usage() -> ImageUsage {
     pipeline::input_usage() | pipeline::output_usage()
 }
@@ -85,7 +85,7 @@ pub fn images_descriptor_set(
         Entry::Vacant(vacant) => {
             let images = vacant.key().clone();
             vacant
-                .insert(pipeline::new_inout_set(context, pipeline, images)?)
+                .insert(pipeline::new_images_set(context, pipeline, images)?)
                 .clone()
         }
     };
