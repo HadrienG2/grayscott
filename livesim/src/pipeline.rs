@@ -18,8 +18,8 @@ use vulkano::{
     sampler::Sampler,
 };
 
-/// Dispatch size required by this rendering pipeline, for a certain
-/// simulation domain and work-group shape
+/// Dispatch size required by this pipeline, for a certain simulation domain and
+/// work-group shape
 pub fn dispatch_size(
     domain_shape: Shape,
     work_group_shape: Shape,
@@ -27,7 +27,22 @@ pub fn dispatch_size(
     shape::full_dispatch_size(domain_shape, work_group_shape)
 }
 
-/// Create the rendering pipeline
+/// Manner in which the input is used
+pub fn input_usage() -> BufferUsage {
+    BufferUsage::STORAGE_BUFFER
+}
+
+/// Manner in which the rendering surface is used
+pub fn output_usage() -> ImageUsage {
+    ImageUsage::STORAGE
+}
+
+/// Manner in which the color palette is used
+pub fn palette_usage() -> ImageUsage {
+    ImageUsage::SAMPLED
+}
+
+/// Create the pipeline
 pub fn create(vulkan: &VulkanContext, work_group_shape: Shape) -> Result<Arc<ComputePipeline>> {
     // Load the rendering shader
     let shader = shader::load(vulkan.device.clone())?;
@@ -144,23 +159,6 @@ pub fn record_render_commands(
     Ok(commands)
 }
 
-/// Callback to configure palette sampling during pipeline construction
-fn sampler_setup_callback(
-    vulkan: &VulkanContext,
-) -> Result<impl FnOnce(&mut [DescriptorSetLayoutCreateInfo])> {
-    let palette_sampler = Sampler::new(vulkan.device.clone(), palette::sampler_conig())?;
-    vulkan.set_debug_utils_object_name(&palette_sampler, || "Color palette sampler".into())?;
-    Ok(
-        move |descriptor_sets: &mut [DescriptorSetLayoutCreateInfo]| {
-            descriptor_sets[PALETTE_SET as usize]
-                .bindings
-                .get_mut(&PALETTE)
-                .expect("Color palette descriptor should be present")
-                .immutable_samplers = vec![palette_sampler];
-        },
-    )
-}
-
 // Rendering shader used when data comes from the CPU
 // TODO: Use different shaders when rendering from GPU data
 mod shader {
@@ -178,18 +176,8 @@ const INOUT_SET: u32 = 0;
 /// Descriptor within `INOUT_SET` for readout of simulation output
 const DATA_INPUT: u32 = 0;
 
-/// Manner in which the input buffer is used
-pub fn input_usage() -> BufferUsage {
-    BufferUsage::STORAGE_BUFFER
-}
-
 /// Descriptor within `INOUT_SET` for writing to screen
 const SCREEN_OUTPUT: u32 = 1;
-
-/// Manner in which the rendering surface is used
-pub fn output_usage() -> ImageUsage {
-    ImageUsage::STORAGE
-}
 
 /// Shader descriptor set to which the color palette is bound
 const PALETTE_SET: u32 = 1;
@@ -197,7 +185,19 @@ const PALETTE_SET: u32 = 1;
 /// Descriptor within `PALETTE_SET` for reading the color palette
 const PALETTE: u32 = 0;
 
-/// Manner in which the palette is used
-pub fn palette_usage() -> ImageUsage {
-    ImageUsage::SAMPLED
+/// Callback to configure palette sampling during pipeline construction
+fn sampler_setup_callback(
+    vulkan: &VulkanContext,
+) -> Result<impl FnOnce(&mut [DescriptorSetLayoutCreateInfo])> {
+    let palette_sampler = Sampler::new(vulkan.device.clone(), palette::sampler_conig())?;
+    vulkan.set_debug_utils_object_name(&palette_sampler, || "Color palette sampler".into())?;
+    Ok(
+        move |descriptor_sets: &mut [DescriptorSetLayoutCreateInfo]| {
+            descriptor_sets[PALETTE_SET as usize]
+                .bindings
+                .get_mut(&PALETTE)
+                .expect("Color palette descriptor should be present")
+                .immutable_samplers = vec![palette_sampler];
+        },
+    )
 }
