@@ -1,6 +1,6 @@
 //! Pipeline cache
 
-use super::Result;
+use super::ContextBuildResult;
 use directories::ProjectDirs;
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
@@ -27,7 +27,7 @@ pub struct PersistentPipelineCache {
 //
 impl PersistentPipelineCache {
     /// Attempt to load the pipeline cache from disk, otherwise create a new one
-    pub fn new(dirs: &ProjectDirs, device: Arc<Device>) -> Result<Self> {
+    pub fn new(dirs: &ProjectDirs, device: Arc<Device>) -> ContextBuildResult<Self> {
         let path = dirs.cache_dir().join("gpu_pipelines.bin");
 
         // TODO: Consider treating some I/O errors as fatal and others as okay
@@ -44,7 +44,7 @@ impl PersistentPipelineCache {
     }
 
     /// Write the pipeline cache back to disk
-    pub fn write(&self) -> Result<()> {
+    pub fn write(&self) -> ContextBuildResult<()> {
         let data = self.cache.get_data()?;
 
         let dir = self

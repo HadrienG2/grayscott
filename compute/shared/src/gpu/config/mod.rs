@@ -8,7 +8,7 @@ use super::{
     context::VulkanContext,
     device,
     instance::{self, DebuggedInstance},
-    library, Error, Result,
+    library, ContextBuildError, ContextBuildResult,
 };
 use directories::ProjectDirs;
 #[allow(unused_imports)]
@@ -234,7 +234,7 @@ impl<
     /// # Ok::<(), compute::gpu::Error>(())
     /// ```
     #[allow(unused_assignments, unused_mut)]
-    pub fn build(mut self) -> Result<VulkanContext<MemAlloc, CommAlloc, DescAlloc>> {
+    pub fn build(mut self) -> ContextBuildResult<VulkanContext<MemAlloc, CommAlloc, DescAlloc>> {
         // Load vulkan library
         let library = library::load()?;
 
@@ -295,7 +295,8 @@ impl<
         let descriptor_set_allocator = (self.descriptor_set_allocator)(device.clone());
 
         // Set up pipeline cache
-        let dirs = ProjectDirs::from("", "", "grayscott").ok_or(Error::HomeDirNotFound)?;
+        let dirs =
+            ProjectDirs::from("", "", "grayscott").ok_or(ContextBuildError::HomeDirNotFound)?;
         let pipeline_cache = PersistentPipelineCache::new(&dirs, device.clone())?;
 
         // We're done!
@@ -314,7 +315,10 @@ impl<
 
 /// Create a Surface
 #[cfg(feature = "livesim")]
-pub fn create_surface(instance: Arc<Instance>, window: Arc<Window>) -> Result<Arc<Surface>> {
+pub fn create_surface(
+    instance: Arc<Instance>,
+    window: Arc<Window>,
+) -> ContextBuildResult<Arc<Surface>> {
     let created_surface = vulkano_win::create_surface_from_winit(window, instance)?;
     info!("Created a surface from {:?} window", created_surface.api());
     Ok(created_surface)

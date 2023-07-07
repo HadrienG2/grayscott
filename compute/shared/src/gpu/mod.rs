@@ -114,41 +114,41 @@ where
 
 /// Things that can go wrong while setting up a VulkanContext
 #[derive(Debug, Error)]
-pub enum Error {
-    #[error("failed to create a debug utils messenger")]
-    DebugUtilsMessengerCreation(#[from] DebugUtilsMessengerCreationError),
-
-    #[error("failed to create logical device")]
-    DeviceCreation(#[from] DeviceCreationError),
+pub enum ContextBuildError {
+    #[error("failed to load the Vulkan library")]
+    Loading(#[from] LoadingError),
 
     #[error("failed to create a Vulkan instance")]
     InstanceCreation(#[from] InstanceCreationError),
 
-    #[error("failed to load the Vulkan library")]
-    Loading(#[from] LoadingError),
-
-    #[error("no physical device matches requirements")]
-    NoMatchingDevice,
-
-    #[error("ran out of memory")]
-    Oom(#[from] OomError),
-
-    #[error("encountered Vulkan runtime error")]
-    Vulkan(#[from] VulkanError),
-
-    #[error("home directory not found")]
-    HomeDirNotFound,
-
-    #[error("failed to read or write on-disk pipeline cache")]
-    PipelineCacheIo(#[from] std::io::Error),
+    #[error("failed to create a debug utils messenger")]
+    DebugUtilsMessengerCreation(#[from] DebugUtilsMessengerCreationError),
 
     #[cfg(feature = "livesim")]
     #[error("failed to create a surface from specified window")]
     SurfaceCreation(#[from] SurfaceCreationError),
+
+    #[error("no physical device matches requirements")]
+    NoMatchingDevice,
+
+    #[error("failed to create a logical device")]
+    DeviceCreation(#[from] DeviceCreationError),
+
+    #[error("ran out of memory")]
+    Oom(#[from] OomError),
+
+    #[error("encountered a Vulkan runtime error")]
+    Vulkan(#[from] VulkanError),
+
+    #[error("did not find home directory")]
+    HomeDirNotFound,
+
+    #[error("failed to read or write on-disk pipeline cache")]
+    PipelineCacheIo(#[from] std::io::Error),
 }
 //
 /// Result type associated with VulkanContext setup issues
-pub type Result<T> = std::result::Result<T, Error>;
+pub type ContextBuildResult<T> = std::result::Result<T, ContextBuildError>;
 
 /// Format Vulkan extension properties for display
 fn format_extension_properties(extension_properties: &[ExtensionProperties]) -> String {
@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn setup_vulkan() -> Result<()> {
+    fn setup_vulkan() -> ContextBuildResult<()> {
         init_logger();
         VulkanConfig {
             enumerate_portability: true,

@@ -1,6 +1,6 @@
 //! Device management
 
-use super::{Error, Result};
+use super::{ContextBuildError, ContextBuildResult};
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
 use std::{cmp::Ordering, ops::Deref, sync::Arc};
@@ -38,7 +38,7 @@ pub fn select_physical(
         Arc<Surface>,
         impl FnMut(&PhysicalDevice, &Surface) -> bool,
     )>,
-) -> Result<Arc<PhysicalDevice>> {
+) -> ContextBuildResult<Arc<PhysicalDevice>> {
     let selected_device = instance
         .enumerate_physical_devices()?
         .filter(|device| {
@@ -69,7 +69,7 @@ pub fn select_physical(
         info!("Selected device {}", device.properties().device_name);
         Ok(device)
     } else {
-        Err(Error::NoMatchingDevice)
+        Err(ContextBuildError::NoMatchingDevice)
     }
 }
 
@@ -158,7 +158,7 @@ pub fn create_logical(
     enabled_features: Features,
     enabled_extensions: DeviceExtensions,
     (queue_create_infos, queue_names): (Vec<QueueCreateInfo>, Vec<impl AsRef<str>>),
-) -> Result<(Arc<Device>, Box<[Arc<Queue>]>)> {
+) -> ContextBuildResult<(Arc<Device>, Box<[Arc<Queue>]>)> {
     // Configure device and queues
     let create_info = DeviceCreateInfo {
         enabled_features,

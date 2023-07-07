@@ -1,6 +1,8 @@
 //! Common Vulkan context shared by all simulations
 
-use super::{cache::PersistentPipelineCache, config::VulkanConfig, Error, Result};
+use super::{
+    cache::PersistentPipelineCache, config::VulkanConfig, ContextBuildError, ContextBuildResult,
+};
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
 use std::{borrow::Cow, sync::Arc};
@@ -11,7 +13,7 @@ use vulkano::{
     instance::debug::DebugUtilsMessenger,
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
     swapchain::Surface,
-    VulkanObject,
+    OomError, VulkanObject,
 };
 
 /// Vulkan compute context
@@ -61,7 +63,7 @@ where
     DescAlloc: DescriptorSetAllocator,
 {
     /// Build a Vulkan context with a certain configuration
-    pub fn new(config: VulkanConfig<MemAlloc, CommAlloc, DescAlloc>) -> Result<Self> {
+    pub fn new(config: VulkanConfig<MemAlloc, CommAlloc, DescAlloc>) -> ContextBuildResult<Self> {
         config.build()
     }
 
@@ -70,7 +72,7 @@ where
         &self,
         object: &Object,
         make_name: impl FnOnce() -> Cow<'static, str>,
-    ) -> Result<()> {
+    ) -> Result<(), OomError> {
         if cfg!(feature = "gpu-debug-utils") {
             let name = make_name();
             self.device
@@ -87,9 +89,9 @@ where
     CommAlloc: CommandBufferAllocator,
     DescAlloc: DescriptorSetAllocator,
 {
-    type Error = Error;
+    type Error = ContextBuildError;
 
-    fn try_from(config: VulkanConfig<MemAlloc, CommAlloc, DescAlloc>) -> Result<Self> {
+    fn try_from(config: VulkanConfig<MemAlloc, CommAlloc, DescAlloc>) -> ContextBuildResult<Self> {
         config.build()
     }
 }

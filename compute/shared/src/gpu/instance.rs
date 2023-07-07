@@ -1,6 +1,6 @@
 //! Vulkan instance
 
-use super::Result;
+use super::ContextBuildResult;
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
 use std::{ops::Deref, sync::Arc};
@@ -63,7 +63,7 @@ impl DebuggedInstance {
         enabled_layers: Vec<String>,
         enabled_extensions: InstanceExtensions,
         enumerate_portability: bool,
-    ) -> Result<DebuggedInstance> {
+    ) -> ContextBuildResult<DebuggedInstance> {
         // Warn if selected layers don't support some extensions
         let unsupported_extensions = *library.supported_extensions()
             - library

@@ -29,12 +29,13 @@ use vulkano::{
         CommandBufferExecFuture, CommandBufferUsage, PipelineExecutionError,
     },
     descriptor_set::{DescriptorSetCreationError, PersistentDescriptorSet},
-    device::{physical::PhysicalDeviceError, Queue},
+    device::Queue,
     image::view::ImageViewCreationError,
     pipeline::{compute::ComputePipelineCreationError, ComputePipeline},
     sampler::SamplerCreationError,
     shader::ShaderCreationError,
     sync::{FlushError, GpuFuture},
+    OomError,
 };
 
 /// Gray-Scott reaction simulation
@@ -149,28 +150,28 @@ impl Simulation {
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("failed to initialize the Vulkan API")]
-    Init(#[from] compute::gpu::Error),
+    ContextBuild(#[from] compute::gpu::ContextBuildError),
 
-    #[error("failed to manipulate images")]
-    Image(#[from] data::concentration::gpu::image::Error),
+    #[error("failed to create the compute shader")]
+    ShaderCreation(#[from] ShaderCreationError),
+
+    #[error("failed to create the sampler")]
+    SamplerCreation(#[from] SamplerCreationError),
+
+    #[error("failed to create the compute pipeline")]
+    PipelineCreation(#[from] ComputePipelineCreationError),
 
     #[error("failed to move parameters to GPU-accessible memory")]
     ParamsUpload(#[from] BufferError),
 
-    #[error("failed to create compute shader")]
-    ShaderCreation(#[from] ShaderCreationError),
-
-    #[error("failed to create compute pipeline")]
-    PipelineCreation(#[from] ComputePipelineCreationError),
-
-    #[error("failed to create sampler")]
-    SamplerCreation(#[from] SamplerCreationError),
-
-    #[error("failed to create image view")]
-    ImageViewCreation(#[from] ImageViewCreationError),
-
-    #[error("failed to create descriptor set")]
+    #[error("failed to create a descriptor set")]
     DescriptorSetCreation(#[from] DescriptorSetCreationError),
+
+    #[error("failed to manipulate concentration images")]
+    Image(#[from] data::concentration::gpu::image::Error),
+
+    #[error("failed to create an image view")]
+    ImageViewCreation(#[from] ImageViewCreationError),
 
     #[error("failed to start recording a command buffer")]
     CommandBufferBegin(#[from] CommandBufferBeginError),
@@ -187,14 +188,14 @@ pub enum Error {
     #[error("failed to flush the queue to the GPU")]
     Flush(#[from] FlushError),
 
+    #[error("ran out of memory")]
+    Oom(#[from] OomError),
+
     #[error("device or shader does not support this domain shape at all")]
     UnsupportedShape,
 
-    #[error("domain shape is not supported with current work-group shape")]
+    #[error("domain shape is not supported with the current work-group shape")]
     ShapeGroupMismatch(#[from] PartialWorkGroupError),
-
-    #[error("failed to query physical device")]
-    PhysicalDevice(#[from] PhysicalDeviceError),
 }
 //
 pub type Result<T> = std::result::Result<T, Error>;

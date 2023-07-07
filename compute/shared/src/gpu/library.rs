@@ -1,13 +1,13 @@
 //! Vulkan library loading
 
-use super::Result;
+use super::ContextBuildResult;
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
 use std::sync::Arc;
 use vulkano::VulkanLibrary;
 
 /// Load the Vulkan library
-pub fn load() -> Result<Arc<VulkanLibrary>> {
+pub fn load() -> ContextBuildResult<Arc<VulkanLibrary>> {
     let library = VulkanLibrary::new()?;
     info!("Loaded Vulkan library");
     trace!("- Supports Vulkan v{}", library.api_version());
