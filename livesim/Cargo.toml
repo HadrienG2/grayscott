@@ -28,10 +28,6 @@ gpu-debug-utils = ["compute/gpu-debug-utils"]
 # that as a cleaner alternative to this dirty cargo features trick.
 gpu = ["data/gpu"]
 
-# TODO: Add a feature to enable context and data sharing between the
-#       visualization and GPU compute backend + avoid unnecessary copies.
-#       Call that "gpu", make it a dep of compute_gpu_xyz features above.
-
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
