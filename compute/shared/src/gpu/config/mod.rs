@@ -1,6 +1,7 @@
 //! Vulkan context configuration
 
 mod defaults;
+pub mod requirements;
 
 use super::{
     cache::PersistentPipelineCache,
@@ -13,11 +14,13 @@ use directories::ProjectDirs;
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
 use std::{borrow::Cow, cmp::Ordering, sync::Arc};
+#[cfg(feature = "livesim")]
+use vulkano::instance::Instance;
 use vulkano::{
     command_buffer::allocator::{CommandBufferAllocator, StandardCommandBufferAllocator},
     descriptor_set::allocator::{DescriptorSetAllocator, StandardDescriptorSetAllocator},
     device::{physical::PhysicalDevice, Device, DeviceExtensions, Features, QueueCreateInfo},
-    instance::{Instance, InstanceExtensions},
+    instance::InstanceExtensions,
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
     swapchain::Surface,
     VulkanLibrary,
@@ -236,10 +239,15 @@ impl<
         let library = library::load()?;
 
         // Set up instance
+        let mut will_render = false;
+        #[cfg(feature = "livesim")]
+        {
+            will_render = self.window_and_reqs.is_some();
+        }
         let instance_extensions = instance::select_extensions(
             &library,
             (self.instance_extensions)(&library),
-            self.window_and_reqs.is_some(),
+            will_render,
         );
         let layers = (self.layers)(&library);
         let instance = DebuggedInstance::new(
@@ -305,6 +313,7 @@ impl<
 }
 
 /// Create a Surface
+#[cfg(feature = "livesim")]
 pub fn create_surface(instance: Arc<Instance>, window: Arc<Window>) -> Result<Arc<Surface>> {
     let created_surface = vulkano_win::create_surface_from_winit(window, instance)?;
     info!("Created a surface from {:?} window", created_surface.api());

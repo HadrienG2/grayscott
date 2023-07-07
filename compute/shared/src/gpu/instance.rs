@@ -16,6 +16,7 @@ use vulkano::{
 };
 
 /// Select Vulkan instance extensions
+#[allow(unused_variables)]
 pub fn select_extensions(
     library: &VulkanLibrary,
     mut extensions: InstanceExtensions,

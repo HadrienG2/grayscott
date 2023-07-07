@@ -124,7 +124,7 @@ pub fn new_inout_sets(
 /// Record rendering commands
 pub fn record_render_commands(
     context: &SimulationContext,
-    pipeline: &Arc<ComputePipeline>,
+    pipeline: Arc<ComputePipeline>,
     inout_set: Arc<PersistentDescriptorSet>,
     palette_set: Arc<PersistentDescriptorSet>,
     dispatch_size: [u32; 3],
@@ -138,20 +138,16 @@ pub fn record_render_commands(
         CommandBufferUsage::OneTimeSubmit,
     )?;
 
+    let layout = pipeline.layout().clone();
     builder
-        .bind_pipeline_compute(pipeline.clone())
+        .bind_pipeline_compute(pipeline)
         .bind_descriptor_sets(
             PipelineBindPoint::Compute,
-            pipeline.layout().clone(),
+            layout.clone(),
             INOUT_SET,
             inout_set,
         )
-        .bind_descriptor_sets(
-            PipelineBindPoint::Compute,
-            pipeline.layout().clone(),
-            PALETTE_SET,
-            palette_set,
-        )
+        .bind_descriptor_sets(PipelineBindPoint::Compute, layout, PALETTE_SET, palette_set)
         .dispatch(dispatch_size)?;
 
     let commands = builder.build()?;

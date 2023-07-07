@@ -2,18 +2,22 @@
 //!
 //! This version is quite similar to the naive version, except for the fact that
 //! it uses specialization constants to pass parameters from CPU to GPU. This
-//! allows the GPU compiler to optimize code specifically for the simulation
-//! parameters, and also makes it a lot easier to keep CPU and GPU code in sync.
+//! allows external control on the shader's work-group size, allows the GPU
+//! compiler to optimize code specifically for the simulation parameters, and
+//! makes it a lot easier to keep CPU and GPU code in sync.
 
 mod args;
-mod specialization;
+mod pipeline;
 
 use self::args::GpuSpecializedArgs;
 use compute::{
     gpu::{config::VulkanConfig, context::VulkanContext, SimulateGpu},
     Simulate, SimulateBase,
 };
-use compute_gpu_naive::{images::IMAGES_SET, Error, Result, Species};
+use compute_gpu_naive::{
+    species::{self, Species},
+    Error, Result,
+};
 use data::{
     concentration::gpu::{image::ImageConcentration, shape::Shape},
     parameters::Parameters,
@@ -22,7 +26,7 @@ use std::sync::Arc;
 use vulkano::{
     command_buffer::{AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage},
     device::Queue,
-    pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
+    pipeline::ComputePipeline,
     sync::GpuFuture,
 };
 
@@ -46,7 +50,7 @@ impl SimulateBase for Simulation {
     type Error = Error;
 
     fn make_species(&self, shape: [usize; 2]) -> Result<Species> {
-        compute_gpu_naive::make_species(
+        species::make_species(
             &self.context,
             shape,
             self.work_group_shape,
@@ -61,7 +65,7 @@ impl SimulateGpu for Simulation {
         args: GpuSpecializedArgs,
         mut config: VulkanConfig,
     ) -> Result<Self> {
-        // Pick work-group size
+        // Pick work-group shape
         let work_group_shape = Shape::new([
             args.compute_work_group_rows.into(),
             args.compute_work_group_cols.into(),
@@ -71,27 +75,14 @@ impl SimulateGpu for Simulation {
         let context = VulkanConfig {
             other_device_requirements: Box::new(move |device| {
                 (config.other_device_requirements)(device)
-                    && compute_gpu_naive::requirements::device_filter(device, work_group_shape)
+                    && pipeline::requirements(device, work_group_shape)
             }),
             ..config
         }
         .build()?;
 
-        // Load the compute shader
-        let shader = shader::load(context.device.clone())?;
-        context.set_debug_utils_object_name(&shader, || "Simulation stepper shader".into())?;
-
-        // Set up the compute pipeline, with specialization constants for all
-        // simulation parameters since they are known at GPU shader compile
-        // time and won't change afterwards.
-        let pipeline = ComputePipeline::new(
-            context.device.clone(),
-            shader.entry_point("main").expect("Should be present"),
-            &specialization::constants(parameters, work_group_shape),
-            Some(context.pipeline_cache.clone()),
-            compute_gpu_naive::images::sampler_setup_callback(&context)?,
-        )?;
-        context.set_debug_utils_object_name(&pipeline, || "Simulation stepper".into())?;
+        // Set up compute pipeline
+        let pipeline = pipeline::create(&context, parameters, work_group_shape)?;
 
         Ok(Self {
             context,
@@ -119,27 +110,15 @@ impl SimulateGpu for Simulation {
             CommandBufferUsage::OneTimeSubmit,
         )?;
 
-        // Set up the compute pipeline and parameters descriptor set
+        // Prepare to dispatch compute operations
         builder.bind_pipeline_compute(self.pipeline.clone());
-
-        // Determine the GPU dispatch size
-        let dispatch_size = compute_gpu_naive::dispatch_size(&species, self.work_group_shape);
+        let dispatch_size = species::dispatch_size_for(&species, self.work_group_shape);
 
         // Record the simulation steps
         for _ in 0..steps {
-            // Set up a descriptor set for the input and output images
-            let images =
-                compute_gpu_naive::images::descriptor_set(&self.context, &self.pipeline, species)?;
-
-            // Attach the images and run the simulation
-            builder
-                .bind_descriptor_sets(
-                    PipelineBindPoint::Compute,
-                    self.pipeline.layout().clone(),
-                    IMAGES_SET,
-                    images,
-                )
-                .dispatch(dispatch_size)?;
+            // Record a simulation step using the current input and output images
+            let images = species::images_descriptor_set(&self.context, &self.pipeline, species)?;
+            pipeline::record_step(&mut builder, &self.pipeline, images, dispatch_size)?;
 
             // Flip to the other set of images and start over
             species.flip()?;
@@ -163,15 +142,5 @@ impl Simulation {
     /// This implementation only uses one queue, therefore we can take shortcuts
     fn queue(&self) -> &Arc<Queue> {
         &self.context.queues[0]
-    }
-}
-
-/// Compute shader used for GPU-side simulation
-mod shader {
-    vulkano_shaders::shader! {
-        ty: "compute",
-        vulkan_version: "1.0",
-        spirv_version: "1.0",
-        path: "src/main.comp",
     }
 }

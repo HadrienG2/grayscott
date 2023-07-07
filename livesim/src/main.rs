@@ -119,7 +119,7 @@ fn main() -> Result<()> {
                         // Record rendering commands
                         pipeline::record_render_commands(
                             &context,
-                            &pipeline,
+                            pipeline.clone(),
                             inout_set,
                             palette_set.clone(),
                             dispatch_size,
