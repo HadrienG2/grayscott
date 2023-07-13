@@ -45,7 +45,6 @@ impl Writer {
             .new_dataset::<Precision>()
             .chunk([1, rows, cols])
             .shape([num_images, rows, cols])
-            .lzf()
             .create(dataset_name)?;
         Ok(Self(State {
             file,
