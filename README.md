@@ -153,7 +153,6 @@ The microbenchmark runner exports a more detailed HTML report in
 
 ---
 
-In order to work around an LLVM codegen segfault on Zen 3 CPUs, the build system
-currently only generates binaries for CPUs with support for the AVX and AVX2
-instruction set. You can optimize the code generation parameters for your CPU
-via the .cargo/config.toml configuration file.
+The build system is configured to generate binaries that are optimized for your
+CPU, using the Rust equivalent of GCC's `-march=native`. You can change this
+using the .cargo/config.toml configuration file.
