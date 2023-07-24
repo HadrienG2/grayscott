@@ -73,6 +73,9 @@ impl SimulateCpu for Simulation {
         let time_step = Values::splat(self.params.time_step);
         let ones = Values::splat(1.0);
 
+        // Compute sum of stencil weights and broadcast it
+        let total_weight = Values::splat(self.params.weights.0.into_iter().flatten().sum());
+
         // Iterate over center pixels of the species concentration matrices
         for (out_u, out_v, win_u, win_v) in compute::cpu::fast_grid_iter(grid) {
             // Access center value of u
@@ -80,7 +83,7 @@ impl SimulateCpu for Simulation {
             let v = win_v[stencil_offset];
 
             // Compute diffusion gradient
-            let [full_u, full_v] = (win_u.rows().into_iter())
+            let [weighted_u, weighted_v] = (win_u.rows().into_iter())
                 .zip(win_v.rows())
                 .zip(self.params.weights.0)
                 .flat_map(|((u_row, v_row), weights_row)| {
@@ -93,11 +96,13 @@ impl SimulateCpu for Simulation {
                     |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
                         let weight = Values::splat(weight);
                         [
-                            mul_add(weight, stencil_u - u, acc_u),
-                            mul_add(weight, stencil_v - v, acc_v),
+                            mul_add(weight, stencil_u, acc_u),
+                            mul_add(weight, stencil_v, acc_v),
                         ]
                     },
                 );
+            let full_u = weighted_u - total_weight * u;
+            let full_v = weighted_v - total_weight * v;
 
             // Deduce variation of U and V
             let uv_square = u * v * v;
