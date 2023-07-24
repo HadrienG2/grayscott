@@ -117,10 +117,13 @@ impl SimulateCpu for Simulation {
 // floating-point operations (which are the bulk of our SIMD workload)
 const PRECISION_SIZE: usize = std::mem::size_of::<Precision>();
 cfg_if! {
-    if #[cfg(target_feature = "avx512f")] {
+    // FIXME: AVX-512 is disabled because rustc does not use zmm registers
+    //        and there is no way to force it to according to
+    //        https://github.com/rust-lang/rust/issues/53312
+    /* if #[cfg(target_feature = "avx512f")] {
         pub const WIDTH: usize = 64 / PRECISION_SIZE;
         pub type Values = Vector<align::Align64, Precision, WIDTH>;
-    } else if #[cfg(target_feature = "avx")] {
+    } else */ if #[cfg(target_feature = "avx")] {
         pub const WIDTH: usize = 32 / PRECISION_SIZE;
         pub type Values = Vector<align::Align32, Precision, WIDTH>;
     } else {
