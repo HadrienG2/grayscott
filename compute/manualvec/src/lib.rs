@@ -103,8 +103,8 @@ impl SimulateCpu for Simulation {
                         ]
                     },
                 );
-            let full_u = total_weight.mul_neg_add(u, weighted_u);
-            let full_v = total_weight.mul_neg_add(v, weighted_v);
+            let full_u = u.mul_neg_add(total_weight, weighted_u);
+            let full_v = v.mul_neg_add(total_weight, weighted_v);
 
             // Deduce variation of U and V
             let uv_square = u.mul(v).mul(v);
