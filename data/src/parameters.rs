@@ -36,12 +36,16 @@ impl Parameters {
     /// Matrix of weights to be applied in the stencil computation
     #[inline]
     pub fn weights(&self) -> StencilWeights {
-        #[cfg(feature = "runtime_weights")]
+        #[cfg(feature = "runtime-weights")]
         {
+            // Look up stencil weights at runtime, even though they are
+            // actually known at compile time. The compiler may or may not
+            // manage to figure things out (as of rustc 1.71, it doesn't).
             self.weights
         }
-        #[cfg(not(feature = "runtime_weights"))]
+        #[cfg(not(feature = "runtime-weights"))]
         {
+            // Take no chance and enforce use of the compile-time weights.
             debug_assert_eq!(self.weights, STENCIL_WEIGHTS);
             STENCIL_WEIGHTS
         }

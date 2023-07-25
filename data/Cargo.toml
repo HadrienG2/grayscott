@@ -23,10 +23,10 @@ simd = []
 
 # Switch to run-time stencil weights lookup
 #
-# May cause a ~2x performance regression if the compiler fails to infer that
-# stencil weights are known at compile time and not user-settable. As of rustc
-# 1.71, however, the compiler does the right thing even in this configuration,
-# which shows that we can have both good performance and nicer-looking code.
+# By default, the code leverages the fact that stencil weights are known at
+# compile time (and all equal to 1). If you would like to know how expensive it
+# would be to give up on this specialization and use generic code that works for
+# any set of stencil weights, turn on this feature flag.
 runtime-weights = []
 
 [dependencies]
