@@ -11,7 +11,7 @@ use compute::{cpu::SimulateStep, NoArgs, SimulateBase, SimulateCreate};
 use data::{
     array2,
     concentration::ScalarConcentration,
-    parameters::{stencil_offset, Parameters, STENCIL_SHAPE},
+    parameters::{stencil_offset, Parameters, StencilWeights, STENCIL_SHAPE},
     Precision,
 };
 use ndarray::{s, ArrayView2};
@@ -68,7 +68,8 @@ impl Simulation {
         // Access species concentration matrices
         let (in_u, in_v, out_u, out_v) = species.in_out();
 
-        // Determine offset from the top-left corner of the stencil to its center
+        // Determine stencil weights and offset from the top-left corner of the stencil to its center
+        let stencil_weights = self.params.weights();
         let stencil_offset = stencil_offset();
 
         // Iterate over center pixels of the species concentration matrices
@@ -79,7 +80,8 @@ impl Simulation {
             [out_u.slice_mut(center_slice), out_v.slice_mut(center_slice)],
         )) {
             // Compute pixel
-            let (new_u, new_v) = self.compute_pixel(win_u, win_v, STENCIL_SHAPE, stencil_offset);
+            let (new_u, new_v) =
+                self.compute_pixel(win_u, win_v, STENCIL_SHAPE, stencil_offset, stencil_weights);
             *out_u = new_u;
             *out_v = new_v;
         }
@@ -92,7 +94,8 @@ impl Simulation {
         let shape = species.shape();
         let (in_u, in_v, out_u, out_v) = species.in_out();
 
-        // Determine offset from the top-left corner of the stencil to its center
+        // Determine stencil weights and offset from the top-left corner of the stencil to its center
+        let stencil_weights = self.params.weights();
         let stencil_offset = stencil_offset();
 
         // Iterate over edges of the species concentration matrices
@@ -134,7 +137,8 @@ impl Simulation {
                     in_u.slice(in_slice),
                     in_v.slice(in_slice),
                     stencil_shape,
-                    stencil_offset
+                    stencil_offset,
+                    stencil_weights,
                 );
                 *out_u = new_u;
                 *out_v = new_v;
@@ -152,6 +156,7 @@ impl Simulation {
         win_v: ArrayView2<'_, Precision>,
         stencil_shape: [usize; 2],
         stencil_offset: [usize; 2],
+        stencil_weights: StencilWeights,
     ) -> (Precision, Precision) {
         // Check that everything's alright in debug mode
         debug_assert_eq!(win_u.shape(), win_v.shape());
@@ -173,7 +178,7 @@ impl Simulation {
         //       again, it's just going to result in a few weird edge pixels...
         let [full_u, full_v] = (win_u.rows().into_iter())
             .zip(win_v.rows())
-            .zip(self.params.weights.0)
+            .zip(stencil_weights.0)
             .flat_map(|((u_row, v_row), weights_row)| {
                 (u_row.into_iter().copied())
                     .zip(v_row.into_iter().copied())

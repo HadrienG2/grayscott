@@ -3,6 +3,8 @@
 
 #[cfg(feature = "simulation")]
 use compute::SimulateBase;
+#[cfg(feature = "simulation")]
+use data::parameters::Parameters;
 #[cfg(any(feature = "simulation", feature = "visualization"))]
 use data::Precision;
 use std::{
@@ -45,13 +47,19 @@ pub struct SharedArgs<Simulation: SimulateBase> {
 //
 #[cfg(feature = "simulation")]
 impl<Simulation: SimulateBase> SharedArgs<Simulation> {
-    /// Argument defaults for killrate, feedrate and deltat that clap can't handle
-    pub fn kill_feed_deltat(&self) -> [Precision; 3] {
-        let default_params = data::parameters::Parameters::default();
-        let kill_rate = self.killrate.unwrap_or(default_params.kill_rate);
-        let feed_rate = self.feedrate.unwrap_or(default_params.feed_rate);
-        let time_step = self.deltat.unwrap_or(default_params.time_step);
-        [kill_rate, feed_rate, time_step]
+    /// Simulation parameters
+    pub fn simulation_parameters(&self) -> Parameters {
+        let mut params = Parameters::default();
+        if let Some(kill_rate) = self.killrate {
+            params.kill_rate = kill_rate;
+        }
+        if let Some(feed_rate) = self.feedrate {
+            params.feed_rate = feed_rate;
+        }
+        if let Some(deltat) = self.deltat {
+            params.time_step = deltat;
+        }
+        params
     }
 
     /// Domain shape

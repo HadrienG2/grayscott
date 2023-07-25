@@ -64,7 +64,8 @@ impl SimulateCpu for Simulation {
 
     #[inline]
     fn unchecked_step_impl(&self, grid: CpuGrid<Self::Values>) {
-        // Determine offset from the top-left corner of the stencil to its center
+        // Determine stencil weights and offset from the top-left corner of the stencil to its center
+        let weights = self.params.weights();
         let stencil_offset = stencil_offset();
 
         // Prepare vector versions of the scalar computation parameters
@@ -76,7 +77,7 @@ impl SimulateCpu for Simulation {
         let ones = Values::splat(1.0);
 
         // Compute sum of stencil weights and broadcast it
-        let total_weight = Values::splat(self.params.weights.0.into_iter().flatten().sum());
+        let total_weight = Values::splat(weights.0.into_iter().flatten().sum());
 
         // Iterate over center pixels of the species concentration matrices
         for (out_u, out_v, win_u, win_v) in compute::cpu::fast_grid_iter(grid) {
@@ -87,7 +88,7 @@ impl SimulateCpu for Simulation {
             // Compute diffusion gradient
             let [weighted_u, weighted_v] = (win_u.rows().into_iter())
                 .zip(win_v.rows())
-                .zip(self.params.weights.0)
+                .zip(weights.0)
                 .flat_map(|((u_row, v_row), weights_row)| {
                     (u_row.into_iter().copied())
                         .zip(v_row.into_iter().copied())

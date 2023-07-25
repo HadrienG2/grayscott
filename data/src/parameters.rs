@@ -1,5 +1,7 @@
 //! Computation parameters
 
+use std::debug_assert_eq;
+
 use crate::Precision;
 #[cfg(feature = "gpu-parameters")]
 use crevice::{
@@ -12,7 +14,7 @@ use crevice::{
 #[cfg_attr(feature = "gpu-parameters", derive(AsStd140, GlslStruct))]
 pub struct Parameters {
     /// Matrix of weights to be applied in the stencil computation
-    pub weights: StencilWeights,
+    weights: StencilWeights,
 
     /// Diffusion rate of species U
     pub diffusion_rate_u: Precision,
@@ -30,16 +32,26 @@ pub struct Parameters {
     pub time_step: Precision,
 }
 //
+impl Parameters {
+    /// Matrix of weights to be applied in the stencil computation
+    #[inline]
+    pub fn weights(&self) -> StencilWeights {
+        #[cfg(feature = "runtime_weights")]
+        {
+            self.weights
+        }
+        #[cfg(not(feature = "runtime_weights"))]
+        {
+            debug_assert_eq!(self.weights, STENCIL_WEIGHTS);
+            STENCIL_WEIGHTS
+        }
+    }
+}
+//
 impl Default for Parameters {
     fn default() -> Self {
         Self {
-            // Stencil used by the C++ version
-            weights: StencilWeights([[1.0; 3]; 3]),
-            // More mathematically accurate but less fun-looking results
-            /* weights: StencilWeights(
-            [[0.05, 0.2, 0.05],
-            [0.2, 0.0, 0.2],
-            [0.05, 0.2, 0.05]]), */
+            weights: STENCIL_WEIGHTS,
             diffusion_rate_u: 0.1,
             diffusion_rate_v: 0.05,
             feed_rate: 0.014,
@@ -52,6 +64,16 @@ impl Default for Parameters {
 /// Computation stencil, as a row-major matrix
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct StencilWeights(pub [[Precision; STENCIL_SHAPE[1]]; STENCIL_SHAPE[0]]);
+//
+/// Stencil used by the C++ version
+const STENCIL_WEIGHTS: StencilWeights = StencilWeights([[1.0; 3]; 3]);
+//
+// More mathematically accurate but less fun-looking results
+/* const STENCIL_WEIGHTS: StencilWeights = StencilWeights([
+    [0.05, 0.2, 0.05],
+    [0.2, 0.0, 0.2],
+    [0.05, 0.2, 0.05],
+]); */
 
 // Make StencilWeights uploadable to the GPU if support is enabled
 cfg_if::cfg_if! {

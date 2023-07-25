@@ -45,7 +45,8 @@ impl SimulateStep for Simulation {
         let shape = species.shape();
         let (in_u, in_v, out_u, out_v) = species.in_out();
 
-        // Determine stencil offsets
+        // Determine stencil weights and offset from the top-left corner of the stencil to its center
+        let weights = self.params.weights();
         let stencil_offset = stencil_offset();
 
         // Iterate over pixels of the species concentration matrices
@@ -64,7 +65,7 @@ impl SimulateStep for Simulation {
                 .fold(
                     [0.; 2],
                     |[acc_u, acc_v], (((in_row, in_col), &stencil_u), &stencil_v)| {
-                        let weight = params.weights.0[in_row][in_col];
+                        let weight = weights.0[in_row][in_col];
                         [acc_u + weight * (stencil_u - u), acc_v + weight * (stencil_v - v)]
                     },
                 );

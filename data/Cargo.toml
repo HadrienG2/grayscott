@@ -18,8 +18,14 @@ gpu-parameters = ["bytemuck", "crevice", "gpu"]
 safe_arch = ["dep:safe_arch", "simd"]
 slipstream = ["simd", "dep:slipstream"]
 
-# Commonalities between SIMD backends (automatically enabled when needed)
+# Commonalities between SIMD backends (automatically enabled by above backends)
 simd = []
+
+# Switch to run-time stencil weights lookup
+#
+# May cause a 2x performance regression if the compiler fails to infer that
+# stencil weights are known at compile time and not user-settable.
+runtime-weights = []
 
 [dependencies]
 cfg-if.workspace = true

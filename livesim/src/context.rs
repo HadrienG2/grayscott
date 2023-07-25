@@ -7,7 +7,6 @@ use compute::gpu::SimulateGpu;
 #[cfg(not(feature = "gpu"))]
 use compute::SimulateCreate;
 use compute_selector::Simulation;
-use data::parameters::Parameters;
 use log::info;
 use std::sync::Arc;
 use ui::SharedArgs;
@@ -29,13 +28,7 @@ impl SimulationContext {
     /// Set up the simulation and Vulkan context
     pub fn new(args: &SharedArgs<Simulation>, window: &Arc<Window>) -> Result<Self> {
         // Configure simulation
-        let [kill_rate, feed_rate, time_step] = args.kill_feed_deltat();
-        let parameters = Parameters {
-            kill_rate,
-            feed_rate,
-            time_step,
-            ..Default::default()
-        };
+        let parameters = args.simulation_parameters();
 
         // Create simulation, forwarding our context config if it's Vulkan-based
         let simulation = {
