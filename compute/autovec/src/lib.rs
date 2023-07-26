@@ -89,25 +89,21 @@ impl SimulateCpu for Simulation {
             let [full_u, full_v] = (win_u.rows().into_iter())
                 .zip(win_v.rows())
                 .zip(weights.0)
-                .map(|((u_row, v_row), weights_row)| {
-                    // First we accumulate across rows of the stencil...
+                .flat_map(|((u_row, v_row), weights_row)| {
                     (u_row.into_iter().copied())
                         .zip(v_row.into_iter().copied())
                         .zip(weights_row)
-                        .fold(
-                            [Values::splat(0.); 2],
-                            |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
-                                let weight = Values::splat(weight);
-                                [
-                                    mul_add(weight, stencil_u, acc_u),
-                                    mul_add(weight, stencil_v, acc_v),
-                                ]
-                            },
-                        )
                 })
-                // ...then we sum the accumulators. This improves ILP.
-                .reduce(|[u_acc1, v_acc1], [u_acc2, v_acc2]| [u_acc1 + u_acc2, v_acc1 + v_acc2])
-                .unwrap_or([Values::splat(0.); 2]);
+                .fold(
+                    [Values::splat(0.); 2],
+                    |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
+                        let weight = Values::splat(weight);
+                        [
+                            mul_add(weight, stencil_u, acc_u),
+                            mul_add(weight, stencil_v, acc_v),
+                        ]
+                    },
+                );
 
             // Deduce variation of U and V
             let uv_square = u * v * v;
