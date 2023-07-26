@@ -221,14 +221,11 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     // The safety of the closures below is actually asserted on the caller's
     // side, but sadly unsafe closures aren't a thing in Rust yet.
     let window_shape = (STENCIL_SHAPE[0], STENCIL_SHAPE[1]).strides((in_row_stride, 1));
-    let offset = |position: [usize; 2], row_stride: usize| -> usize {
-        position[0] * row_stride + position[1]
+    let unchecked_output = move |out_row_ptr: *mut Values, out_col: usize| unsafe {
+        &mut *out_row_ptr.add(out_col)
     };
-    let unchecked_output = move |out_ptr: *mut Values, out_pos| unsafe {
-        &mut *out_ptr.add(offset(out_pos, out_row_stride))
-    };
-    let unchecked_input_window = move |in_ptr: *const Values, out_pos| unsafe {
-        let win_ptr = in_ptr.add(offset(out_pos, in_row_stride));
+    let unchecked_input_window = move |in_row_ptr: *const Values, out_col: usize| unsafe {
+        let win_ptr = in_row_ptr.add(out_col);
         ArrayView2::from_shape_ptr(window_shape, win_ptr)
     };
 
@@ -237,28 +234,26 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     let in_v_ptr = in_v.as_ptr();
     let out_u_ptr = out_u_center.as_mut_ptr();
     let out_v_ptr = out_v_center.as_mut_ptr();
-    let mut out_pos = [0, 0];
-    std::iter::from_fn(move || {
-        // Handle end of iteration
-        if out_pos[0] == out_shape[0] {
-            return None;
-        }
+    let [out_rows, out_cols] = out_shape;
+    (0..out_rows).flat_map(move |out_row| {
+        // Make a pointer to the start of the current row
+        //
+        // This is safe and will produce a valid row pointer because the current
+        // row index is valid and the row strides are used correctly.
+        let in_u_row_ptr = unsafe { in_u_ptr.add(out_row * in_row_stride) };
+        let in_v_row_ptr = unsafe { in_v_ptr.add(out_row * in_row_stride) };
+        let out_u_row_ptr = unsafe { out_u_ptr.add(out_row * out_row_stride) };
+        let out_v_row_ptr = unsafe { out_v_ptr.add(out_row * out_row_stride) };
 
-        // Produce current result
-        // Safe because it will only be called on valid window positions
-        let out_u = unchecked_output(out_u_ptr, out_pos);
-        let out_v = unchecked_output(out_v_ptr, out_pos);
-        let win_u = unchecked_input_window(in_u_ptr, out_pos);
-        let win_v = unchecked_input_window(in_v_ptr, out_pos);
-
-        // Advance iterator
-        out_pos[1] += 1;
-        if out_pos[1] == out_shape[1] {
-            out_pos[0] += 1;
-            out_pos[1] = 0;
-        }
-
-        // Emit result
-        Some((out_u, out_v, win_u, win_v))
+        // Iterate over input windows / output elements within the current row
+        (0..out_cols).map(move |out_col| {
+            // This is safe bceause the current row pointer is valid and the
+            // current column index is valid
+            let out_u = unchecked_output(out_u_row_ptr, out_col);
+            let out_v = unchecked_output(out_v_row_ptr, out_col);
+            let win_u = unchecked_input_window(in_u_row_ptr, out_col);
+            let win_v = unchecked_input_window(in_v_row_ptr, out_col);
+            (out_u, out_v, win_u, win_v)
+        })
     })
 }
