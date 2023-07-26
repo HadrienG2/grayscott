@@ -17,6 +17,7 @@ use data::{
     parameters::{stencil_offset, Parameters},
     Precision,
 };
+use itertools::Itertools;
 use slipstream::{vector::align, Vector};
 use std::convert::Infallible;
 
@@ -75,14 +76,37 @@ impl SimulateCpu for Simulation {
         let ones = Values::splat(1.0);
 
         // Iterate over center pixels of the species concentration matrices
-        for (out_u, out_v, win_u, win_v) in compute::cpu::fast_grid_iter(grid) {
+        for (t1, t2) in compute::cpu::fast_grid_iter(grid).tuples::<(_, _)>() {
+            let (out_u1, out_v1, win_u1, win_v1) = t1;
+            let (out_u2, out_v2, win_u2, win_v2) = t2;
+
             // Access center value of u
-            let u = win_u[stencil_offset];
-            let v = win_v[stencil_offset];
+            let u1 = win_u1[stencil_offset];
+            let u2 = win_u2[stencil_offset];
+            let v1 = win_v1[stencil_offset];
+            let v2 = win_v2[stencil_offset];
 
             // Compute diffusion gradient
-            let [full_u, full_v] = (win_u.rows().into_iter())
-                .zip(win_v.rows())
+            let [full_u1, full_v1] = (win_u1.rows().into_iter())
+                .zip(win_v1.rows())
+                .zip(weights.0)
+                .flat_map(|((u_row, v_row), weights_row)| {
+                    (u_row.into_iter().copied())
+                        .zip(v_row.into_iter().copied())
+                        .zip(weights_row)
+                })
+                .fold(
+                    [Values::splat(0.); 2],
+                    |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
+                        let weight = Values::splat(weight);
+                        [
+                            mul_add(weight, stencil_u, acc_u),
+                            mul_add(weight, stencil_v, acc_v),
+                        ]
+                    },
+                );
+            let [full_u2, full_v2] = (win_u2.rows().into_iter())
+                .zip(win_v2.rows())
                 .zip(weights.0)
                 .flat_map(|((u_row, v_row), weights_row)| {
                     (u_row.into_iter().copied())
@@ -101,15 +125,32 @@ impl SimulateCpu for Simulation {
                 );
 
             // Deduce variation of U and V
-            let uv_square = u * v * v;
-            let du = mul_add(diffusion_rate_u, full_u, feed_rate * (ones - u) - uv_square);
-            let dv = mul_add(
-                diffusion_rate_v,
-                full_v,
-                mul_add(min_feed_kill, v, uv_square),
+            let uv_square_1 = u1 * v1 * v1;
+            let uv_square_2 = u2 * v2 * v2;
+            let du1 = mul_add(
+                diffusion_rate_u,
+                full_u1,
+                feed_rate * (ones - u1) - uv_square_1,
             );
-            *out_u = mul_add(du, time_step, u);
-            *out_v = mul_add(dv, time_step, v);
+            let du2 = mul_add(
+                diffusion_rate_u,
+                full_u2,
+                feed_rate * (ones - u2) - uv_square_2,
+            );
+            let dv1 = mul_add(
+                diffusion_rate_v,
+                full_v1,
+                mul_add(min_feed_kill, v1, uv_square_1),
+            );
+            let dv2 = mul_add(
+                diffusion_rate_v,
+                full_v2,
+                mul_add(min_feed_kill, v2, uv_square_2),
+            );
+            *out_u1 = mul_add(du1, time_step, u1);
+            *out_u2 = mul_add(du2, time_step, u2);
+            *out_v1 = mul_add(dv1, time_step, v1);
+            *out_v2 = mul_add(dv2, time_step, v2);
         }
     }
 }

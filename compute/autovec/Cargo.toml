@@ -9,6 +9,9 @@ compute = { workspace = true, features = ["cpu"] }
 data = { workspace = true, features = ["slipstream"] }
 slipstream.workspace = true
 
+# FIXME: Propagate if useful
+itertools = "0.11"
+
 [dev-dependencies]
 compute = { workspace = true, features = ["criterion"] }
 
