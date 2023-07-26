@@ -108,3 +108,49 @@ macro_rules! gpu_benchmark {
         );
     };
 }
+
+/// As long as this RAII guard is alive, denormals are flushed to zero
+///
+/// Denormals are an obscure feature of IEEE-754 which slightly improves
+/// precision of computations involving on very small numbers. They are rarely
+/// useful, but spontaneously appear when manipulating exponentially decaying
+/// numbers and cause a tremendous execution slowdown on Intel processors.
+/// Therefore, flushing them to zero is often the right thing to do...
+///
+/// This guard operates on a best-effort basis : if no facility for flushing
+/// denormals is available/known on the target CPU, denormals will be left alone.
+///
+/// This guard also assumes that it is the only entity manipulating the FTZ flag.
+/// Manipulation of the FTZ flag while it is operating will lead to invalid
+/// state restoration.
+pub struct DenormalsFlusher {
+    #[cfg(target_feature = "sse")]
+    old_ftz_mode: u32,
+}
+//
+impl DenormalsFlusher {
+    /// Start flushing denormals
+    pub fn new() -> Self {
+        #[cfg(target_feature = "sse")]
+        unsafe {
+            use std::arch::x86_64::{
+                _MM_FLUSH_ZERO_ON, _MM_GET_FLUSH_ZERO_MODE, _MM_SET_FLUSH_ZERO_MODE,
+            };
+            let old_ftz_mode = _MM_GET_FLUSH_ZERO_MODE();
+            _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
+            Self { old_ftz_mode }
+        }
+        #[cfg(not(target_feature = "sse"))]
+        Self {}
+    }
+}
+//
+impl Drop for DenormalsFlusher {
+    fn drop(&mut self) {
+        #[cfg(target_feature = "sse")]
+        unsafe {
+            use std::arch::x86_64::_MM_SET_FLUSH_ZERO_MODE;
+            _MM_SET_FLUSH_ZERO_MODE(self.old_ftz_mode);
+        }
+    }
+}

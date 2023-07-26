@@ -3,7 +3,7 @@
 //! Please consider using the macros provided by this crate instead of calling
 //! these implementation details directly.
 
-use crate::Simulate;
+use crate::{DenormalsFlusher, Simulate};
 use clap::{Args, Command, FromArgMatches};
 use criterion::{BenchmarkId, Criterion, Throughput};
 #[cfg(feature = "gpu")]
@@ -57,6 +57,7 @@ pub fn criterion_benchmark<Simulation: Simulate>(
             let mut species = sim.make_species(black_box(shape)).unwrap();
 
             group.throughput(Throughput::Elements(num_elems * num_steps));
+            let _flush_denormals = DenormalsFlusher::new();
             group.bench_function(
                 BenchmarkId::from_parameter(format!(
                     "{parameter_base}{}x{}elems,{num_steps}steps",

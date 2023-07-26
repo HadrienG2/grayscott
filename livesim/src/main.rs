@@ -7,7 +7,7 @@ mod surface;
 
 use self::{context::SimulationContext, frames::Frames};
 use clap::Parser;
-use compute::{Simulate, SimulateBase};
+use compute::{DenormalsFlusher, Simulate, SimulateBase};
 use compute_selector::Simulation;
 use data::concentration::gpu::shape::Shape;
 use std::num::NonZeroU32;
@@ -109,9 +109,12 @@ fn main() -> Result<()> {
                 frames
                     .process_frame(&context, &pipeline, |upload_buffer, inout_set| {
                         // Synchronously run the simulation
-                        context
-                            .simulation()
-                            .perform_steps(&mut species, steps_per_image)?;
+                        {
+                            let _flush_denormals = DenormalsFlusher::new();
+                            context
+                                .simulation()
+                                .perform_steps(&mut species, steps_per_image)?;
+                        }
 
                         // Make the simulation output available to the GPU
                         input::fill_upload_buffer(upload_buffer, &mut species)?;

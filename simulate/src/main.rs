@@ -3,7 +3,7 @@ use clap::Parser;
 #[cfg(feature = "async-gpu")]
 use compute::gpu::SimulateGpu;
 #[cfg(not(feature = "async-gpu"))]
-use compute::Simulate;
+use compute::{DenormalsFlusher, Simulate};
 use compute::{SimulateBase, SimulateCreate};
 use compute_selector::Simulation;
 use data::{
@@ -108,7 +108,10 @@ fn main() -> Result<()> {
             // Otherwise, use synchronous commands
             #[cfg(not(feature = "async-gpu"))]
             {
-                simulation.perform_steps(&mut species, steps_per_image)?;
+                {
+                    let _flush_denormals = DenormalsFlusher::new();
+                    simulation.perform_steps(&mut species, steps_per_image)?;
+                }
                 species.write_result_view(image.view_mut())?
             }
 
