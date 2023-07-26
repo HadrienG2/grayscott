@@ -119,10 +119,6 @@ macro_rules! gpu_benchmark {
 ///
 /// This guard operates on a best-effort basis : if no facility for flushing
 /// denormals is available/known on the target CPU, denormals will be left alone.
-///
-/// This guard also assumes that it is the only entity manipulating the FTZ flag.
-/// Manipulation of the FTZ flag while it is operating will lead to invalid
-/// state restoration.
 pub struct DenormalsFlusher {
     #[cfg(target_feature = "sse")]
     old_ftz_mode: u32,
@@ -149,8 +145,12 @@ impl Drop for DenormalsFlusher {
     fn drop(&mut self) {
         #[cfg(target_feature = "sse")]
         unsafe {
-            use std::arch::x86_64::_MM_SET_FLUSH_ZERO_MODE;
-            _MM_SET_FLUSH_ZERO_MODE(self.old_ftz_mode);
+            use std::arch::x86_64::{
+                _MM_FLUSH_ZERO_ON, _MM_GET_FLUSH_ZERO_MODE, _MM_SET_FLUSH_ZERO_MODE,
+            };
+            if _MM_GET_FLUSH_ZERO_MODE() == _MM_FLUSH_ZERO_ON {
+                _MM_SET_FLUSH_ZERO_MODE(self.old_ftz_mode);
+            }
         }
     }
 }
