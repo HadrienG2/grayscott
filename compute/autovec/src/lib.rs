@@ -63,19 +63,21 @@ impl SimulateCpu for Simulation {
     #[inline]
     fn unchecked_step_impl(&self, grid: CpuGrid<Values>) {
         // Determine stencil weights and offset from the top-left corner of the stencil to its center
-        let weights = self.params.weights();
+        let mut weights = self.params.weights();
         let stencil_offset = stencil_offset();
+
+        // Adjust central stencil weight to account for the fact that we're
+        // computing (stencil - center) for each element.
+        weights.0[stencil_offset[0]][stencil_offset[1]] -=
+            weights.0.into_iter().flatten().sum::<Precision>();
 
         // Prepare vector versions of the scalar computation parameters
         let diffusion_rate_u = Values::splat(self.params.diffusion_rate_u);
         let diffusion_rate_v = Values::splat(self.params.diffusion_rate_v);
         let feed_rate = Values::splat(self.params.feed_rate);
-        let kill_rate = Values::splat(self.params.kill_rate);
+        let min_feed_kill = Values::splat(-self.params.feed_rate * self.params.kill_rate);
         let time_step = Values::splat(self.params.time_step);
         let ones = Values::splat(1.0);
-
-        // Compute sum of stencil weights and broadcast it
-        let total_weight = Values::splat(weights.0.into_iter().flatten().sum());
 
         // Iterate over center pixels of the species concentration matrices
         for (out_u, out_v, win_u, win_v) in compute::cpu::fast_grid_iter(grid) {
@@ -84,26 +86,28 @@ impl SimulateCpu for Simulation {
             let v = win_v[stencil_offset];
 
             // Compute diffusion gradient
-            let [weighted_u, weighted_v] = (win_u.rows().into_iter())
+            let [full_u, full_v] = (win_u.rows().into_iter())
                 .zip(win_v.rows())
                 .zip(weights.0)
-                .flat_map(|((u_row, v_row), weights_row)| {
+                .map(|((u_row, v_row), weights_row)| {
+                    // First we accumulate across rows of the stencil...
                     (u_row.into_iter().copied())
                         .zip(v_row.into_iter().copied())
                         .zip(weights_row)
+                        .fold(
+                            [Values::splat(0.); 2],
+                            |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
+                                let weight = Values::splat(weight);
+                                [
+                                    mul_add(weight, stencil_u, acc_u),
+                                    mul_add(weight, stencil_v, acc_v),
+                                ]
+                            },
+                        )
                 })
-                .fold(
-                    [Values::splat(0.); 2],
-                    |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
-                        let weight = Values::splat(weight);
-                        [
-                            mul_add(weight, stencil_u, acc_u),
-                            mul_add(weight, stencil_v, acc_v),
-                        ]
-                    },
-                );
-            let full_u = weighted_u - total_weight * u;
-            let full_v = weighted_v - total_weight * v;
+                // ...then we sum the accumulators. This improves ILP.
+                .reduce(|[u_acc1, v_acc1], [u_acc2, v_acc2]| [u_acc1 + u_acc2, v_acc1 + v_acc2])
+                .unwrap_or([Values::splat(0.); 2]);
 
             // Deduce variation of U and V
             let uv_square = u * v * v;
@@ -111,7 +115,7 @@ impl SimulateCpu for Simulation {
             let dv = mul_add(
                 diffusion_rate_v,
                 full_v,
-                uv_square - (feed_rate + kill_rate) * v,
+                mul_add(min_feed_kill, v, uv_square),
             );
             *out_u = mul_add(du, time_step, u);
             *out_v = mul_add(dv, time_step, v);
