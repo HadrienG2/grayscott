@@ -65,19 +65,16 @@ impl SimulateCpu for Simulation {
     #[inline]
     fn unchecked_step_impl(&self, grid: CpuGrid<Self::Values>) {
         // Determine stencil weights and offset from the top-left corner of the stencil to its center
-        let weights = self.params.weights();
+        let weights = self.params.corrected_weights();
         let stencil_offset = stencil_offset();
 
         // Prepare vector versions of the scalar computation parameters
         let diffusion_rate_u = Values::splat(self.params.diffusion_rate_u);
         let diffusion_rate_v = Values::splat(self.params.diffusion_rate_v);
         let feed_rate = Values::splat(self.params.feed_rate);
-        let kill_rate = Values::splat(self.params.kill_rate);
+        let min_feed_kill = Values::splat(self.params.min_feed_kill());
         let time_step = Values::splat(self.params.time_step);
         let ones = Values::splat(1.0);
-
-        // Compute sum of stencil weights and broadcast it
-        let total_weight = Values::splat(weights.0.into_iter().flatten().sum());
 
         // Iterate over center pixels of the species concentration matrices
         for (out_u, out_v, win_u, win_v) in compute::cpu::fast_grid_iter(grid) {
@@ -86,7 +83,7 @@ impl SimulateCpu for Simulation {
             let v = win_v[stencil_offset];
 
             // Compute diffusion gradient
-            let [weighted_u, weighted_v] = (win_u.rows().into_iter())
+            let [full_u, full_v] = (win_u.rows().into_iter())
                 .zip(win_v.rows())
                 .zip(weights.0)
                 .flat_map(|((u_row, v_row), weights_row)| {
@@ -104,14 +101,11 @@ impl SimulateCpu for Simulation {
                         ]
                     },
                 );
-            let full_u = u.mul_neg_add(total_weight, weighted_u);
-            let full_v = v.mul_neg_add(total_weight, weighted_v);
 
             // Deduce variation of U and V
             let uv_square = u.mul(v).mul(v);
             let du = diffusion_rate_u.mul_add(full_u, feed_rate.mul_sub(ones.sub(u), uv_square));
-            let dv = diffusion_rate_v
-                .mul_add(full_v, (feed_rate.add(kill_rate)).mul_neg_add(v, uv_square));
+            let dv = diffusion_rate_v.mul_add(full_v, min_feed_kill.mul_add(v, uv_square));
             *out_u = du.mul_add(time_step, u);
             *out_v = dv.mul_add(time_step, v);
         }

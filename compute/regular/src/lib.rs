@@ -69,7 +69,7 @@ impl Simulation {
         let (in_u, in_v, out_u, out_v) = species.in_out();
 
         // Determine stencil weights and offset from the top-left corner of the stencil to its center
-        let stencil_weights = self.params.weights();
+        let stencil_weights = self.params.corrected_weights();
         let stencil_offset = stencil_offset();
 
         // Iterate over center pixels of the species concentration matrices
@@ -95,7 +95,7 @@ impl Simulation {
         let (in_u, in_v, out_u, out_v) = species.in_out();
 
         // Determine stencil weights and offset from the top-left corner of the stencil to its center
-        let stencil_weights = self.params.weights();
+        let stencil_weights = self.params.corrected_weights();
         let stencil_offset = stencil_offset();
 
         // Iterate over edges of the species concentration matrices
@@ -169,6 +169,7 @@ impl Simulation {
         let u = win_u[stencil_offset];
         let v = win_v[stencil_offset];
         let params = &self.params;
+        let min_feed_kill = params.min_feed_kill();
 
         // Compute diffusion gradient
         // NOTE: Right now, this matches the computation performed by the
@@ -187,18 +188,14 @@ impl Simulation {
             .fold(
                 [0.; 2],
                 |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
-                    [
-                        acc_u + weight * (stencil_u - u),
-                        acc_v + weight * (stencil_v - v),
-                    ]
+                    [acc_u + weight * stencil_u, acc_v + weight * stencil_v]
                 },
             );
 
         // Deduce variation of U and V
         let uv_square = u * v * v;
-        let du = params.diffusion_rate_u * full_u - uv_square + params.feed_rate * (1.0 - u);
-        let dv = params.diffusion_rate_v * full_v + uv_square
-            - (params.feed_rate + params.kill_rate) * v;
+        let du = params.diffusion_rate_u * full_u + params.feed_rate * (1.0 - u) - uv_square;
+        let dv = params.diffusion_rate_v * full_v + min_feed_kill * v + uv_square;
         let u = u + du * params.time_step;
         let v = v + dv * params.time_step;
         (u, v)

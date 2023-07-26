@@ -63,19 +63,14 @@ impl SimulateCpu for Simulation {
     #[inline]
     fn unchecked_step_impl(&self, grid: CpuGrid<Values>) {
         // Determine stencil weights and offset from the top-left corner of the stencil to its center
-        let mut weights = self.params.weights();
+        let weights = self.params.corrected_weights();
         let stencil_offset = stencil_offset();
-
-        // Adjust central stencil weight to account for the fact that we're
-        // computing (stencil - center) for each element.
-        weights.0[stencil_offset[0]][stencil_offset[1]] -=
-            weights.0.into_iter().flatten().sum::<Precision>();
 
         // Prepare vector versions of the scalar computation parameters
         let diffusion_rate_u = Values::splat(self.params.diffusion_rate_u);
         let diffusion_rate_v = Values::splat(self.params.diffusion_rate_v);
         let feed_rate = Values::splat(self.params.feed_rate);
-        let min_feed_kill = Values::splat(-self.params.feed_rate * self.params.kill_rate);
+        let min_feed_kill = Values::splat(self.params.min_feed_kill());
         let time_step = Values::splat(self.params.time_step);
         let ones = Values::splat(1.0);
 

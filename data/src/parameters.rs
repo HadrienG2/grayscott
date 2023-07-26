@@ -33,7 +33,8 @@ pub struct Parameters {
 }
 //
 impl Parameters {
-    /// Matrix of weights to be applied in the stencil computation
+    /// Matrix of weights to be applied in the naive
+    /// sum(weight * (elem - center)) stencil computation
     #[inline]
     pub fn weights(&self) -> StencilWeights {
         #[cfg(feature = "runtime-weights")]
@@ -49,6 +50,22 @@ impl Parameters {
             debug_assert_eq!(self.weights, STENCIL_WEIGHTS);
             STENCIL_WEIGHTS
         }
+    }
+
+    /// Corrected weights which integrate the -center term above
+    #[inline]
+    pub fn corrected_weights(&self) -> StencilWeights {
+        let mut weights = self.weights();
+        let stencil_offset = stencil_offset();
+        weights.0[stencil_offset[0]][stencil_offset[1]] -=
+            weights.0.into_iter().flatten().sum::<Precision>();
+        weights
+    }
+
+    /// -(feed_rate + kill_rate) prefactor for the dv computation
+    #[inline]
+    pub fn min_feed_kill(&self) -> Precision {
+        -(self.feed_rate + self.kill_rate)
     }
 }
 //

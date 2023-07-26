@@ -44,9 +44,13 @@ In the same spirit as the C++ version, the code is sliced into several crates:
       at the center of the domain than it is at the edges in order to get about
       2x more performance on the center pixels, at the cost of some code
       duplication between the center and edge computations.
+        - This backend also features some optimizations which eliminate some
+          redundant computations in the stencil formula and in the dv expression.
+          These do not do much at this stage, but will become more important
+          after introducting vectorization.
     * The `autovec` backend shapes the computation and data in such a way that
       the compiler can automatically vectorize most of the code. The code is
-      simpler and more portable than if it were written directly against harware
+      simpler and more portable than if it were written directly against hardware
       intrinsics, but this implementation strategy also puts us at the mercy of
       compiler autovectorizer whims. Data layout is also improved, pretty much
       like what was done in the `_intrinsics` C++ version.
