@@ -200,6 +200,7 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     let in_shape = array2(|i| out_shape[i] + 2 * stencil_offset[i]);
     assert_eq!(in_u.shape(), &in_shape[..]);
     assert_eq!(in_v.shape(), &in_shape[..]);
+    let [out_rows, out_cols] = out_shape;
 
     // Assert that the sub-grids have the expected strides
     fn checked_row_stride<A, S, D>(arrays: [&ArrayBase<S, D>; 2]) -> usize
@@ -217,46 +218,65 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     let out_row_stride = checked_row_stride([&out_u_center, &out_v_center]);
     let in_row_stride = checked_row_stride([&in_u, &in_v]);
 
+    // Determine how many elements we must skip in order to go from the
+    // past-the-end element of one row to the first element of the next row.
+    let in_next_row_step = in_row_stride - out_cols;
+    let out_next_row_step = out_row_stride - out_cols;
+
     // Prepare a way to access input windows and output refs by output position
     // The safety of the closures below is actually asserted on the caller's
     // side, but sadly unsafe closures aren't a thing in Rust yet.
     let window_shape = (STENCIL_SHAPE[0], STENCIL_SHAPE[1]).strides((in_row_stride, 1));
-    let offset = |position: [usize; 2], row_stride: usize| -> usize {
-        position[0] * row_stride + position[1]
+    let unchecked_output = move |out_ptr: *mut Values| unsafe {
+        &mut *out_ptr
     };
-    let unchecked_output = move |out_ptr: *mut Values, out_pos| unsafe {
-        &mut *out_ptr.add(offset(out_pos, out_row_stride))
-    };
-    let unchecked_input_window = move |in_ptr: *const Values, out_pos| unsafe {
-        let win_ptr = in_ptr.add(offset(out_pos, in_row_stride));
-        ArrayView2::from_shape_ptr(window_shape, win_ptr)
+    let unchecked_input_window = move |in_ptr: *const Values| unsafe {
+        ArrayView2::from_shape_ptr(window_shape, in_ptr)
     };
 
-    // Start iteration
-    let in_u_ptr = in_u.as_ptr();
-    let in_v_ptr = in_v.as_ptr();
-    let out_u_ptr = out_u_center.as_mut_ptr();
-    let out_v_ptr = out_v_center.as_mut_ptr();
-    let mut out_pos = [0, 0];
+    // Set up iteration pointers
+    let mut in_u_ptr = in_u.as_ptr();
+    let mut in_v_ptr = in_v.as_ptr();
+    let mut out_u_ptr = out_u_center.as_mut_ptr();
+    let mut out_v_ptr = out_v_center.as_mut_ptr();
+    //
+    // End of the current row processed by out_v_ptr
+    let mut out_v_row_end = unsafe { out_v_ptr.add(out_cols) };
+    //
+    // Beginning of a nonexistent past-the-end row after the last row to be
+    // processed by out_v_ptr.
+    let out_v_end = out_v_ptr.wrapping_add(out_rows * out_row_stride);
+
     std::iter::from_fn(move || {
         // Handle end of iteration
-        if out_pos[0] == out_shape[0] {
+        if out_v_ptr == out_v_end {
             return None;
         }
 
         // Produce current result
         // Safe because it will only be called on valid window positions
-        let out_u = unchecked_output(out_u_ptr, out_pos);
-        let out_v = unchecked_output(out_v_ptr, out_pos);
-        let win_u = unchecked_input_window(in_u_ptr, out_pos);
-        let win_v = unchecked_input_window(in_v_ptr, out_pos);
+        let out_u = unchecked_output(out_u_ptr);
+        let out_v = unchecked_output(out_v_ptr);
+        let win_u = unchecked_input_window(in_u_ptr);
+        let win_v = unchecked_input_window(in_v_ptr);
 
-        // Advance iterator
-        out_pos[1] += 1;
-        if out_pos[1] == out_shape[1] {
-            out_pos[0] += 1;
-            out_pos[1] = 0;
+        // Advance iterator to next column
+        unsafe {
+            in_u_ptr = in_u_ptr.add(1);
+            in_v_ptr = in_v_ptr.add(1);
+            out_u_ptr = out_u_ptr.add(1);
+            out_v_ptr = out_v_ptr.add(1);
         }
+
+        // If we reached the end of the current row, go to the beginning of the
+        // next row and update the end-of-row pointer.
+        if out_v_ptr == out_v_row_end {
+            in_u_ptr = in_u_ptr.wrapping_add(in_next_row_step);
+            in_v_ptr = in_v_ptr.wrapping_add(in_next_row_step);
+            out_u_ptr = out_u_ptr.wrapping_add(out_next_row_step);
+            out_v_ptr = out_v_ptr.wrapping_add(out_next_row_step);
+            out_v_row_end = out_v_row_end.wrapping_add(out_row_stride);
+        };
 
         // Emit result
         Some((out_u, out_v, win_u, win_v))
