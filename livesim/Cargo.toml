@@ -29,12 +29,12 @@ gpu-debug-utils = ["compute/gpu-debug-utils"]
 gpu = ["data/gpu"]
 
 [dependencies]
-anyhow.workspace = true
 clap.workspace = true
 compute = { workspace = true, features = ["livesim"] }
 compute_selector.workspace = true
 data.workspace = true
 env_logger.workspace = true
+eyre.workspace = true
 log.workspace = true
 ndarray.workspace = true
 ui = { workspace = true, features = ["simulation", "visualization"] }

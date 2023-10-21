@@ -19,8 +19,8 @@ use winit::{
     event_loop::ControlFlow,
 };
 
-/// Use anyhow for error handling
-pub use anyhow::Result;
+/// Use eyre for error handling
+pub use eyre::Result;
 
 /// Perform Gray-Scott simulation
 #[derive(Parser)]

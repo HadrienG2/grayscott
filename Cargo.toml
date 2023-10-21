@@ -16,15 +16,13 @@ members = [
     "simulate",
     "ui",
 ]
+resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 
 [workspace.dependencies]
-# Used for error propagation and backtraces in final binaries
-anyhow = "1.0"
-
 # Used to safely manipulate data as bytes
 bytemuck = "1.13"
 
@@ -54,6 +52,9 @@ directories = "5.0"
 
 # Used for tests that emit logs
 env_logger = "0.10"
+
+# Used for error propagation and backtraces in final binaries
+eyre = "0.6"
 
 # Used when saving raw data to files
 hdf5 = { version = "0.8", features = ["lzf"] }

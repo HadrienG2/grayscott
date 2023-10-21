@@ -29,11 +29,11 @@ gpu-debug-utils = ["compute/gpu-debug-utils"]
 async-gpu = []
 
 [dependencies]
-anyhow.workspace = true
 clap.workspace = true
 compute.workspace = true
 compute_selector.workspace = true
 data = { workspace = true, features = ["hdf5"] }
+eyre.workspace = true
 ndarray.workspace = true
 ui = { workspace = true, features = ["simulation", "tui"] }
 

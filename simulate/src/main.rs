@@ -1,4 +1,3 @@
-use anyhow::Result;
 use clap::Parser;
 #[cfg(feature = "async-gpu")]
 use compute::gpu::SimulateGpu;
@@ -10,6 +9,7 @@ use data::{
     concentration::ScalarConcentration,
     hdf5::{self, Writer},
 };
+use eyre::Result;
 use ndarray::Array2;
 use std::{
     num::NonZeroUsize,
@@ -118,7 +118,7 @@ fn main() -> Result<()> {
             // Schedule writing the image
             image_send.send(image)?;
         }
-        Ok::<_, anyhow::Error>(())
+        Ok::<_, eyre::Report>(())
     })?;
 
     // Make sure output data is written correctly

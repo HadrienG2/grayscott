@@ -125,12 +125,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anyhow"
-version = "1.0.71"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c7d0618f0e0b7e8ff11427422b64564d5fb0be1940354bfe2e0529b18a9d9b8"
-
-[[package]]
 name = "arrayref"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -687,10 +681,10 @@ dependencies = [
 name = "data-to-pics"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "clap",
  "crossbeam-channel",
  "data",
+ "eyre",
  "image",
  "ndarray",
  "rayon",
@@ -822,6 +816,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d2f06b9cac1506ece98fe3231e3cc9c4410ec3d5b1f24ae1c8946f0742cdefc"
 dependencies = [
  "version_check",
+]
+
+[[package]]
+name = "eyre"
+version = "0.6.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c2b6b5a29c02cdc822728b7d7b8ae1bab3e3b05d44522770ddd49722eeac7eb"
+dependencies = [
+ "indenter",
+ "once_cell",
 ]
 
 [[package]]
@@ -1017,6 +1021,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "indenter"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
+
+[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1153,12 +1163,12 @@ checksum = "09fc20d2ca12cb9f044c93e3bd6d32d523e6e2ec3db4f7b2939cd99026ecd3f0"
 name = "livesim"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "clap",
  "compute",
  "compute_selector",
  "data",
  "env_logger",
+ "eyre",
  "log",
  "ndarray",
  "ui",
@@ -1883,11 +1893,11 @@ checksum = "238abfbb77c1915110ad968465608b68e869e0772622c9656714e73e5a1a522f"
 name = "simulate"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "clap",
  "compute",
  "compute_selector",
  "data",
+ "eyre",
  "ndarray",
  "ui",
 ]

@@ -1,8 +1,8 @@
 mod split;
 
-use anyhow::Result;
 use clap::Parser;
 use data::hdf5::{Config, Reader};
+use eyre::Result;
 use image::{Rgb, RgbImage};
 use ndarray::Axis;
 use rayon::prelude::*;
@@ -143,6 +143,6 @@ fn main() -> Result<()> {
             // Send it to the output thread so it's written down
             image_send.send((idx, image))?;
         }
-        Ok::<_, anyhow::Error>(())
+        Ok::<_, eyre::Report>(())
     })
 }
