@@ -127,6 +127,7 @@ pub struct DenormalsFlusher {
 impl DenormalsFlusher {
     /// Start flushing denormals
     pub fn new() -> Self {
+        // SAFETY: Enabling FTZ requires SSE, but is always safe with SSE
         #[cfg(target_feature = "sse")]
         unsafe {
             use std::arch::x86_64::{
@@ -143,6 +144,7 @@ impl DenormalsFlusher {
 //
 impl Drop for DenormalsFlusher {
     fn drop(&mut self) {
+        // SAFETY: Enabling FTZ requires SSE, but is always safe with SSE
         #[cfg(target_feature = "sse")]
         unsafe {
             use std::arch::x86_64::{
@@ -152,5 +154,11 @@ impl Drop for DenormalsFlusher {
                 _MM_SET_FLUSH_ZERO_MODE(self.old_ftz_mode);
             }
         }
+    }
+}
+//
+impl Default for DenormalsFlusher {
+    fn default() -> Self {
+        Self::new()
     }
 }
