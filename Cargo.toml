@@ -60,8 +60,7 @@ eyre = "0.6"
 hdf5 = { version = "0.8", features = ["lzf"] }
 
 # Used for cache locality optimizations
-# FIXME: Switch to a fixed release once they are available
-hwlocality = { git = "https://github.com/HadrienG2/hwlocality.git" }
+hwlocality = "1.0.0-alpha.1"
 
 # Used for progress report in the binaries
 indicatif = "0.17"

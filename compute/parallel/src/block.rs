@@ -19,7 +19,9 @@ pub struct MultiCore {
 //
 impl DefaultBlockSize for MultiCore {
     fn new(topology: &Topology) -> Self {
-        let cache_stats = topology.cpu_cache_stats();
+        let cache_stats = topology
+            .cpu_cache_stats()
+            .expect("CPU cache properties aren't known");
         let cache_sizes = cache_stats.smallest_data_cache_sizes_per_thread();
 
         let l1_block_size = cache_sizes.first().copied().unwrap_or(16 * 1024) as usize / 2;
