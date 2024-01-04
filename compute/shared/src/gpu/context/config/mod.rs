@@ -218,7 +218,7 @@ impl Default
     /// the others to their default values:
     ///
     /// ```
-    /// # use compute::gpu::VulkanConfig;
+    /// # use compute::gpu::context::config::VulkanConfig;
     /// let config = VulkanConfig {
     ///     enumerate_portability: true,
     ///     .. VulkanConfig::default()
@@ -238,9 +238,9 @@ impl<
     /// Set up a Vulkan compute context with this configuration
     ///
     /// ```
-    /// # use compute::gpu::VulkanConfig;
+    /// # use compute::gpu::context::{config::VulkanConfig, ContextBuildError};
     /// let context = VulkanConfig::default().build()?;
-    /// # Ok::<(), compute::gpu::Error>(())
+    /// # Ok::<(), ContextBuildError>(())
     /// ```
     #[allow(unused_assignments, unused_mut)]
     pub fn build(mut self) -> ContextBuildResult<VulkanContext<MemAlloc, CommAlloc, DescAlloc>> {

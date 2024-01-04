@@ -175,7 +175,7 @@ impl<T: SimulateCpu> SimulateStep for T {
 ///
 /// In an ideal world, this would be just...
 ///
-/// ```
+/// ```compile_fail
 /// (out_u_center.iter_mut())
 ///     .zip(&mut out_v_center)
 ///     .zip(in_u.windows(STENCIL_SHAPE))
