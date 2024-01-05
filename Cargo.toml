@@ -33,7 +33,7 @@ cfg-if = "1.0"
 cgmath = "0.18"
 
 # Used when processing user CLI arguments in binaries
-clap = { version = "4.3", features = ["derive"] }
+clap = { version = "4.4", features = ["derive"] }
 
 # Used when visualizing data
 colorous = "1.0"
