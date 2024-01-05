@@ -13,7 +13,7 @@ compute = { workspace = true, features = ["criterion"] }
 
 # Criterion workarounds for lack of stable benchmark harness
 [[bench]]
-name = "benchmark"
+name = "compute_regular"
 harness = false
 #
 [lib]
