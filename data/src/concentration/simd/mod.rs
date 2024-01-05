@@ -237,7 +237,9 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
 
     /// Shape of the inner array of SIMD vectors
     fn raw_shape(&self) -> [usize; 2] {
-        let &[rows, cols] = self.simd.shape() else { panic!("2D array should have 2D shape") };
+        let &[rows, cols] = self.simd.shape() else {
+            panic!("2D array should have 2D shape")
+        };
         [rows, cols]
     }
 

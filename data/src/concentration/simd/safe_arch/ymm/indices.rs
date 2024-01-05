@@ -110,14 +110,14 @@ cfg_if! {
             #[inline]
             fn ge(self, other: Self) -> Self::Mask {
                 let masks256 = array2(|i| self[i].ge(other[i]));
-                let [lo128; hi128] = masks256.map(safe_arch::convert_to_m128_from_m256d);
+                let [lo128, hi128] = masks256.map(safe_arch::convert_to_m128_from_m256d);
                 safe_arch::set_m128_m256(hi128, lo128)
             }
 
             #[inline]
             fn lt(self, other: Self) -> Self::Mask {
                 let masks256 = array2(|i| self[i].lt(other[i]));
-                let [lo128; hi128] = masks256.map(safe_arch::convert_to_m128_from_m256d);
+                let [lo128, hi128] = masks256.map(safe_arch::convert_to_m128_from_m256d);
                 safe_arch::set_m128_m256(hi128, lo128)
             }
         }

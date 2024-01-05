@@ -321,7 +321,9 @@ impl Concentration for ScalarConcentration {
     }
 
     fn shape(&self) -> [usize; 2] {
-        let [rows, cols] = ScalarConcentration::shape(self) else { panic!("Expected 2D shape") };
+        let [rows, cols] = ScalarConcentration::shape(self) else {
+            panic!("Expected 2D shape")
+        };
         [*rows, *cols]
     }
 
