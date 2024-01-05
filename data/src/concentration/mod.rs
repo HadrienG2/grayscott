@@ -349,8 +349,8 @@ impl Concentration for ScalarConcentration {
         _context: &mut (),
         mut target: ArrayViewMut2<Precision>,
     ) -> Result<(), Self::Error> {
-        Self::validate_write(&self, &target);
-        target.assign(&self);
+        Self::validate_write(self, &target);
+        target.assign(self);
         Ok(())
     }
 }
