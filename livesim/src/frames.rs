@@ -40,7 +40,7 @@ impl Frames {
     /// Set up per-frame state
     pub fn new(context: &SimulationContext, pipeline: &ComputePipeline) -> Result<Self> {
         // Set up a swapchain
-        let (swapchain, swapchain_images) = surface::create_swapchain(&context)?;
+        let (swapchain, swapchain_images) = surface::create_swapchain(context)?;
 
         // Set up buffers to upload simulation results to the GPU
         // TODO: If the simulation backend is GPU-based, directly access simulation
@@ -52,7 +52,7 @@ impl Frames {
 
         // Set up input and output descriptor sets
         let inout_sets =
-            pipeline::new_inout_sets(vulkan, &pipeline, &upload_buffers[..], swapchain_images)?;
+            pipeline::new_inout_sets(vulkan, pipeline, &upload_buffers[..], swapchain_images)?;
 
         // Set up futures to track the rendering of each swapchain image
         let frame_futures = (0..frames_in_flight).map(|_| None).collect();

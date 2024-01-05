@@ -78,7 +78,7 @@ pub(crate) fn create(context: &VulkanContext) -> Result<Arc<ComputePipeline>> {
         shader.entry_point("main").expect("Should be present"),
         &(),
         Some(context.pipeline_cache.clone()),
-        sampler_setup_callback(&context)?,
+        sampler_setup_callback(context)?,
     )?;
     context.set_debug_utils_object_name(&pipeline, || "Simulation stepper".into())?;
     Ok(pipeline)

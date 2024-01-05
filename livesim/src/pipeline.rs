@@ -100,7 +100,7 @@ pub fn new_inout_sets(
     let set_layout = &pipeline.layout().set_layouts()[INOUT_SET as usize];
     upload_buffers
         .iter()
-        .zip(swapchain_images.into_iter())
+        .zip(swapchain_images)
         .map(|(buffer, swapchain_image)| {
             let output_info = ImageViewCreateInfo {
                 usage: output_usage(),
