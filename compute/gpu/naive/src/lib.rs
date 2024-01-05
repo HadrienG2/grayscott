@@ -116,7 +116,7 @@ impl SimulateGpu for Simulation {
 
         // Prepare to dispatch compute operations
         pipeline::bind_pipeline(&mut builder, self.pipeline.clone(), self.parameters.clone());
-        let dispatch_size = species::dispatch_size_for(&species, WORK_GROUP_SHAPE);
+        let dispatch_size = species::dispatch_size_for(species, WORK_GROUP_SHAPE);
 
         // Record the simulation steps
         for _ in 0..steps {

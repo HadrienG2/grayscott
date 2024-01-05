@@ -237,7 +237,9 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
 
     /// Shape of the inner array of SIMD vectors
     fn raw_shape(&self) -> [usize; 2] {
-        let &[rows, cols] = self.simd.shape() else { panic!("2D array should have 2D shape") };
+        let &[rows, cols] = self.simd.shape() else {
+            panic!("2D array should have 2D shape")
+        };
         [rows, cols]
     }
 
@@ -346,7 +348,7 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> Concentration
         target: ArrayViewMut2<Precision>,
     ) -> Result<(), Self::Error> {
         // Check that the target dimensions are correct
-        Self::validate_write(&self, &target);
+        Self::validate_write(self, &target);
 
         // Extract the center of the SIMD domain
         let [center_rows, center_cols] = self.simd_center_range();

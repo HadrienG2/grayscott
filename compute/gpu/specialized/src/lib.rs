@@ -6,6 +6,8 @@
 //! compiler to optimize code specifically for the simulation parameters, and
 //! makes it a lot easier to keep CPU and GPU code in sync.
 
+#![allow(clippy::result_large_err)]
+
 mod args;
 mod pipeline;
 
@@ -115,7 +117,7 @@ impl SimulateGpu for Simulation {
 
         // Prepare to dispatch compute operations
         builder.bind_pipeline_compute(self.pipeline.clone());
-        let dispatch_size = species::dispatch_size_for(&species, self.work_group_shape);
+        let dispatch_size = species::dispatch_size_for(species, self.work_group_shape);
 
         // Record the simulation steps
         for _ in 0..steps {

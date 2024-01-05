@@ -95,7 +95,7 @@ pub fn recreate_swapchain(
     swapchain: &Arc<Swapchain>,
 ) -> Result<(Arc<Swapchain>, Vec<Arc<PersistentDescriptorSet>>)> {
     let (swapchain, images) = swapchain.recreate(swapchain.create_info())?;
-    let inout_sets = pipeline::new_inout_sets(vulkan, &pipeline, upload_buffers, images)?;
+    let inout_sets = pipeline::new_inout_sets(vulkan, pipeline, upload_buffers, images)?;
     Ok((swapchain, inout_sets))
 }
 

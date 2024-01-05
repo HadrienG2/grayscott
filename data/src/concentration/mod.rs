@@ -321,7 +321,9 @@ impl Concentration for ScalarConcentration {
     }
 
     fn shape(&self) -> [usize; 2] {
-        let [rows, cols] = ScalarConcentration::shape(self) else { panic!("Expected 2D shape") };
+        let [rows, cols] = ScalarConcentration::shape(self) else {
+            panic!("Expected 2D shape")
+        };
         [*rows, *cols]
     }
 
@@ -347,8 +349,8 @@ impl Concentration for ScalarConcentration {
         _context: &mut (),
         mut target: ArrayViewMut2<Precision>,
     ) -> Result<(), Self::Error> {
-        Self::validate_write(&self, &target);
-        target.assign(&self);
+        Self::validate_write(self, &target);
+        target.assign(self);
         Ok(())
     }
 }

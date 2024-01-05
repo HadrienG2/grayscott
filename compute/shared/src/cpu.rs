@@ -229,22 +229,17 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     // The safety of the closures below is actually asserted on the caller's
     // side, but sadly unsafe closures aren't a thing in Rust yet.
     let window_shape = (STENCIL_SHAPE[0], STENCIL_SHAPE[1]).strides((in_row_stride, 1));
-    let unchecked_output = move |out_ptr: *mut Values| unsafe {
-        &mut *out_ptr
-    };
-    let unchecked_input_window = move |in_ptr: *const Values| unsafe {
-        ArrayView2::from_shape_ptr(window_shape, in_ptr)
-    };
+    let unchecked_output = move |out_ptr: *mut Values| unsafe { &mut *out_ptr };
+    let unchecked_input_window =
+        move |in_ptr: *const Values| unsafe { ArrayView2::from_shape_ptr(window_shape, in_ptr) };
 
     // Recipe to emit the currently selected input windows and output references,
     // then move to the next column. As before, this is only safe if called with
     // correct element pointers.
-    let emit_and_increment = move |
-        in_u_ptr: &mut *const Values,
-        in_v_ptr: &mut *const Values,
-        out_u_ptr: &mut *mut Values,
-        out_v_ptr: &mut *mut Values
-    | unsafe {
+    let emit_and_increment = move |in_u_ptr: &mut *const Values,
+                                   in_v_ptr: &mut *const Values,
+                                   out_u_ptr: &mut *mut Values,
+                                   out_v_ptr: &mut *mut Values| unsafe {
         let out_u = unchecked_output(*out_u_ptr);
         let out_v = unchecked_output(*out_v_ptr);
         let win_u = unchecked_input_window(*in_u_ptr);
@@ -272,7 +267,12 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
     std::iter::from_fn(move || {
         // Common case : we are within the bounds of a row and advance normally
         if out_v_ptr < out_v_row_end {
-            return Some(emit_and_increment(&mut in_u_ptr, &mut in_v_ptr, &mut out_u_ptr, &mut out_v_ptr));
+            return Some(emit_and_increment(
+                &mut in_u_ptr,
+                &mut in_v_ptr,
+                &mut out_u_ptr,
+                &mut out_v_ptr,
+            ));
         }
 
         // Otherwise, check if we reached the end of iteration
@@ -290,6 +290,11 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
             out_v_ptr = out_v_ptr.add(out_next_row_step);
             out_v_row_end = out_v_ptr.add(out_cols);
         }
-        Some(emit_and_increment(&mut in_u_ptr, &mut in_v_ptr, &mut out_u_ptr, &mut out_v_ptr))
+        Some(emit_and_increment(
+            &mut in_u_ptr,
+            &mut in_v_ptr,
+            &mut out_u_ptr,
+            &mut out_v_ptr,
+        ))
     })
 }

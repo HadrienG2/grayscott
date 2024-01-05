@@ -17,9 +17,26 @@ Additinally, GPU examples use the Vulkan API through the
 requirements](https://github.com/vulkano-rs/vulkano#setup-and-troubleshooting).
 
 In addition to the Vulkano build requirements, actually running the GPU examples
-requires at least one working Vulkan implementation (e.g. any reasonably modern
-Linux GPU driver). Debug builds additionally enable Vulkan validation layers
-for richer debug logs, so these must be installed too.
+requires at least one working Vulkan implementation. Any reasonably modern
+Linux GPU driver will do, or if you just want them to run and don't care about
+actual performance, you may alternatively using the llvmpipe software renderer.
+
+Debug builds additionally enable Vulkan validation layers for richer debug logs,
+so these must be installed too.
+
+Overall, if you want to be able to run these examples in all possible
+configurations, you will want to install the following native packages:
+
+```bash
+# Example given for Ubuntu, other linux distributions will be similar except the
+# packages will be named a little differently
+sudo apt install git build-essential curl \
+    libhdf5-dev libhwloc-dev libudev-dev pkgconf \
+    cmake ninja-build python3 \
+    vulkan-validationlayers-dev libvulkan-dev vulkan-tools
+# A rust toolchain can be installed in a distribution-agnostic fashion
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
 
 The microbenchmarks are implemented using `criterion`, and we use the newer
 `cargo-criterion` runner mechanism, which requires a separate binary that you

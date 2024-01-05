@@ -121,7 +121,6 @@ opt-level = 1
 
 [profile.release]
 # Good for perf profiling
-# TODO: Switch to a narrower setting once rust 1.70 is old enough
-debug = 1
+debug = "line-tables-only"
 # Reproducible performance at the cost of longer compile times
 codegen-units = 1

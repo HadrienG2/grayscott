@@ -5,7 +5,9 @@ use vulkano::device::Properties;
 
 /// Device requirements when a particular work-group size is used
 pub fn for_work_group(properties: &Properties, work_group_shape: Shape) -> bool {
-    let Ok(invocations) = work_group_shape.invocations() else { return false };
+    let Ok(invocations) = work_group_shape.invocations() else {
+        return false;
+    };
     properties.max_compute_work_group_invocations >= invocations
         && (properties.max_compute_work_group_size.into_iter())
             .zip(work_group_shape.vulkan())

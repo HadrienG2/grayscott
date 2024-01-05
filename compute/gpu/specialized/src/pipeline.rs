@@ -39,7 +39,7 @@ pub(crate) fn create(
         shader.entry_point("main").expect("Should be present"),
         &specialization_constants(parameters, work_group_shape),
         Some(context.pipeline_cache.clone()),
-        naive_pipeline::sampler_setup_callback(&context)?,
+        naive_pipeline::sampler_setup_callback(context)?,
     )?;
     context.set_debug_utils_object_name(&pipeline, || "Simulation stepper".into())?;
     Ok(pipeline)

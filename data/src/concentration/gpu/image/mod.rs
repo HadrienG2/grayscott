@@ -202,7 +202,7 @@ impl ImageConcentration {
         context: &mut ImageContext,
         mut target: ArrayViewMut2<Precision>,
     ) -> Result<()> {
-        Self::validate_write(&self, &target);
+        Self::validate_write(self, &target);
         let view = self.make_scalar_view_after(after, context)?;
         target.assign(&view.as_scalars());
         Ok(())

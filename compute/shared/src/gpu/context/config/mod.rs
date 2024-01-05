@@ -237,7 +237,7 @@ impl<
 {
     /// Set up a Vulkan compute context with this configuration
     ///
-    /// ```
+    /// ```ignore
     /// # use compute::gpu::context::{config::VulkanConfig, ContextBuildError};
     /// let context = VulkanConfig::default().build()?;
     /// # Ok::<(), ContextBuildError>(())
