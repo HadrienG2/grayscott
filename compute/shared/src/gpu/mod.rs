@@ -110,6 +110,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "need a working GPU driver"]
     fn setup_vulkan() -> context::ContextBuildResult<()> {
         init_logger();
         VulkanConfig {
