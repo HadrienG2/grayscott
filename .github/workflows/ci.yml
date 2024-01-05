@@ -134,6 +134,12 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v4
  
+      - name: Install native dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          version: 1.0
+          packages: libhdf5-dev libhwloc-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
+
       - name: Set up toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -179,6 +185,12 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v4
  
+      - name: Install native dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          version: 1.0
+          packages: libhdf5-dev libhwloc-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
+
       - name: Set up toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -221,6 +233,12 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v4
  
+      - name: Install native dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          version: 1.0
+          packages: libhdf5-dev libhwloc-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
+
       - name: Set up toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -274,6 +292,12 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v4
  
+      - name: Install native dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          version: 1.0
+          packages: libhdf5-dev libhwloc-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
+
       - name: Set up toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
