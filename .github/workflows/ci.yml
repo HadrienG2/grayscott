@@ -74,7 +74,7 @@ jobs:
           - 'compute_parallel'
           - 'compute_gpu_naive'
           - 'compute_gpu_specialized'
-          - 'compute_gpu_specialized,gpu_debug_utils'
+          - 'compute_gpu_specialized,gpu-debug-utils'
 
     env:
       JOB_FLAGS: '--workspace --features=${{ matrix.features }}'
@@ -125,7 +125,7 @@ jobs:
         features:
           - 'compute_naive'
           - 'compute_naive,runtime-weights'
-          - 'compute_gpu_specialized,gpu_debug_utils'
+          - 'compute_gpu_specialized,gpu-debug-utils'
 
     env:
       FEATURES_FLAG: '--features=${{ matrix.features }}'
@@ -170,7 +170,7 @@ jobs:
           - 'compute_parallel'
           - 'compute_gpu_naive'
           - 'compute_gpu_specialized'
-          - 'compute_gpu_specialized,gpu_debug_utils'
+          - 'compute_gpu_specialized,gpu-debug-utils'
 
     env:
       FEATURES_FLAG: '--features=${{ matrix.features }}'
@@ -212,7 +212,7 @@ jobs:
         features:
           - 'compute_naive'
           - 'compute_naive,runtime-weights'
-          - 'compute_gpu_specialized,gpu_debug_utils'
+          - 'compute_gpu_specialized,gpu-debug-utils'
 
     env:
       FEATURES_FLAG: '--features=${{ matrix.features }}'
@@ -265,7 +265,7 @@ jobs:
           - 'compute_parallel'
           - 'compute_gpu_naive'
           - 'compute_gpu_specialized'
-          - 'compute_gpu_specialized,gpu_debug_utils'
+          - 'compute_gpu_specialized,gpu-debug-utils'
 
     env:
       FEATURES_FLAG: '--features=${{ matrix.features }}'
