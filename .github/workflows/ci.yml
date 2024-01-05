@@ -1,0 +1,297 @@
+# There are two kinds of continuous integration jobs in this project:
+#
+# - Every code submission or master push passes continuous integration on the
+#   minimal supported Rust version and the current stable Rust version.
+# - Two times a month, a scheduled job makes sure that the code remains
+#   compatible and lint-free on upcoming Rust toolchains (beta and nightly).
+
+name: Continuous Integration
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 0 13/15 * *'
+
+# Cancel existing jobs on new pushes to the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
+  MINIMAL_RUST: 1.63.0  # Minimal Supported Rust Version
+
+jobs:
+  # Formatting doesn't depend on configuration, and we only care about the
+  # formatting rules of the latest supported Rust version
+  format:
+    # Don't run CI twice when a PR is created from a branch internal to the repo
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event.pull_request.head.repo.full_name != github.repository
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Set up stable toolchain
+        if: github.event_name != 'schedule'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt
+
+      - name: Set up nightly toolchain
+        if: github.event_name == 'schedule'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          components: rustfmt
+
+      - name: Check code formatting
+        run: cargo fmt --all --check
+
+
+  # Lints should cover all cfg code paths
+  #
+  # We don't care about warnings on the minimum supported Rust version, only
+  # about building and running correctly.
+  lints:
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event.pull_request.head.repo.full_name != github.repository
+    
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        features:
+          - 'compute_naive'
+          - 'compute_naive,runtime-weights'
+          - 'compute_regular'
+          - 'compute_manualvec'
+          - 'compute_autovec'
+          - 'compute_block'
+          - 'compute_parallel'
+          - 'compute_gpu_naive'
+          - 'compute_gpu_specialized'
+          - 'compute_gpu_specialized,gpu_debug_utils'
+
+    env:
+      JOB_FLAGS: '--workspace --features=${{ matrix.features }}'
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install native dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          version: 1.0
+          packages: libhdf5-dev libhwloc-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
+
+      - name: Set up stable toolchain
+        if: github.event_name != 'schedule'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy
+
+      - name: Set up nightly toolchain
+        if: github.event_name == 'schedule'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          components: clippy
+
+      - name: Check clippy lints
+        run: cargo clippy ${{ env.JOB_FLAGS }} --all-targets -- -D warnings
+
+      - name: Build docs
+        run: cargo doc ${{ env.JOB_FLAGS }}
+
+
+  # Run the tests on all supported Rust versions (main CI)
+  test-contrib:
+    # Don't run CI twice when a PR is created from a branch internal to the repo
+    # Don't run in scheduled jobs, that's what test-scheduled is for
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+ 
+    runs-on: ubuntu-latest
+ 
+    strategy:
+      matrix:
+        toolchain:
+          - $MINIMAL_RUST  # Minimal Supported Rust Version
+          - stable
+        features:
+          - 'compute_naive'
+          - 'compute_naive,runtime-weights'
+          - 'compute_gpu_specialized,gpu_debug_utils'
+
+    env:
+      FEATURES_FLAG: '--features=${{ matrix.features }}'
+ 
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+ 
+      - name: Set up toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+ 
+      - name: Run unit tests
+        run: cargo test --workspace ${{ env.FEATURES_FLAG }}
+
+
+  # Run a small simulation on all supported Rust versions (main CI)
+  #
+  # FIXME: There should be a way to use conditional build matrices without
+  #        duplicating the whole job recipe...
+  #
+  test-simulate:
+    # Don't run CI twice when a PR is created from a branch internal to the repo
+    # Don't run in scheduled jobs, that's what test-scheduled is for
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+ 
+    runs-on: ubuntu-latest
+ 
+    strategy:
+      matrix:
+        toolchain:
+          - $MINIMAL_RUST  # Minimal Supported Rust Version
+          - stable
+        features:
+          - 'compute_naive'
+          - 'compute_naive,runtime-weights'
+          - 'compute_regular'
+          - 'compute_manualvec'
+          - 'compute_autovec'
+          - 'compute_block'
+          - 'compute_parallel'
+          - 'compute_gpu_naive'
+          - 'compute_gpu_specialized'
+          - 'compute_gpu_specialized,gpu_debug_utils'
+
+    env:
+      FEATURES_FLAG: '--features=${{ matrix.features }}'
+ 
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+ 
+      - name: Set up toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+ 
+      - name: Run a tiny simulation job
+        run: cargo run --bin simulate -- -n 10
+ 
+      - name: Translate simulation output to images
+        run: mkdir out && cargo run --bin data-to-pics -- -o out
+
+
+  # Check benchmarks build on all supported Rust versions (main CI)
+  #
+  # FIXME: There should be a way to use conditional build matrices without
+  #        duplicating the whole job recipe...
+  #
+  test-bench-build:
+    # Don't run CI twice when a PR is created from a branch internal to the repo
+    # Don't run in scheduled jobs, that's what test-scheduled is for
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+ 
+    runs-on: ubuntu-latest
+ 
+    strategy:
+      matrix:
+        toolchain:
+          - beta
+          - nightly
+          - $MINIMAL_RUST  # Compatibility can be broken by deps updates
+        features:
+          - 'compute_naive'
+          - 'compute_naive,runtime-weights'
+          - 'compute_gpu_specialized,gpu_debug_utils'
+
+    env:
+      FEATURES_FLAG: '--features=${{ matrix.features }}'
+ 
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+ 
+      - name: Set up toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+
+      - name: Install cargo-criterion
+        uses: baptiste0928/cargo-install@v2
+        with:
+          crate: cargo-criterion
+
+      - name: Check that benchmarks build
+        run: cargo criterion --no-run
+
+
+  # Check compatibility with newer Rust/deps versions (scheduled CI)
+  #
+  # We aren't concerned about trashing the cargo cache here since these jobs
+  # only run occasionally, so the extra convenience and maintainability of
+  # grouping debug and release tests trumps other considerations.
+  #
+  # FIXME: There should be a way to use conditional build matrices without
+  #        duplicating the whole job recipe...
+  #
+  test-scheduled:
+    if: github.event_name == 'schedule'
+ 
+    runs-on: ubuntu-latest
+ 
+    strategy:
+      matrix:
+        toolchain:
+          - beta
+          - nightly
+          - $MINIMAL_RUST  # Compatibility can be broken by deps updates
+        features:
+          - 'compute_naive'
+          - 'compute_naive,runtime-weights'
+          - 'compute_regular'
+          - 'compute_manualvec'
+          - 'compute_autovec'
+          - 'compute_block'
+          - 'compute_parallel'
+          - 'compute_gpu_naive'
+          - 'compute_gpu_specialized'
+          - 'compute_gpu_specialized,gpu_debug_utils'
+
+    env:
+      FEATURES_FLAG: '--features=${{ matrix.features }}'
+ 
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+ 
+      - name: Set up toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+ 
+      - name: Run unit tests
+        run: cargo test --workspace ${{ env.FEATURES_FLAG }}
+ 
+      - name: Run a tiny simulation job
+        run: cargo run --bin simulate -- -n 10
+ 
+      - name: Translate simulation output to images
+        run: mkdir out && cargo run --bin data-to-pics -- -o out
+
+      - name: Install cargo-criterion
+        uses: baptiste0928/cargo-install@v2
+        with:
+          crate: cargo-criterion
+
+      - name: Check that benchmarks build
+        run: cargo criterion --no-run
