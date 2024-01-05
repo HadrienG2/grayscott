@@ -109,7 +109,8 @@ macro_rules! gpu_benchmark {
     };
 }
 
-/// As long as this RAII guard is alive, denormals are flushed to zero
+/// As long as this RAII guard is alive, denormals are flushed to zero in the
+/// current thread (not in other threads, sadly)
 ///
 /// Denormals are an obscure feature of IEEE-754 which slightly improves
 /// precision of computations involving on very small numbers. They are rarely
@@ -120,22 +121,62 @@ macro_rules! gpu_benchmark {
 /// This guard operates on a best-effort basis : if no facility for flushing
 /// denormals is available/known on the target CPU, denormals will be left alone.
 pub struct DenormalsFlusher {
+    /// Truth that the FTZ flag was previously unset, and should thus be reset
+    /// once the code that uses DenormalsFlusher finishes executing.
     #[cfg(target_feature = "sse")]
-    old_ftz_mode: u32,
+    should_reset: bool,
 }
 //
 impl DenormalsFlusher {
     /// Start flushing denormals
     pub fn new() -> Self {
-        // SAFETY: Enabling FTZ requires SSE, but is always safe with SSE
+        // SAFETY: Actually UB, alas there's no UB-free way to do this in Rust
+        //         at the time of writing because the Rust MXCSR intrinsics are
+        //         deprecated and Rust inline assembly currently has no way to
+        //         tell the compiler backend that it's clobbering MXCSR.
+        //
+        //         The following consequences of this UB have been considered:
+        //
+        //         - The compiler backend may reset MXCSR to the state that it
+        //           expects at any point of program execution between the
+        //           construction and DenormalsFlusher, which will result in the
+        //           FTZ flag being cleared earlier than desired. While
+        //           annoying, this is unlikely and does fit into our
+        //           "best-effort flushing" API contract.
+        //         - Since the FP contract of all known compilers specifies an
+        //           expected FP environment where FTZ is off, there is no known
+        //           circumstance where it would be okay for the compiler to
+        //           expect this flag to be set, so it's fine if we clear it too
+        //           eagerly in the destructor.
+        //         - Most worryingly, however, the compiler backend may reorder
+        //           floating-point operations across our MXCSR state change,
+        //           resulting in denormals being incorrectly flushed or not
+        //           flushed close to the construction and destruction of the
+        //           DenormalsFlusher. We attempt to guard against this using
+        //           compiler fences, under the assumption that realistic
+        //           floating-point computations take inputs from memory or
+        //           write output to memory and are thus affected by fences. The
+        //           cost of fences should not be a problem since users are not
+        //           expected to create/destroy DenormalFlushers in a loop.
         #[cfg(target_feature = "sse")]
         unsafe {
-            use std::arch::x86_64::{
-                _MM_FLUSH_ZERO_ON, _MM_GET_FLUSH_ZERO_MODE, _MM_SET_FLUSH_ZERO_MODE,
-            };
-            let old_ftz_mode = _MM_GET_FLUSH_ZERO_MODE();
-            _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-            Self { old_ftz_mode }
+            use std::sync::atomic::{compiler_fence, Ordering};
+            compiler_fence(Ordering::Release);
+            let mut mxcsr_buf: u32 = 0;
+            let initial_mxcsr: u32;
+            std::arch::asm!(
+                "stmxcsr [{mxcsr_buf}]",
+                "mov {initial_mxcsr:e}, [{mxcsr_buf}]",
+                // 0x8000 is the FTZ flag of SSE's MXCSR register
+                "or dword ptr [{mxcsr_buf}], 0x8000",
+                "ldmxcsr [{mxcsr_buf}]",
+                mxcsr_buf = in(reg) &mut mxcsr_buf,
+                initial_mxcsr = out(reg) initial_mxcsr,
+                options(nostack)
+            );
+            let should_reset = initial_mxcsr & 0x8000 == 0;
+            compiler_fence(Ordering::Acquire);
+            Self { should_reset }
         }
         #[cfg(not(target_feature = "sse"))]
         Self {}
@@ -144,14 +185,22 @@ impl DenormalsFlusher {
 //
 impl Drop for DenormalsFlusher {
     fn drop(&mut self) {
-        // SAFETY: Enabling FTZ requires SSE, but is always safe with SSE
+        // SAFETY: See comment in new()
         #[cfg(target_feature = "sse")]
         unsafe {
-            use std::arch::x86_64::{
-                _MM_FLUSH_ZERO_ON, _MM_GET_FLUSH_ZERO_MODE, _MM_SET_FLUSH_ZERO_MODE,
-            };
-            if _MM_GET_FLUSH_ZERO_MODE() == _MM_FLUSH_ZERO_ON {
-                _MM_SET_FLUSH_ZERO_MODE(self.old_ftz_mode);
+            if self.should_reset {
+                use std::sync::atomic::{compiler_fence, Ordering};
+                compiler_fence(Ordering::Release);
+                let mut mxcsr_buf: u32 = 0;
+                std::arch::asm!(
+                    "stmxcsr [{mxcsr_buf}]",
+                    // 0xFFFF7FFF == !0x8000 as u32
+                    "and dword ptr [{mxcsr_buf}], 0xFFFF7FFF",
+                    "ldmxcsr [{mxcsr_buf}]",
+                    mxcsr_buf = in(reg) &mut mxcsr_buf,
+                    options(nostack)
+                );
+                compiler_fence(Ordering::Acquire);
             }
         }
     }
