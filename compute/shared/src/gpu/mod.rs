@@ -106,7 +106,7 @@ mod tests {
 
     fn init_logger() {
         static INIT_LOGGER: Once = Once::new();
-        INIT_LOGGER.call_once(|| env_logger::init());
+        INIT_LOGGER.call_once(env_logger::init);
     }
 
     #[test]

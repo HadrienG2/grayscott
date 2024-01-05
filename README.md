@@ -31,7 +31,7 @@ configurations, you will want to install the following native packages:
 # Example given for Ubuntu, other linux distributions will be similar except the
 # packages will be named a little differently
 sudo apt install git build-essential curl \
-    libhdf5-dev libhwloc-dev pkgconf \
+    libhdf5-dev libhwloc-dev libudev-dev pkgconf \
     cmake ninja-build python3 \
     vulkan-validationlayers-dev libvulkan-dev vulkan-tools
 # A rust toolchain can be installed in a distribution-agnostic fashion
