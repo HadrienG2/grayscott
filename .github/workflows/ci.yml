@@ -24,6 +24,16 @@ env:
   MINIMAL_RUST: 1.71.0  # Minimal Supported Rust Version
 
 jobs:
+  # Workaround for github CI dropping env var expansion in matrix strategy
+  matrix_vars:
+    runs-on: ubuntu-latest
+    outputs:
+      MINIMAL_RUST: ${{ env.MINIMAL_RUST }}
+    steps:
+      - name: Forward env var to output
+        run: echo "MINIMAL_RUST=${{ env.MINIMAL_RUST }}" >> $GITHUB_OUTPUT
+
+
   # Formatting doesn't depend on configuration, and we only care about the
   # formatting rules of the latest supported Rust version
   format:
@@ -116,11 +126,13 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
  
     runs-on: ubuntu-latest
+
+    needs: matrix_vars
  
     strategy:
       matrix:
         toolchain:
-          - $MINIMAL_RUST  # Minimal Supported Rust Version
+          - ${{ needs.matrix_vars.outputs.MINIMAL_RUST }}
           - stable
         features:
           - 'compute_naive'
@@ -160,11 +172,13 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
  
     runs-on: ubuntu-latest
+
+    needs: matrix_vars
  
     strategy:
       matrix:
         toolchain:
-          - $MINIMAL_RUST  # Minimal Supported Rust Version
+          - ${{ needs.matrix_vars.outputs.MINIMAL_RUST }}
           - stable
         features:
           - 'compute_naive'
@@ -217,11 +231,13 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
  
     runs-on: ubuntu-latest
+
+    needs: matrix_vars
  
     strategy:
       matrix:
         toolchain:
-          - $MINIMAL_RUST  # Minimal Supported Rust Version
+          - ${{ needs.matrix_vars.outputs.MINIMAL_RUST }}
           - stable
         features:
           - 'compute_naive'
@@ -268,13 +284,15 @@ jobs:
     if: github.event_name == 'schedule'
  
     runs-on: ubuntu-latest
+
+    needs: matrix_vars
  
     strategy:
       matrix:
         toolchain:
           - beta
           - nightly
-          - $MINIMAL_RUST  # Compatibility can be broken by deps updates
+          - ${{ needs.matrix_vars.outputs.MINIMAL_RUST }}
         features:
           - 'compute_naive'
           - 'compute_naive,runtime-weights'
