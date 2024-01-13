@@ -89,7 +89,7 @@ pub fn sampler_conig() -> SamplerCreateInfo {
 }
 
 /// Generate color palette for a given resolution
-fn colors(resolution: u32) -> impl Iterator<Item = [u8; 4]> + ExactSizeIterator {
+fn colors(resolution: u32) -> impl ExactSizeIterator<Item = [u8; 4]> {
     (0..resolution).map(move |idx| {
         let position = idx as f64 / (resolution - 1) as f64;
         let color = ui::GRADIENT.eval_continuous(position);
