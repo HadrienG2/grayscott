@@ -327,7 +327,7 @@ jobs:
         run: cargo test --workspace ${{ env.FEATURES_FLAG }}
  
       - name: Run a tiny simulation job
-        run: cargo run --bin simulate -- -n 10
+        run: cargo run --bin simulate ${{ env.FEATURES_FLAG }} -- -n 10
  
       - name: Translate simulation output to images
         run: mkdir out && cargo run --bin data-to-pics -- -o out
