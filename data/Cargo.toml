@@ -23,11 +23,35 @@ simd = []
 
 # Switch to run-time stencil weights lookup
 #
-# By default, the code leverages the fact that stencil weights are known at
-# compile time (and all equal to 1). If you would like to know how expensive it
-# would be to give up on this specialization and use generic code that works for
-# any set of stencil weights, turn on this feature flag.
-runtime-weights = []
+# By default, the compiler leverages the fact that stencil weights are known at
+# compile time to produce more efficient code. If you would like to know how
+# expensive it would be to give up on this specialization and use generic code
+# that works for any set of stencil weights, turn on this feature flag.
+weights-runtime = []
+
+# Use the five-points discrete Laplacian stencil
+#
+# By default, we use the Oono-Puri 9-points discrete Laplacian stencil, which is
+# optimally isotropic. The 5-points stencil is easier to compute, but exibits a
+# lot more anisotropy, which will make the simulation domain more square-shaped
+# than circular as it should be.
+weights-5points = []
+
+# Use the Patra-Karttunen discrete Laplacian stencil
+#
+# Gives the best approximation of rotational symmetry and has the smallest error
+# around the origin.
+#
+# Takes precedence over weights-5points.
+weights-patrakarttunen = []
+
+# Use the discrete Laplacian stencil that the C++ version uses by default
+#
+# Mathematically wrong (ignores the fact that diagonal neighbors are at higher
+# distance than axial neighbors), but produces visually pleasing results :)
+#
+# Takes precedence over weights-patrakarttunen and weights-5points.
+weights-pretty = []
 
 [dependencies]
 cfg-if.workspace = true

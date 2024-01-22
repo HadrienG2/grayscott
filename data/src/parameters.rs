@@ -37,14 +37,14 @@ impl Parameters {
     /// sum(weight * (elem - center)) stencil computation
     #[inline]
     pub fn weights(&self) -> StencilWeights {
-        #[cfg(feature = "runtime-weights")]
+        #[cfg(feature = "weights-runtime")]
         {
             // Look up stencil weights at runtime, even though they are
             // actually known at compile time. The compiler may or may not
             // manage to figure things out (as of rustc 1.71, it doesn't).
             self.weights
         }
-        #[cfg(not(feature = "runtime-weights"))]
+        #[cfg(not(feature = "weights-runtime"))]
         {
             // Take no chance and enforce use of the compile-time weights.
             debug_assert_eq!(self.weights, STENCIL_WEIGHTS);
@@ -86,15 +86,41 @@ impl Default for Parameters {
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct StencilWeights(pub [[Precision; STENCIL_SHAPE[1]]; STENCIL_SHAPE[0]]);
 //
-/// Stencil used by the C++ version
-const STENCIL_WEIGHTS: StencilWeights = StencilWeights([[1.0; 3]; 3]);
-//
-// More mathematically accurate but less fun-looking results
-/* const STENCIL_WEIGHTS: StencilWeights = StencilWeights([
-    [0.05, 0.2, 0.05],
-    [0.2, 0.0, 0.2],
-    [0.05, 0.2, 0.05],
-]); */
+/// Compile-time stencil selection
+#[rustfmt::skip]
+const STENCIL_WEIGHTS: StencilWeights =
+    if cfg!(feature = "weights-pretty") {
+        // Stencil used by the C++ version of the course
+        //
+        // Most likely based on the graph generalization of the Laplacian, which
+        // assumes all neighbors to be at an equal distance.
+        StencilWeights([[1.0; 3]; 3])
+    } else if cfg!(feature = "weights-patrakarttunen") {
+        // Patra-Karttunen stencil imposes rotational invariance, has smallest
+        // error around the origin
+        StencilWeights([
+            [1.0/6.0, 4.0/6.0, 1.0/6.0],
+            [4.0/6.0,   0.0,   4.0/6.0],
+            [1.0/6.0, 4.0/6.0, 1.0/6.0]
+        ])
+    } else if cfg!(feature = "weights-5points") {
+        // 5-points stencil is computationally simpler, but is intrinsically
+        // anisotropic which will lead the simulated domain to take a cross-like
+        // shape rather than the expected smooth circular shape
+        StencilWeights([
+            [0.0, 1.0, 0.0],
+            [1.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0]
+        ])
+    } else {
+        // Oono-Puri stencil is the optimally isotropic form of discretization,
+        // reduces overall error.
+        StencilWeights([
+            [0.25, 0.5, 0.25],
+            [0.5,  0.0, 0.5],
+            [0.25, 0.5, 0.25]
+        ])
+    };
 
 // Make StencilWeights uploadable to the GPU if support is enabled
 cfg_if::cfg_if! {
