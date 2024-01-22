@@ -76,7 +76,7 @@ jobs:
       matrix:
         features:
           - 'compute_naive'
-          - 'compute_naive,runtime-weights'
+          - 'compute_naive,weights-runtime'
           - 'compute_regular'
           - 'compute_manualvec'
           - 'compute_autovec'
@@ -136,7 +136,7 @@ jobs:
           - stable
         features:
           - 'compute_naive'
-          - 'compute_naive,runtime-weights'
+          - 'compute_naive,weights-runtime'
           - 'compute_gpu_specialized,gpu-debug-utils'
 
     env:
@@ -182,7 +182,7 @@ jobs:
           - stable
         features:
           - 'compute_naive'
-          - 'compute_naive,runtime-weights'
+          - 'compute_naive,weights-runtime'
           - 'compute_regular'
           - 'compute_manualvec'
           - 'compute_autovec'
@@ -241,7 +241,7 @@ jobs:
           - stable
         features:
           - 'compute_naive'
-          - 'compute_naive,runtime-weights'
+          - 'compute_naive,weights-runtime'
           - 'compute_gpu_specialized,gpu-debug-utils'
 
     env:
@@ -295,7 +295,7 @@ jobs:
           - ${{ needs.matrix_vars.outputs.MINIMAL_RUST }}
         features:
           - 'compute_naive'
-          - 'compute_naive,runtime-weights'
+          - 'compute_naive,weights-runtime'
           - 'compute_regular'
           - 'compute_manualvec'
           - 'compute_autovec'
