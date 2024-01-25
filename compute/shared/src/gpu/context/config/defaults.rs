@@ -8,7 +8,9 @@ use vulkano::{
     command_buffer::allocator::{
         StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,
     },
-    descriptor_set::allocator::StandardDescriptorSetAllocator,
+    descriptor_set::allocator::{
+        StandardDescriptorSetAllocator, StandardDescriptorSetAllocatorCreateInfo,
+    },
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
         Device, DeviceExtensions, Features, QueueCreateInfo, QueueFamilyProperties, QueueFlags,
@@ -200,5 +202,5 @@ pub fn command_buffer_allocator(device: Arc<Device>) -> StandardCommandBufferAll
 
 /// Suggested descriptor set allocator
 pub fn descriptor_set_allocator(device: Arc<Device>) -> StandardDescriptorSetAllocator {
-    StandardDescriptorSetAllocator::new(device)
+    StandardDescriptorSetAllocator::new(device, StandardDescriptorSetAllocatorCreateInfo::default())
 }

@@ -11,8 +11,8 @@ use vulkano::{
         CopyBufferToImageInfo, CopyImageToBufferInfo, PrimaryAutoCommandBuffer,
     },
     descriptor_set::PersistentDescriptorSet,
-    device::{Device, DeviceOwned, Queue},
-    image::{ImageUsage, StorageImage},
+    device::{DeviceOwned, DeviceOwnedVulkanObject, Queue},
+    image::{Image, ImageUsage},
     memory::allocator::StandardMemoryAllocator,
     sync::GpuFuture,
 };
@@ -32,7 +32,7 @@ pub struct ImageContext {
     /// We do not handle the creation of that descriptor set as the specifics
     /// depend on how the shader accesses the image (sampled or not, etc), which
     /// is where our line for compute backend specific code is drawn.
-    pub descriptor_sets: HashMap<[Arc<StorageImage>; 4], Arc<PersistentDescriptorSet>>,
+    pub descriptor_sets: HashMap<[Arc<Image>; 4], Arc<PersistentDescriptorSet>>,
 
     /// Buffer/image allocator
     memory_allocator: Arc<MemAlloc>,
@@ -50,7 +50,7 @@ pub struct ImageContext {
     command_allocator: Arc<CommAlloc>,
 
     /// Modified CPU data that should eventually be uploaded to the GPU
-    pending_uploads: HashMap<CpuBuffer, Arc<StorageImage>>,
+    pending_uploads: HashMap<CpuBuffer, Arc<Image>>,
 
     /// Queue to be used when GPU data is uploaded from the CPU
     upload_queue: Arc<Queue>,
@@ -112,13 +112,8 @@ impl ImageContext {
         })
     }
 
-    /// Get access to the underlying device
-    pub(crate) fn device(&self) -> &Arc<Device> {
-        self.download_queue.device()
-    }
-
     /// Get access to the memory allocator
-    pub(crate) fn memory_allocator(&self) -> &MemAlloc {
+    pub(crate) fn memory_allocator(&self) -> &Arc<MemAlloc> {
         &self.memory_allocator
     }
 
@@ -145,7 +140,7 @@ impl ImageContext {
     ///
     /// Instead, the upload is delayed until the moment where we actually need
     /// the image to be on the GPU side, at which point upload_all is called.
-    pub(crate) fn schedule_upload(&mut self, cpu: &CpuBuffer, gpu: &Arc<StorageImage>) {
+    pub(crate) fn schedule_upload(&mut self, cpu: &CpuBuffer, gpu: &Arc<Image>) {
         if let Some(target) = self.pending_uploads.get(cpu) {
             debug_assert_eq!(target, gpu);
         } else {
@@ -167,8 +162,7 @@ impl ImageContext {
             let commands = builder.build()?;
 
             if cfg!(feature = "gpu-debug-utils") {
-                let device = self.upload_queue.device();
-                device.set_debug_utils_object_name(&commands, Some("Bulk concentration upload"))?;
+                commands.set_debug_utils_object_name(Some("Bulk concentration upload"))?;
             }
 
             vulkano::sync::now(self.upload_queue.device().clone())
@@ -187,7 +181,7 @@ impl ImageContext {
     pub(crate) fn download_after(
         &mut self,
         after: impl GpuFuture + 'static,
-        gpu: Arc<StorageImage>,
+        gpu: Arc<Image>,
         cpu: CpuBuffer,
     ) -> Result<()> {
         assert!(

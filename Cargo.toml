@@ -93,10 +93,8 @@ syslog = "6.1"
 thiserror = "1.0"
 
 # Interface to the Vulkan GPU library
-# TODO: Go back to upstream once fix is merged
-vulkano = { git = "https://github.com/HadrienG2/vulkano.git", branch = "fix-debug-utils-name-uaf-v0.33" }
-vulkano-shaders = { git = "https://github.com/HadrienG2/vulkano.git", branch = "fix-debug-utils-name-uaf-v0.33" }
-vulkano-win = { git = "https://github.com/HadrienG2/vulkano.git", branch = "fix-debug-utils-name-uaf-v0.33" }
+vulkano = "0.34"
+vulkano-shaders = "0.34"
 
 # Used to create windows
 winit = "0.28"

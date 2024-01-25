@@ -1,10 +1,8 @@
 //! Image-based GPU concentration storage
 
-#![allow(clippy::result_large_err)]
-
 pub mod context;
 
-use self::context::{ImageContext, MemAlloc};
+use self::context::ImageContext;
 use crate::{
     concentration::{
         gpu::shape::{Shape, ShapeConvertError},
@@ -17,18 +15,19 @@ use std::{ops::Range, sync::Arc};
 use thiserror::Error;
 use vulkano::{
     buffer::{
-        subbuffer::BufferReadGuard, Buffer, BufferCreateInfo, BufferError, BufferUsage, Subbuffer,
+        subbuffer::BufferReadGuard, AllocateBufferError, Buffer, BufferCreateInfo, BufferUsage,
+        Subbuffer,
     },
-    command_buffer::{BuildError, CommandBufferBeginError, CommandBufferExecError, CopyError},
-    device::DeviceOwned,
+    command_buffer::CommandBufferExecError,
+    device::{DeviceOwned, DeviceOwnedVulkanObject},
     format::{Format, FormatFeatures},
     image::{
-        ImageAccess, ImageCreateFlags, ImageError, ImageFormatInfo, ImageTiling, ImageType,
-        ImageUsage, StorageImage,
+        AllocateImageError, Image, ImageCreateFlags, ImageCreateInfo, ImageFormatInfo, ImageTiling,
+        ImageType, ImageUsage,
     },
-    memory::allocator::{AllocationCreateInfo, MemoryAllocatePreference, MemoryUsage},
-    sync::{future::NowFuture, FlushError, GpuFuture, Sharing},
-    DeviceSize, OomError,
+    memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter},
+    sync::{future::NowFuture, GpuFuture, HostAccessError, Sharing},
+    DeviceSize, Validated, ValidationError, VulkanError,
 };
 
 /// Image-based Concentration implementation
@@ -52,7 +51,7 @@ use vulkano::{
 /// and best replaced by buffers in more advanced examples.
 pub struct ImageConcentration {
     /// GPU version of the concentration
-    gpu_image: Arc<StorageImage>,
+    gpu_image: Arc<Image>,
 
     /// CPU version of the concentration
     cpu_buffer: CpuBuffer,
@@ -79,7 +78,7 @@ impl Concentration for ImageConcentration {
     }
 
     fn shape(&self) -> [usize; 2] {
-        Shape::try_from(self.gpu_image.dimensions())
+        Shape::try_from(self.gpu_image.extent())
             .expect("Can't fail (checked at construction time)")
             .ndarray()
     }
@@ -135,9 +134,7 @@ impl Concentration for ImageConcentration {
 impl ImageConcentration {
     /// Image format used by this concentration type
     pub fn format() -> Format {
-        Self::image_format_info(ImageUsage::default())
-            .format
-            .unwrap()
+        Self::image_format_info(ImageUsage::default()).format
     }
 
     /// Required image format features
@@ -159,7 +156,7 @@ impl ImageConcentration {
         );
         ImageFormatInfo {
             flags: ImageCreateFlags::empty(),
-            format: Some(Format::R32_SFLOAT),
+            format: Format::R32_SFLOAT,
             image_type: ImageType::Dim2d,
             tiling: ImageTiling::Optimal,
             usage: ImageUsage::TRANSFER_SRC | ImageUsage::TRANSFER_DST | client_usage,
@@ -169,9 +166,9 @@ impl ImageConcentration {
 
     /// Access the inner image for GPU work
     ///
-    /// You must not cache this `Arc<StorageImage>` across simulation steps, as
-    /// the actual image you are reading/writing will change between steps.
-    pub fn access_image(&self) -> &Arc<StorageImage> {
+    /// You must not cache this `Arc<Image>` across simulation steps, as the
+    /// actual image you are reading/writing will change between steps.
+    pub fn access_image(&self) -> &Arc<Image> {
         assert_eq!(
             self.owner,
             Owner::Gpu,
@@ -236,11 +233,14 @@ impl ImageConcentration {
         context: &mut ImageContext,
         shape: [usize; 2],
         buffer_constructor: impl FnOnce(
-            &MemAlloc,
+            Arc<dyn MemoryAllocator>,
             BufferCreateInfo,
             AllocationCreateInfo,
             DeviceSize,
-        ) -> std::result::Result<CpuBuffer, BufferError>,
+        ) -> std::result::Result<
+            CpuBuffer,
+            Validated<AllocateBufferError>,
+        >,
         owner: Owner,
     ) -> Result<Self> {
         let shape = Shape::try_from(shape)?;
@@ -248,10 +248,10 @@ impl ImageConcentration {
         let cpu_buffer = Self::make_buffer(context, shape, buffer_constructor)?;
 
         if cfg!(feature = "gpu-debug-utils") {
-            let device = context.device();
-            device
-                .set_debug_utils_object_name(gpu_image.inner().image, Some("GPU concentration"))?;
-            device.set_debug_utils_object_name(cpu_buffer.buffer(), Some("CPU concentration"))?;
+            gpu_image.set_debug_utils_object_name(Some("GPU concentration"))?;
+            cpu_buffer
+                .buffer()
+                .set_debug_utils_object_name(Some("CPU concentration"))?;
         }
 
         Ok(Self {
@@ -262,15 +262,26 @@ impl ImageConcentration {
     }
 
     /// Image construction logic
-    fn make_image(context: &mut ImageContext, shape: Shape) -> Result<Arc<StorageImage>> {
+    fn make_image(context: &mut ImageContext, shape: Shape) -> Result<Arc<Image>> {
         let image_format_info = Self::image_format_info(context.client_image_usage());
-        let image = StorageImage::with_usage(
-            context.memory_allocator(),
-            shape.image(),
-            Self::format(),
-            image_format_info.usage,
-            image_format_info.flags,
-            context.gpu_queue_family_indices(),
+        let (image_type, extent) = shape.image_type_and_extent();
+        assert_eq!(image_format_info.image_type, image_type);
+        let image = Image::new(
+            context.memory_allocator().clone(),
+            ImageCreateInfo {
+                flags: image_format_info.flags,
+                image_type,
+                format: Self::format(),
+                extent,
+                usage: image_format_info.usage,
+                sharing: if context.gpu_queue_family_indices().count() > 1 {
+                    Sharing::Concurrent(context.gpu_queue_family_indices().collect())
+                } else {
+                    Sharing::Exclusive
+                },
+                ..Default::default()
+            },
+            AllocationCreateInfo::default(),
         )?;
         Ok(image)
     }
@@ -280,14 +291,15 @@ impl ImageConcentration {
         context: &mut ImageContext,
         shape: Shape,
         constructor: impl FnOnce(
-            &MemAlloc,
+            Arc<dyn MemoryAllocator>,
             BufferCreateInfo,
             AllocationCreateInfo,
             DeviceSize,
-        ) -> std::result::Result<CpuBuffer, BufferError>,
+        )
+            -> std::result::Result<CpuBuffer, Validated<AllocateBufferError>>,
     ) -> Result<CpuBuffer> {
         let buffer = constructor(
-            context.memory_allocator(),
+            context.memory_allocator().clone(),
             BufferCreateInfo {
                 sharing: if context.cpu_queue_family_indices().count() > 1 {
                     Sharing::Concurrent(context.cpu_queue_family_indices().collect())
@@ -298,8 +310,7 @@ impl ImageConcentration {
                 ..Default::default()
             },
             AllocationCreateInfo {
-                usage: MemoryUsage::Download,
-                allocate_preference: MemoryAllocatePreference::Unknown,
+                memory_type_filter: MemoryTypeFilter::HOST_RANDOM_ACCESS,
                 ..Default::default()
             },
             shape
@@ -343,32 +354,35 @@ pub enum Owner {
 /// Errors that can occur while using images
 #[derive(Clone, Debug, Error)]
 pub enum Error {
-    #[error("failed to start recording a command buffer")]
-    CommandBufferBegin(#[from] CommandBufferBeginError),
-
-    #[error("failed to build a command buffer")]
-    CommandBufferBuild(#[from] BuildError),
-
-    #[error("failed to execute a command buffer")]
+    #[error("failed to execute a command buffer ({0})")]
     CommandBufferExec(#[from] CommandBufferExecError),
 
-    #[error("failed to record a copy command")]
-    Copy(#[from] CopyError),
+    #[error("failed to create a data buffer ({0})")]
+    Buffer(#[from] Validated<AllocateBufferError>),
 
-    #[error("failed to create or manipulate a data buffer")]
-    Buffer(#[from] BufferError),
+    #[error("failed to access data from the host ({0})")]
+    HostAccessError(#[from] HostAccessError),
 
-    #[error("failed to submit commands to the GPU")]
-    Flush(#[from] FlushError),
+    #[error("failed to create an image ({0})")]
+    Image(#[from] Validated<AllocateImageError>),
 
-    #[error("failed to create or manipulate an image")]
-    Image(#[from] ImageError),
-
-    #[error("ran out of memory")]
-    OutOfMemory(#[from] OomError),
-
-    #[error("bad domain shape")]
+    #[error("bad domain shape ({0})")]
     BadShape(#[from] ShapeConvertError),
+
+    #[error("a Vulkan API call errored out or failed validation ({0})")]
+    Vulkan(#[from] Validated<VulkanError>),
+}
+//
+impl From<VulkanError> for Error {
+    fn from(value: VulkanError) -> Self {
+        Self::Vulkan(Validated::Error(value))
+    }
+}
+//
+impl From<Box<ValidationError>> for Error {
+    fn from(value: Box<ValidationError>) -> Self {
+        Self::Vulkan(value.into())
+    }
 }
 //
 pub type Result<T> = std::result::Result<T, Error>;
