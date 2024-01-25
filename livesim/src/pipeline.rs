@@ -3,19 +3,27 @@
 use crate::{input::Input, palette, Result, SimulationContext};
 use compute::gpu::context::VulkanContext;
 use data::concentration::gpu::shape::{self, PartialWorkGroupError, Shape};
-use std::sync::Arc;
+use std::{collections::HashMap, hash::BuildHasher, sync::Arc};
 use vulkano::{
     buffer::BufferUsage,
-    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer},
+    command_buffer::{
+        allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
+        PrimaryAutoCommandBuffer,
+    },
     descriptor_set::{
         layout::DescriptorSetLayoutCreateInfo, PersistentDescriptorSet, WriteDescriptorSet,
     },
     image::{
+        sampler::Sampler,
         view::{ImageView, ImageViewCreateInfo},
-        ImageUsage, ImmutableImage, SwapchainImage,
+        Image, ImageUsage,
     },
-    pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
-    sampler::Sampler,
+    pipeline::{
+        compute::ComputePipelineCreateInfo, layout::PipelineDescriptorSetLayoutCreateInfo,
+        ComputePipeline, Pipeline, PipelineBindPoint, PipelineLayout,
+        PipelineShaderStageCreateInfo,
+    },
+    shader::{ShaderModule, SpecializationConstant, SpecializedShaderModule},
 };
 
 /// Dispatch size required by this pipeline, for a certain simulation domain and
@@ -31,21 +39,27 @@ pub fn dispatch_size(
 
 /// Create the pipeline
 pub fn create(vulkan: &VulkanContext, work_group_shape: Shape) -> Result<Arc<ComputePipeline>> {
-    // Load the rendering shader
+    // Load and specialize the rendering shader
     let shader = shader::load(vulkan.device.clone())?;
     vulkan.set_debug_utils_object_name(&shader, || "Live renderer shader".into())?;
+    let entry_point = specialize_shader(&shader, work_group_shape)?
+        .single_entry_point()
+        .expect("shader should have an entry point");
+    let shader_stage = PipelineShaderStageCreateInfo::new(entry_point.clone());
+
+    // Autogenerate a pipeline layout
+    let mut pipeline_layout_cfg =
+        PipelineDescriptorSetLayoutCreateInfo::from_stages([&shader_stage]);
+    setup_palette_sampler(vulkan, &mut pipeline_layout_cfg.set_layouts[..])?;
+    let pipeline_layout_cfg =
+        pipeline_layout_cfg.into_pipeline_layout_create_info(vulkan.device.clone())?;
+    let pipeline_layout = PipelineLayout::new(vulkan.device.clone(), pipeline_layout_cfg)?;
 
     // Set up the rendering pipeline
     let pipeline = ComputePipeline::new(
         vulkan.device.clone(),
-        shader.entry_point("main").expect("Should be present"),
-        &shader::SpecializationConstants {
-            constant_0: work_group_shape.width(),
-            constant_1: work_group_shape.height(),
-            amplitude_scale: ui::AMPLITUDE_SCALE,
-        },
         Some(vulkan.pipeline_cache.clone()),
-        sampler_setup_callback(vulkan)?,
+        ComputePipelineCreateInfo::stage_layout(shader_stage, pipeline_layout),
     )?;
     vulkan.set_debug_utils_object_name(&pipeline, || "Live renderer".into())?;
     Ok(pipeline)
@@ -60,7 +74,7 @@ pub fn palette_usage() -> ImageUsage {
 pub fn new_palette_set(
     vulkan: &VulkanContext,
     pipeline: &ComputePipeline,
-    palette_image: Arc<ImmutableImage>,
+    palette_image: Arc<Image>,
 ) -> Result<Arc<PersistentDescriptorSet>> {
     let palette_info = ImageViewCreateInfo {
         usage: palette_usage(),
@@ -73,6 +87,7 @@ pub fn new_palette_set(
             PALETTE,
             ImageView::new(palette_image, palette_info)?,
         )],
+        [],
     )?;
     // FIXME: Name this descriptor set once vulkano allows for it
     Ok(palette)
@@ -93,7 +108,7 @@ pub fn new_inout_sets(
     vulkan: &VulkanContext,
     pipeline: &ComputePipeline,
     upload_buffers: &[Input],
-    swapchain_images: Vec<Arc<SwapchainImage>>,
+    swapchain_images: Vec<Arc<Image>>,
 ) -> Result<Vec<Arc<PersistentDescriptorSet>>> {
     assert_eq!(upload_buffers.len(), swapchain_images.len());
     // FIXME: Name swapchain images once vulkano allows for it
@@ -116,6 +131,7 @@ pub fn new_inout_sets(
                         ImageView::new(swapchain_image, output_info)?,
                     ),
                 ],
+                [],
             )?;
             // FIXME: Name descriptor set once vulkano allows for it
             Ok(descriptor_set)
@@ -130,7 +146,7 @@ pub fn record_render_commands(
     inout_set: Arc<PersistentDescriptorSet>,
     palette_set: Arc<PersistentDescriptorSet>,
     dispatch_size: [u32; 3],
-) -> Result<PrimaryAutoCommandBuffer> {
+) -> Result<Arc<PrimaryAutoCommandBuffer<Arc<StandardCommandBufferAllocator>>>> {
     let vulkan = context.vulkan();
     let queue = context.queue();
 
@@ -142,19 +158,69 @@ pub fn record_render_commands(
 
     let layout = pipeline.layout().clone();
     builder
-        .bind_pipeline_compute(pipeline)
+        .bind_pipeline_compute(pipeline)?
         .bind_descriptor_sets(
             PipelineBindPoint::Compute,
             layout.clone(),
             INOUT_SET,
             inout_set,
-        )
-        .bind_descriptor_sets(PipelineBindPoint::Compute, layout, PALETTE_SET, palette_set)
+        )?
+        .bind_descriptor_sets(PipelineBindPoint::Compute, layout, PALETTE_SET, palette_set)?
         .dispatch(dispatch_size)?;
 
     let commands = builder.build()?;
     vulkan.set_debug_utils_object_name(&commands, || "Render to screen".into())?;
     Ok(commands)
+}
+
+/// Specialize the rendering shader
+fn specialize_shader(
+    shader: &Arc<ShaderModule>,
+    work_group_shape: Shape,
+) -> Result<Arc<SpecializedShaderModule>> {
+    // Read out shader specialization constants and make sure GPU specialization
+    // constants seem in sync with CPU specialization constants
+    let mut constants = shader.specialization_constants().clone();
+    assert_eq!(
+        constants.len(),
+        3,
+        "number of specialization constants doesn't match"
+    );
+    fn set(
+        constants: &mut HashMap<u32, SpecializationConstant, impl BuildHasher>,
+        id: u32,
+        value: impl Into<SpecializationConstant>,
+    ) {
+        constants
+            .insert(id, value.into())
+            .expect("no specialization constant at expected ID");
+    }
+
+    // Set up specialization constants
+    set(&mut constants, 0, work_group_shape.width());
+    set(&mut constants, 1, work_group_shape.height());
+    set(&mut constants, 2, ui::AMPLITUDE_SCALE);
+
+    // Specialize the shader
+    Ok(shader.specialize(constants)?)
+}
+
+/// Callback to configure palette sampling during pipeline construction
+fn setup_palette_sampler(
+    vulkan: &VulkanContext,
+    set_layouts: &mut [DescriptorSetLayoutCreateInfo],
+) -> Result<()> {
+    // Create palette sampler
+    let palette_sampler = Sampler::new(vulkan.device.clone(), palette::sampler_conig())?;
+    vulkan.set_debug_utils_object_name(&palette_sampler, || "Color palette sampler".into())?;
+
+    // Configure the pipeline descriptor sets to use it
+    set_layouts[PALETTE_SET as usize]
+        .bindings
+        .get_mut(&PALETTE)
+        .expect("Color palette descriptor should be present")
+        .immutable_samplers = vec![palette_sampler];
+    Ok(())
 }
 
 // Rendering shader used when data comes from the CPU
@@ -164,7 +230,7 @@ mod shader {
         ty: "compute",
         vulkan_version: "1.0",
         spirv_version: "1.0",
-        path: "src/cpu.comp",
+        path: "src/from_cpu.comp",
     }
 }
 
@@ -182,20 +248,3 @@ const PALETTE_SET: u32 = 1;
 
 /// Descriptor within `PALETTE_SET` for reading the color palette
 const PALETTE: u32 = 0;
-
-/// Callback to configure palette sampling during pipeline construction
-fn sampler_setup_callback(
-    vulkan: &VulkanContext,
-) -> Result<impl FnOnce(&mut [DescriptorSetLayoutCreateInfo])> {
-    let palette_sampler = Sampler::new(vulkan.device.clone(), palette::sampler_conig())?;
-    vulkan.set_debug_utils_object_name(&palette_sampler, || "Color palette sampler".into())?;
-    Ok(
-        move |descriptor_sets: &mut [DescriptorSetLayoutCreateInfo]| {
-            descriptor_sets[PALETTE_SET as usize]
-                .bindings
-                .get_mut(&PALETTE)
-                .expect("Color palette descriptor should be present")
-                .immutable_samplers = vec![palette_sampler];
-        },
-    )
-}

@@ -19,11 +19,15 @@ use vulkano::{
     device::physical::PhysicalDevice,
     format::FormatFeatures,
     image::{
+        sampler::{BorderColor, Sampler, SamplerAddressMode, SamplerCreateInfo},
         view::{ImageView, ImageViewCreateInfo},
-        ImageUsage, StorageImage,
+        Image, ImageUsage,
     },
-    pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
-    sampler::{BorderColor, Sampler, SamplerAddressMode, SamplerCreateInfo},
+    pipeline::{
+        compute::ComputePipelineCreateInfo, layout::PipelineDescriptorSetLayoutCreateInfo,
+        ComputePipeline, Pipeline, PipelineBindPoint, PipelineLayout,
+        PipelineShaderStageCreateInfo,
+    },
 };
 
 /// Device requirements for this backend
@@ -71,23 +75,35 @@ pub(crate) fn create(context: &VulkanContext) -> Result<Arc<ComputePipeline>> {
     // Load the compute shader
     let shader = shader::load(context.device.clone())?;
     context.set_debug_utils_object_name(&shader, || "Simulation stepper shader".into())?;
+    let entry_point = shader
+        .single_entry_point()
+        .expect("shader should have an entry point");
+    let shader_stage = PipelineShaderStageCreateInfo::new(entry_point.clone());
+
+    // Autogenerate a pipeline layout
+    let mut pipeline_layout_cfg =
+        PipelineDescriptorSetLayoutCreateInfo::from_stages([&shader_stage]);
+    setup_input_sampler(context, &mut pipeline_layout_cfg.set_layouts[..])?;
+    let pipeline_layout_cfg =
+        pipeline_layout_cfg.into_pipeline_layout_create_info(context.device.clone())?;
+    let pipeline_layout = PipelineLayout::new(context.device.clone(), pipeline_layout_cfg)?;
 
     // Set up the compute pipeline
     let pipeline = ComputePipeline::new(
         context.device.clone(),
-        shader.entry_point("main").expect("Should be present"),
-        &(),
         Some(context.pipeline_cache.clone()),
-        sampler_setup_callback(context)?,
+        ComputePipelineCreateInfo::stage_layout(shader_stage, pipeline_layout),
     )?;
     context.set_debug_utils_object_name(&pipeline, || "Simulation stepper".into())?;
     Ok(pipeline)
 }
 
 /// Callback to configure input image sampling during pipeline construction
-pub fn sampler_setup_callback(
+pub fn setup_input_sampler(
     context: &VulkanContext,
-) -> Result<impl FnOnce(&mut [DescriptorSetLayoutCreateInfo])> {
+    set_layouts: &mut [DescriptorSetLayoutCreateInfo],
+) -> Result<()> {
+    // Create input sampler
     let input_sampler = Sampler::new(
         context.device.clone(),
         SamplerCreateInfo {
@@ -98,19 +114,18 @@ pub fn sampler_setup_callback(
         },
     )?;
     context.set_debug_utils_object_name(&input_sampler, || "Concentration sampler".into())?;
-    Ok(
-        move |descriptor_sets: &mut [DescriptorSetLayoutCreateInfo]| {
-            fn binding(
-                set: &mut DescriptorSetLayoutCreateInfo,
-                idx: u32,
-            ) -> &mut DescriptorSetLayoutBinding {
-                set.bindings.get_mut(&idx).unwrap()
-            }
-            let images_set = &mut descriptor_sets[IMAGES_SET as usize];
-            binding(images_set, IN_U).immutable_samplers = vec![input_sampler.clone()];
-            binding(images_set, IN_V).immutable_samplers = vec![input_sampler];
-        },
-    )
+
+    // Configure the pipeline descriptor sets to use it
+    fn binding(
+        set: &mut DescriptorSetLayoutCreateInfo,
+        idx: u32,
+    ) -> &mut DescriptorSetLayoutBinding {
+        set.bindings.get_mut(&idx).unwrap()
+    }
+    let images_set = &mut set_layouts[IMAGES_SET as usize];
+    binding(images_set, IN_U).immutable_samplers = vec![input_sampler.clone()];
+    binding(images_set, IN_V).immutable_samplers = vec![input_sampler];
+    Ok(())
 }
 
 /// Manner in which the parameters are used
@@ -128,6 +143,7 @@ pub(crate) fn new_parameters_set(
         &context.descriptor_set_allocator,
         pipeline.layout().set_layouts()[PARAMS_SET as usize].clone(),
         [WriteDescriptorSet::buffer(PARAMS, parameters)],
+        [],
     )?;
     // FIXME: Name this descriptor set once vulkano allows for it
     Ok(descriptor_set)
@@ -144,15 +160,16 @@ pub fn output_usage() -> ImageUsage {
 }
 
 /// Bind the pipeline and its parameters
-pub(crate) fn bind_pipeline(
-    builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer, impl CommandBufferAllocator>,
+pub(crate) fn bind_pipeline<CommAlloc: CommandBufferAllocator>(
+    builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer<CommAlloc>, CommAlloc>,
     pipeline: Arc<ComputePipeline>,
     parameters: Arc<PersistentDescriptorSet>,
-) {
+) -> Result<()> {
     let layout = pipeline.layout().clone();
     builder
-        .bind_pipeline_compute(pipeline)
-        .bind_descriptor_sets(PipelineBindPoint::Compute, layout, PARAMS_SET, parameters);
+        .bind_pipeline_compute(pipeline)?
+        .bind_descriptor_sets(PipelineBindPoint::Compute, layout, PARAMS_SET, parameters)?;
+    Ok(())
 }
 
 /// Dispatch size required by an image-based pipeline, for a certain simulation
@@ -165,10 +182,10 @@ pub fn dispatch_size(domain_shape: Shape, work_group_shape: Shape) -> Result<[u3
 pub fn new_images_set(
     context: &VulkanContext,
     pipeline: &ComputePipeline,
-    [in_u, in_v, out_u, out_v]: [Arc<StorageImage>; 4],
+    [in_u, in_v, out_u, out_v]: [Arc<Image>; 4],
 ) -> Result<Arc<PersistentDescriptorSet>> {
     let layout = pipeline.layout().set_layouts()[usize::try_from(IMAGES_SET).unwrap()].clone();
-    let binding = |binding, image: Arc<StorageImage>, usage| -> Result<WriteDescriptorSet> {
+    let binding = |binding, image: Arc<Image>, usage| -> Result<WriteDescriptorSet> {
         let view_info = ImageViewCreateInfo {
             usage,
             ..ImageViewCreateInfo::from_image(&image)
@@ -187,14 +204,15 @@ pub fn new_images_set(
             binding(OUT_U, out_u, output_usage())?,
             binding(OUT_V, out_v, output_usage())?,
         ],
+        [],
     )?;
     // FIXME: Name this descriptor set once vulkano allows for it
     Ok(descriptor_set)
 }
 
 /// Record a simulation step
-pub fn record_step(
-    builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer, impl CommandBufferAllocator>,
+pub fn record_step<CommAlloc: CommandBufferAllocator>(
+    builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer<CommAlloc>, CommAlloc>,
     pipeline: &ComputePipeline,
     images: Arc<PersistentDescriptorSet>,
     dispatch_size: [u32; 3],
@@ -205,7 +223,7 @@ pub fn record_step(
             pipeline.layout().clone(),
             IMAGES_SET,
             images,
-        )
+        )?
         .dispatch(dispatch_size)?;
     Ok(())
 }

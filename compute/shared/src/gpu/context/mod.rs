@@ -9,21 +9,20 @@ mod library;
 use self::{cache::PersistentPipelineCache, config::VulkanConfig};
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
-use std::{borrow::Cow, sync::Arc};
+use std::{
+    borrow::{Borrow, Cow},
+    collections::HashSet,
+    sync::Arc,
+};
 use thiserror::Error;
-#[cfg(feature = "livesim")]
-use vulkano::swapchain::SurfaceCreationError;
 use vulkano::{
     command_buffer::allocator::{CommandBufferAllocator, StandardCommandBufferAllocator},
     descriptor_set::allocator::{DescriptorSetAllocator, StandardDescriptorSetAllocator},
-    device::{Device, DeviceCreationError, DeviceOwned, Queue},
-    instance::{
-        debug::{DebugUtilsMessenger, DebugUtilsMessengerCreationError},
-        InstanceCreationError,
-    },
+    device::{Device, DeviceOwnedVulkanObject, Queue},
+    instance::debug::DebugUtilsMessenger,
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
     swapchain::Surface,
-    ExtensionProperties, LoadingError, OomError, VulkanError, VulkanObject,
+    ExtensionProperties, LoadingError, Validated, ValidationError, VulkanError,
 };
 
 /// Vulkan compute context
@@ -78,17 +77,26 @@ where
     }
 
     /// Give a Vulkan entity a name, if gpu_debug_utils is enabled
-    pub fn set_debug_utils_object_name<Object: VulkanObject + DeviceOwned>(
+    pub fn set_debug_utils_object_name<Object: DeviceOwnedVulkanObject>(
         &self,
         object: &Object,
         make_name: impl FnOnce() -> Cow<'static, str>,
-    ) -> Result<(), OomError> {
+    ) -> Result<(), Validated<VulkanError>> {
         if cfg!(feature = "gpu-debug-utils") {
             let name = make_name();
-            self.device
-                .set_debug_utils_object_name(object, Some(&name))?;
+            object.set_debug_utils_object_name(Some(&name))?;
         }
         Ok(())
+    }
+
+    /// Queue families present in [`Self::queues`]
+    pub fn queue_family_indices(&self) -> impl Borrow<HashSet<u32>> + '_ {
+        let queue_family_indices = self
+            .queues
+            .iter()
+            .map(|queue| queue.queue_family_index())
+            .collect::<HashSet<_>>();
+        queue_family_indices
     }
 }
 //
@@ -112,33 +120,29 @@ pub enum ContextBuildError {
     #[error("failed to load the Vulkan library")]
     Loading(#[from] LoadingError),
 
-    #[error("failed to create a Vulkan instance")]
-    InstanceCreation(#[from] InstanceCreationError),
-
-    #[error("failed to create a debug utils messenger")]
-    DebugUtilsMessengerCreation(#[from] DebugUtilsMessengerCreationError),
-
-    #[cfg(feature = "livesim")]
-    #[error("failed to create a surface from specified window")]
-    SurfaceCreation(#[from] SurfaceCreationError),
-
     #[error("no physical device matches requirements")]
     NoMatchingDevice,
 
-    #[error("failed to create a logical device")]
-    DeviceCreation(#[from] DeviceCreationError),
-
-    #[error("ran out of memory")]
-    Oom(#[from] OomError),
-
-    #[error("encountered a Vulkan runtime error")]
-    Vulkan(#[from] VulkanError),
+    #[error("a Vulkan API call errored out or failed validation ({0})")]
+    Vulkan(#[from] Validated<VulkanError>),
 
     #[error("did not find home directory")]
     HomeDirNotFound,
 
     #[error("failed to read or write on-disk pipeline cache")]
     PipelineCacheIo(#[from] std::io::Error),
+}
+//
+impl From<VulkanError> for ContextBuildError {
+    fn from(value: VulkanError) -> Self {
+        Self::Vulkan(Validated::Error(value))
+    }
+}
+//
+impl From<Box<ValidationError>> for ContextBuildError {
+    fn from(value: Box<ValidationError>) -> Self {
+        Self::Vulkan(value.into())
+    }
 }
 //
 /// Result type associated with VulkanContext setup issues

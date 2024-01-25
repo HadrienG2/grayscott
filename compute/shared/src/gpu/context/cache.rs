@@ -11,7 +11,10 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use vulkano::{device::Device, pipeline::cache::PipelineCache};
+use vulkano::{
+    device::Device,
+    pipeline::cache::{PipelineCache, PipelineCacheCreateInfo},
+};
 
 /// GPU pipeline cache
 ///
@@ -30,16 +33,27 @@ impl PersistentPipelineCache {
     pub fn new(dirs: &ProjectDirs, device: Arc<Device>) -> ContextBuildResult<Self> {
         let path = dirs.cache_dir().join("gpu_pipelines.bin");
 
+        // Load existing cache data, if any
         // TODO: Consider treating some I/O errors as fatal and others as okay
-        let cache = if let Ok(mut cache_file) = File::open(&path) {
+        let initial_data = if let Ok(mut cache_file) = File::open(&path) {
             let mut data = Vec::new();
             cache_file.read_to_end(&mut data)?;
-            // Assumed safe because we hopefully created this file...
-            unsafe { PipelineCache::with_data(device, &data)? }
+            data
         } else {
-            PipelineCache::empty(device)?
+            Vec::new()
         };
 
+        // Create the pipeline cache
+        // SAFETY: We hopefully created the file that the cache is from...
+        let cache = unsafe {
+            PipelineCache::new(
+                device,
+                PipelineCacheCreateInfo {
+                    initial_data,
+                    ..Default::default()
+                },
+            )?
+        };
         Ok(Self { cache, path })
     }
 

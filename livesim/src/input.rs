@@ -10,7 +10,7 @@ use data::{
 use ndarray::ArrayViewMut2;
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, Subbuffer},
-    memory::allocator::{AllocationCreateInfo, MemoryUsage},
+    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter},
 };
 
 // TODO: Expose device requirements
@@ -28,13 +28,13 @@ pub fn create_upload_buffers(
     (0..count)
         .map(|idx| {
             let sub_buffer = Buffer::new_slice::<Precision>(
-                &vulkan.memory_allocator,
+                vulkan.memory_allocator.clone(),
                 BufferCreateInfo {
                     usage: pipeline::input_usage(),
                     ..Default::default()
                 },
                 AllocationCreateInfo {
-                    usage: MemoryUsage::Upload,
+                    memory_type_filter: MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                     ..Default::default()
                 },
                 buffer_len,

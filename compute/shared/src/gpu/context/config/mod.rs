@@ -248,16 +248,22 @@ impl<
         let library = library::load()?;
 
         // Set up instance
-        let mut will_render = false;
-        #[cfg(feature = "livesim")]
-        {
-            will_render = self.window_and_reqs.is_some();
-        }
-        let instance_extensions = instance::select_extensions(
-            &library,
-            (self.instance_extensions)(&library),
-            will_render,
-        );
+        let user_instance_extensions = (self.instance_extensions)(&library);
+        let instance_extensions = {
+            #[cfg(feature = "livesim")]
+            {
+                let window = if let Some((window, _)) = &self.window_and_reqs {
+                    Some(&**window)
+                } else {
+                    None
+                };
+                instance::select_extensions(&library, user_instance_extensions, window)
+            }
+            #[cfg(not(feature = "livesim"))]
+            {
+                instance::select_extensions(&library, user_instance_extensions)
+            }
+        };
         let layers = (self.layers)(&library);
         let instance = DebuggedInstance::new(
             library,
@@ -328,7 +334,7 @@ pub fn create_surface(
     instance: Arc<Instance>,
     window: Arc<Window>,
 ) -> ContextBuildResult<Arc<Surface>> {
-    let created_surface = vulkano_win::create_surface_from_winit(window, instance)?;
+    let created_surface = Surface::from_window(instance, window)?;
     info!("Created a surface from {:?} window", created_surface.api());
     Ok(created_surface)
 }

@@ -11,7 +11,7 @@ use data::concentration::gpu::image::ImageConcentration;
 use data::{concentration::Species, parameters::Parameters};
 use std::{hint::black_box, sync::Once};
 #[cfg(feature = "gpu")]
-use vulkano::sync::FlushError;
+use vulkano::{Validated, VulkanError};
 
 /// Re-export criterion for the criterion_benchmark macro
 #[cfg(feature = "criterion")]
@@ -102,7 +102,7 @@ pub fn full_gpu_future_workload<
     species: &mut Species<ImageConcentration>,
     num_steps: usize,
 ) where
-    <Simulation as crate::SimulateBase>::Error: From<FlushError>,
+    <Simulation as crate::SimulateBase>::Error: From<Validated<VulkanError>>,
 {
     let steps = sim.prepare_steps(sim.now(), species, num_steps).unwrap();
     black_box(

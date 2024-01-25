@@ -7,12 +7,16 @@ use crate::{
 };
 use std::sync::Arc;
 use vulkano::{
-    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage},
+    buffer::{Buffer, BufferCreateInfo, BufferUsage},
+    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferToImageInfo},
     descriptor_set::PersistentDescriptorSet,
-    format::{Format, NumericType},
-    image::{ImageAccess, ImageAspects, ImageDimensions, ImmutableImage, MipmapsCount},
+    format::{Format, NumericFormat},
+    image::{
+        sampler::{Filter, SamplerCreateInfo},
+        Image, ImageAspects, ImageCreateInfo, ImageType, ImageUsage,
+    },
+    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter},
     pipeline::ComputePipeline,
-    sampler::{Filter, SamplerCreateInfo},
     swapchain::ColorSpace,
     sync::GpuFuture,
 };
@@ -21,12 +25,12 @@ use vulkano::{
 
 /// Surface formats that this color palette is compatible with
 pub fn is_supported_surface_format((format, colorspace): (Format, ColorSpace)) -> bool {
-    let Some(color_type) = format.type_color() else {
+    let Some(color_type) = format.numeric_format_color() else {
         return false;
     };
     format.aspects().contains(ImageAspects::COLOR)
         && format.components().iter().take(3).all(|&bits| bits > 0)
-        && color_type == NumericType::UNORM
+        && color_type == NumericFormat::UNORM
         && colorspace == ColorSpace::SrgbNonLinear
 }
 
@@ -53,20 +57,39 @@ pub fn create(
         CommandBufferUsage::OneTimeSubmit,
     )?;
 
-    // Create color palette, record upload commands
+    // Create color palette image, record upload commands
     // FIXME: Expose requirements
-    let palette_image = ImmutableImage::from_iter(
-        &vulkan.memory_allocator,
-        colors(resolution),
-        ImageDimensions::Dim1d {
-            width: resolution,
-            array_layers: 1,
+    let palette_image = Image::new(
+        vulkan.memory_allocator.clone(),
+        ImageCreateInfo {
+            image_type: ImageType::Dim1d,
+            format: Format::B8G8R8A8_UNORM,
+            extent: [resolution, 1, 1],
+            usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
+            ..Default::default()
         },
-        MipmapsCount::One,
-        Format::B8G8R8A8_UNORM,
-        &mut upload_builder,
+        AllocationCreateInfo::default(),
     )?;
-    vulkan.set_debug_utils_object_name(&palette_image.inner().image, || "Color palette".into())?;
+    vulkan.set_debug_utils_object_name(&palette_image, || "Color palette".into())?;
+
+    // Record upload command
+    let palette_buffer = Buffer::from_iter(
+        vulkan.memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::TRANSFER_SRC,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..Default::default()
+        },
+        colors(resolution),
+    )?;
+    vulkan.set_debug_utils_object_name(palette_buffer.buffer(), || "Color palette".into())?;
+    upload_builder.copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
+        palette_buffer,
+        palette_image.clone(),
+    ))?;
 
     // Create palette descriptor set
     let palette = pipeline::new_palette_set(vulkan, pipeline, palette_image.clone())?;

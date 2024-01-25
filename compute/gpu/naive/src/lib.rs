@@ -5,8 +5,6 @@
 //! in the split-source model that Vulkan-based Rust code must sadly use until
 //! rust-gpu is mature enough.
 
-#![allow(clippy::result_large_err)]
-
 mod parameters;
 pub mod pipeline;
 pub mod species;
@@ -26,19 +24,16 @@ use data::{
 use std::sync::Arc;
 use thiserror::Error;
 use vulkano::{
-    buffer::BufferError,
+    buffer::AllocateBufferError,
     command_buffer::{
-        AutoCommandBufferBuilder, BuildError, CommandBufferBeginError, CommandBufferExecError,
-        CommandBufferExecFuture, CommandBufferUsage, PipelineExecutionError,
+        AutoCommandBufferBuilder, CommandBufferExecError, CommandBufferExecFuture,
+        CommandBufferUsage,
     },
-    descriptor_set::{DescriptorSetCreationError, PersistentDescriptorSet},
+    descriptor_set::PersistentDescriptorSet,
     device::Queue,
-    image::view::ImageViewCreationError,
-    pipeline::{compute::ComputePipelineCreationError, ComputePipeline},
-    sampler::SamplerCreationError,
-    shader::ShaderCreationError,
-    sync::{FlushError, GpuFuture},
-    OomError,
+    pipeline::{layout::IntoPipelineLayoutCreateInfoError, ComputePipeline},
+    sync::GpuFuture,
+    Validated, ValidationError, VulkanError,
 };
 
 /// Gray-Scott reaction simulation
@@ -115,7 +110,7 @@ impl SimulateGpu for Simulation {
         )?;
 
         // Prepare to dispatch compute operations
-        pipeline::bind_pipeline(&mut builder, self.pipeline.clone(), self.parameters.clone());
+        pipeline::bind_pipeline(&mut builder, self.pipeline.clone(), self.parameters.clone())?;
         let dispatch_size = species::dispatch_size_for(species, WORK_GROUP_SHAPE);
 
         // Record the simulation steps
@@ -152,53 +147,41 @@ impl Simulation {
 /// Errors that can occur during this computation
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("failed to initialize the Vulkan API")]
+    #[error("failed to initialize the Vulkan API ({0})")]
     ContextBuild(#[from] ContextBuildError),
 
-    #[error("failed to create the compute shader")]
-    ShaderCreation(#[from] ShaderCreationError),
+    #[error("failed to determine compute pipeine layout")]
+    ComputePipelineLayout(#[from] IntoPipelineLayoutCreateInfoError),
 
-    #[error("failed to create the sampler")]
-    SamplerCreation(#[from] SamplerCreationError),
+    #[error("failed to allocate a buffer ({0})")]
+    AllocateBuffer(#[from] Validated<AllocateBufferError>),
 
-    #[error("failed to create the compute pipeline")]
-    PipelineCreation(#[from] ComputePipelineCreationError),
-
-    #[error("failed to move parameters to GPU-accessible memory")]
-    ParamsUpload(#[from] BufferError),
-
-    #[error("failed to create a descriptor set")]
-    DescriptorSetCreation(#[from] DescriptorSetCreationError),
-
-    #[error("failed to manipulate concentration images")]
+    #[error("failed to manipulate concentration images ({0})")]
     Image(#[from] data::concentration::gpu::image::Error),
 
-    #[error("failed to create an image view")]
-    ImageViewCreation(#[from] ImageViewCreationError),
-
-    #[error("failed to start recording a command buffer")]
-    CommandBufferBegin(#[from] CommandBufferBeginError),
-
-    #[error("failed to record a compute dispatch")]
-    PipelineExecution(#[from] PipelineExecutionError),
-
-    #[error("failed to build a command buffer")]
-    CommandBufferBuild(#[from] BuildError),
-
-    #[error("failed to submit commands to the queue")]
+    #[error("failed to submit commands to the queue ({0})")]
     CommandBufferExec(#[from] CommandBufferExecError),
 
-    #[error("failed to flush the queue to the GPU")]
-    Flush(#[from] FlushError),
-
-    #[error("ran out of memory")]
-    Oom(#[from] OomError),
+    #[error("a Vulkan API call errored out or failed validation ({0})")]
+    Vulkan(#[from] Validated<VulkanError>),
 
     #[error("device or shader does not support this domain shape at all")]
     UnsupportedShape,
 
-    #[error("domain shape is not supported with the current work-group shape")]
+    #[error("domain shape is not supported with the current work-group shape ({0})")]
     ShapeGroupMismatch(#[from] PartialWorkGroupError),
+}
+//
+impl From<VulkanError> for Error {
+    fn from(value: VulkanError) -> Self {
+        Self::Vulkan(Validated::Error(value))
+    }
+}
+//
+impl From<Box<ValidationError>> for Error {
+    fn from(value: Box<ValidationError>) -> Self {
+        Self::Vulkan(value.into())
+    }
 }
 //
 pub type Result<T> = std::result::Result<T, Error>;

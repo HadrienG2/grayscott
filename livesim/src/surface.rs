@@ -8,7 +8,7 @@ use std::sync::Arc;
 use vulkano::{
     descriptor_set::PersistentDescriptorSet,
     device::physical::PhysicalDevice,
-    image::SwapchainImage,
+    image::Image,
     pipeline::ComputePipeline,
     swapchain::{Surface, SurfaceInfo, Swapchain, SwapchainCreateInfo},
 };
@@ -52,9 +52,7 @@ pub fn create_window(shape: Shape) -> Result<(EventLoop<()>, Arc<Window>)> {
 }
 
 /// Create a swapchain
-pub fn create_swapchain(
-    context: &SimulationContext,
-) -> Result<(Arc<Swapchain>, Vec<Arc<SwapchainImage>>)> {
+pub fn create_swapchain(context: &SimulationContext) -> Result<(Arc<Swapchain>, Vec<Arc<Image>>)> {
     let vulkan = context.vulkan();
     let physical_device = vulkan.device.physical_device();
     let surface = context.surface();
@@ -72,8 +70,9 @@ pub fn create_swapchain(
         min_image_count: surface_capabilities
             .min_image_count
             .max(MIN_SWAPCHAIN_IMAGES),
-        image_format: Some(image_format),
+        image_format,
         image_color_space,
+        image_extent: surface_capabilities.current_extent.unwrap(),
         image_usage: pipeline::output_usage(),
         ..Default::default()
     };

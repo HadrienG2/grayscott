@@ -6,8 +6,9 @@ use log::{debug, error, info, log, trace, warn};
 use std::{cmp::Ordering, ops::Deref, sync::Arc};
 use vulkano::{
     device::{
-        physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions, Features, Queue,
-        QueueCreateInfo, QueueFamilyProperties, QueueFlags,
+        physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions,
+        DeviceOwnedVulkanObject, Features, Queue, QueueCreateInfo, QueueFamilyProperties,
+        QueueFlags,
     },
     instance::{Instance, Version},
     swapchain::{Surface, SurfaceInfo},
@@ -97,14 +98,14 @@ fn log_description(device: &PhysicalDevice, surface: Option<&Surface>) {
                 .map(|(idx, _family)| idx)
                 .collect::<Vec<_>>()
         );
+        let surface_info = SurfaceInfo::default();
         trace!(
             "  * Supports present modes {:?}",
             device
-                .surface_present_modes(surface)
+                .surface_present_modes(surface, surface_info.clone())
                 .map(|iter| iter.collect::<Vec<_>>())
                 .unwrap_or_default()
         );
-        let surface_info = SurfaceInfo::default();
         trace!(
             "  * Supports surface formats {:?}",
             device
@@ -178,7 +179,7 @@ pub fn create_logical(
     );
     if cfg!(feature = "gpu-debug-utils") {
         for (queue, name) in queues.iter().zip(queue_names) {
-            device.set_debug_utils_object_name(queue, Some(name.as_ref()))?;
+            queue.set_debug_utils_object_name(Some(name.as_ref()))?;
         }
     }
     Ok((device, queues))

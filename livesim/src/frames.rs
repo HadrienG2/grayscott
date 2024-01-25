@@ -9,13 +9,15 @@ use compute::gpu::context::VulkanContext;
 use data::concentration::gpu::shape::Shape;
 use std::sync::Arc;
 use vulkano::{
-    command_buffer::{CommandBufferExecFuture, PrimaryAutoCommandBuffer},
+    command_buffer::{
+        allocator::StandardCommandBufferAllocator, CommandBufferExecFuture,
+        PrimaryAutoCommandBuffer,
+    },
     descriptor_set::PersistentDescriptorSet,
     pipeline::ComputePipeline,
-    swapchain::{
-        self, AcquireError, PresentFuture, Swapchain, SwapchainAcquireFuture, SwapchainPresentInfo,
-    },
-    sync::{future::FenceSignalFuture, FlushError, GpuFuture},
+    swapchain::{self, PresentFuture, Swapchain, SwapchainAcquireFuture, SwapchainPresentInfo},
+    sync::{future::FenceSignalFuture, GpuFuture},
+    Validated, VulkanError,
 };
 
 /// State associated with the processing of multiple on-screen frames
@@ -74,7 +76,9 @@ impl Frames {
         record_commands: impl FnOnce(
             &mut Input,
             Arc<PersistentDescriptorSet>,
-        ) -> Result<PrimaryAutoCommandBuffer>,
+        ) -> Result<
+            Arc<PrimaryAutoCommandBuffer<Arc<StandardCommandBufferAllocator>>>,
+        >,
     ) -> Result<()> {
         // Recreate the swapchain and dependent state as needed
         let vulkan = context.vulkan();
@@ -84,7 +88,7 @@ impl Frames {
         let (image_idx, suboptimal, acquire_future) =
             match swapchain::acquire_next_image(self.swapchain.clone(), None) {
                 Ok(r) => r,
-                Err(AcquireError::OutOfDate) => {
+                Err(Validated::Error(VulkanError::OutOfDate)) => {
                     self.recreate_swapchain = true;
                     return Ok(());
                 }
@@ -127,7 +131,9 @@ impl Frames {
         record_commands: impl FnOnce(
             &mut Input,
             Arc<PersistentDescriptorSet>,
-        ) -> Result<PrimaryAutoCommandBuffer>,
+        ) -> Result<
+            Arc<PrimaryAutoCommandBuffer<Arc<StandardCommandBufferAllocator>>>,
+        >,
     ) -> Result<()> {
         // Wait for the previous render to this surface to terminate so we
         // can safely write to the upload buffer
@@ -156,7 +162,7 @@ impl Frames {
         // Handle swapchain invalidation during scheduling of render
         match schedule_result {
             Ok(future) => self.frame_futures[image_idx] = Some(future),
-            Err(FlushError::OutOfDate) => self.recreate_swapchain = true,
+            Err(Validated::Error(VulkanError::OutOfDate)) => self.recreate_swapchain = true,
             Err(e) => return Err(e.into()),
         }
         Ok(())

@@ -2,7 +2,7 @@
 
 use crate::Precision;
 use thiserror::Error;
-use vulkano::{image::ImageDimensions, DeviceSize};
+use vulkano::{image::ImageType, DeviceSize};
 
 /// Domain shape converter
 ///
@@ -64,12 +64,8 @@ impl Shape {
 
     /// Size of Vulkan images dimensioned after the domain shape
     #[inline]
-    pub const fn image(&self) -> ImageDimensions {
-        ImageDimensions::Dim2d {
-            width: self.width(),
-            height: self.height(),
-            array_layers: 1,
-        }
+    pub const fn image_type_and_extent(&self) -> (ImageType, [u32; 3]) {
+        (ImageType::Dim2d, [self.width(), self.height(), 1])
     }
 
     /// Length of Vulkan buffers dimensioned after the domain shape
@@ -124,24 +120,6 @@ impl TryFrom<[usize; 2]> for Shape {
     fn try_from([rows, cols]: [usize; 2]) -> Result<Self, Self::Error> {
         let convert = |us| u32::try_from(us).map_err(|_| ShapeConvertError::TooLarge);
         Ok(Self::new([convert(rows)?, convert(cols)?]))
-    }
-}
-//
-impl TryFrom<ImageDimensions> for Shape {
-    type Error = ShapeConvertError;
-
-    #[inline]
-    fn try_from(value: ImageDimensions) -> Result<Self, Self::Error> {
-        if let ImageDimensions::Dim2d {
-            width,
-            height,
-            array_layers: 1,
-        } = value
-        {
-            Ok(Self::from_width_height([width, height]))
-        } else {
-            Err(ShapeConvertError::BadImage)
-        }
     }
 }
 //

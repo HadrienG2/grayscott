@@ -3,32 +3,35 @@
 use super::ContextBuildResult;
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
-use std::{ops::Deref, sync::Arc};
+use std::{fmt::Write, ops::Deref, sync::Arc};
 use vulkano::{
     instance::{
         debug::{
             DebugUtilsMessageSeverity, DebugUtilsMessageType, DebugUtilsMessenger,
-            DebugUtilsMessengerCreateInfo, Message,
+            DebugUtilsMessengerCallback, DebugUtilsMessengerCallbackLabel,
+            DebugUtilsMessengerCreateInfo,
         },
-        Instance, InstanceCreateInfo, InstanceExtensions,
+        Instance, InstanceCreateFlags, InstanceCreateInfo, InstanceExtensions,
     },
     VulkanLibrary,
 };
+#[cfg(feature = "livesim")]
+use winit::window::Window;
 
 /// Select Vulkan instance extensions
 #[allow(unused_variables)]
 pub fn select_extensions(
     library: &VulkanLibrary,
     mut extensions: InstanceExtensions,
-    will_render: bool,
+    #[cfg(feature = "livesim")] window: Option<&Window>,
 ) -> InstanceExtensions {
     if cfg!(feature = "gpu-debug-utils") {
         extensions.ext_debug_utils = true;
     }
     #[cfg(feature = "livesim")]
     {
-        if will_render {
-            extensions = extensions.union(&vulkano_win::required_extensions(library));
+        if let Some(window) = window {
+            extensions |= vulkano::swapchain::Surface::required_extensions(window);
         }
     }
     extensions
@@ -74,42 +77,38 @@ impl DebuggedInstance {
             );
         }
 
+        // Set up debug logging, if enabled
+        let debug_messenger_cfg = enabled_extensions
+            .ext_debug_utils
+            .then(Self::configure_debug_messenger);
+
         // Configure instance
+        let mut flags = InstanceCreateFlags::default();
+        if enumerate_portability {
+            flags |= InstanceCreateFlags::ENUMERATE_PORTABILITY;
+        }
         let create_info = InstanceCreateInfo {
+            flags,
             enabled_extensions,
             enabled_layers,
-            enumerate_portability,
+            debug_utils_messengers: debug_messenger_cfg.clone().into_iter().collect(),
             ..InstanceCreateInfo::application_from_cargo_toml()
         };
         info!("Will now create a Vulkan instance with {create_info:#?}");
+        let instance = Instance::new(library, create_info)?;
+        trace!(
+            "Vulkan instance supports Vulkan v{}",
+            instance.api_version()
+        );
 
-        // Create instance, with debug logging if supported
-        let result = if enabled_extensions.ext_debug_utils {
-            // Configure debug utils messenger
-            let debug_messenger_cfg = Self::configure_debug_messenger();
-            info!("Setting up debug utils with {debug_messenger_cfg:#?}");
-
-            // Safe because our logger does not call into Vulkan APIs
-            unsafe {
-                let instance = Instance::with_debug_utils_messengers(
-                    library,
-                    create_info,
-                    Some(debug_messenger_cfg.clone()),
-                )?;
-                let messenger = DebugUtilsMessenger::new(instance.clone(), debug_messenger_cfg)?;
-                Self {
-                    instance,
-                    _messenger: Some(messenger),
-                }
-            }
-        } else {
-            Self {
-                instance: Instance::new(library, create_info)?,
-                _messenger: None,
-            }
-        };
-        trace!("Vulkan instance supports Vulkan v{}", result.api_version());
-        Ok(result)
+        // Set up runtime debug logging
+        let _messenger = debug_messenger_cfg
+            .map(|cfg| DebugUtilsMessenger::new(instance.clone(), cfg))
+            .transpose()?;
+        Ok(Self {
+            instance,
+            _messenger,
+        })
     }
 
     /// Configure Vulkan logging via the debug utils messenger
@@ -119,21 +118,52 @@ impl DebuggedInstance {
         let mut debug_messenger_info = DebugUtilsMessengerCreateInfo {
             message_severity: DUMSeverity::empty(),
             message_type: DUMType::GENERAL,
-            ..DebugUtilsMessengerCreateInfo::user_callback(Arc::new(|message: &Message| {
-                // SAFETY: This callback must not call into Vulkan APIs
-                let level = match message.severity {
-                    DUMSeverity::ERROR => log::Level::Error,
-                    DUMSeverity::WARNING => log::Level::Warn,
-                    DUMSeverity::INFO => log::Level::Debug,
-                    DUMSeverity::VERBOSE => log::Level::Trace,
-                    _ => log::Level::Info,
-                };
-                let target = message
-                    .layer_prefix
-                    .map(|layer| format!("Vulkan {:?} {layer}", message.ty))
-                    .unwrap_or(format!("Vulkan {:?}", message.ty));
-                log!(target: &target, level, "{}", message.description);
-            }))
+            // SAFETY: This callback does not call into Vulkan APIs
+            ..DebugUtilsMessengerCreateInfo::user_callback(unsafe {
+                DebugUtilsMessengerCallback::new(|severity, ty, data| {
+                    let level = match severity {
+                        DUMSeverity::ERROR => log::Level::Error,
+                        DUMSeverity::WARNING => log::Level::Warn,
+                        DUMSeverity::INFO => log::Level::Debug,
+                        DUMSeverity::VERBOSE => log::Level::Trace,
+                        _ => log::Level::Info,
+                    };
+                    if level > log::max_level() {
+                        return;
+                    }
+                    let target = data
+                        .message_id_name
+                        .map(|id_name| format!("Vulkan {:?} {id_name}", ty))
+                        .unwrap_or(format!("Vulkan {:?}", ty));
+                    fn labels<'iter>(
+                        iter: impl Iterator<Item = DebugUtilsMessengerCallbackLabel<'iter>>,
+                    ) -> Vec<&'iter str> {
+                        iter.map(|label| label.label_name).collect::<Vec<_>>()
+                    }
+                    let queue_labels = labels(data.queue_labels);
+                    let cmd_buf_labels = labels(data.cmd_buf_labels);
+                    let objects = data
+                        .objects
+                        .map(|obj| {
+                            let mut desc = format!("{:?} #{}", obj.object_type, obj.object_handle);
+                            if let Some(name) = obj.object_name {
+                                write!(desc, " named \"{name}\"").expect("can't fail");
+                            }
+                            desc
+                        })
+                        .collect::<Vec<_>>();
+                    log!(
+                        target: &target,
+                        level,
+                        "{} (id: {}, queue_labels: {:?}, cmd_buf_labels: {:?}, objects: {:?})",
+                        data.message,
+                        data.message_id_number,
+                        queue_labels,
+                        cmd_buf_labels,
+                        objects,
+                    );
+                })
+            })
         };
         if log::STATIC_MAX_LEVEL >= log::Level::Error {
             debug_messenger_info.message_severity |= DUMSeverity::ERROR;
@@ -150,6 +180,7 @@ impl DebuggedInstance {
         if cfg!(debug_assertions) {
             debug_messenger_info.message_type |= DUMType::VALIDATION | DUMType::PERFORMANCE;
         };
+        info!("Setting up debug utils with {debug_messenger_info:#?}");
         debug_messenger_info
     }
 }

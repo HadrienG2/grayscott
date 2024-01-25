@@ -1,7 +1,5 @@
 //! Common facilities shared by all GPU compute backends
 
-#![allow(clippy::result_large_err)]
-
 pub mod context;
 
 use self::context::{config::VulkanConfig, VulkanContext};
@@ -9,7 +7,10 @@ use crate::{SimulateBase, SimulateCreate};
 use data::{concentration::Species, parameters::Parameters};
 #[allow(unused_imports)]
 use log::{debug, error, info, log, trace, warn};
-use vulkano::sync::{future::NowFuture, FlushError, GpuFuture};
+use vulkano::{
+    sync::{future::NowFuture, GpuFuture},
+    Validated, VulkanError,
+};
 
 /// Lower-level, asynchronous interface to a GPU compute backend
 ///
@@ -30,7 +31,7 @@ use vulkano::sync::{future::NowFuture, FlushError, GpuFuture};
 /// focused it took priority for usage simplicity.
 pub trait SimulateGpu: SimulateBase
 where
-    <Self as SimulateBase>::Error: From<FlushError>,
+    <Self as SimulateBase>::Error: From<Validated<VulkanError>>,
 {
     /// Variant of SimulateCreate::new() that also accepts a preliminary Vulkan
     /// context configuration
@@ -92,7 +93,7 @@ where
 //
 impl<T: SimulateGpu> SimulateCreate for T
 where
-    <T as SimulateBase>::Error: From<FlushError>,
+    <T as SimulateBase>::Error: From<Validated<VulkanError>>,
 {
     fn new(params: Parameters, args: Self::CliArgs) -> Result<Self, Self::Error> {
         Self::with_config(params, args, VulkanConfig::default())
