@@ -301,9 +301,12 @@ jobs:
           - 'compute_autovec'
           - 'compute_block'
           - 'compute_parallel'
-          - 'compute_gpu_naive'
-          - 'compute_gpu_specialized'
-          - 'compute_gpu_specialized,gpu-debug-utils'
+          # FIXME: Must get a working Vulkan impl in CI for this, and for some
+          #        unknown reason llvmpipe doesn't cut it there even though it
+          #        does in a local ubuntu:22.04 image... :(
+          # - 'compute_gpu_naive'
+          # - 'compute_gpu_specialized'
+          # - 'compute_gpu_specialized,gpu-debug-utils'
 
     env:
       FEATURES_FLAG: '--features=${{ matrix.features }}'
