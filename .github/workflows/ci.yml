@@ -263,7 +263,7 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
 
       - name: Install cargo-criterion
-        uses: baptiste0928/cargo-install@v2
+        uses: baptiste0928/cargo-install@v3
         with:
           crate: cargo-criterion
 
@@ -336,7 +336,7 @@ jobs:
         run: mkdir out && cargo run --bin data-to-pics -- -o out
 
       - name: Install cargo-criterion
-        uses: baptiste0928/cargo-install@v2
+        uses: baptiste0928/cargo-install@v3
         with:
           crate: cargo-criterion
 
