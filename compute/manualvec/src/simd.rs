@@ -33,12 +33,6 @@ pub trait Vector: Copy + Sized {
     fn mul_sub(self, mul: Self, sub: Self) -> Self {
         self.mul(mul).sub(sub)
     }
-
-    /// Negated multiply-add
-    #[inline]
-    fn mul_neg_add(self, min_mul: Self, add: Self) -> Self {
-        add.sub(self.mul(min_mul))
-    }
 }
 
 /// Mapping from scalar types to SIMD types
@@ -98,12 +92,6 @@ cfg_if! {
             fn mul_sub(self, mul: Self, sub: Self) -> Self {
                 safe_arch::fused_mul_sub_m256(self, mul, sub)
             }
-
-            #[cfg(target_feature = "fma")]
-            #[inline]
-            fn mul_neg_add(self, min_mul: Self, add: Self) -> Self {
-                safe_arch::fused_mul_neg_add_m256(self, min_mul, add)
-            }
         }
 
         impl Scalar for f32 {
@@ -145,12 +133,6 @@ cfg_if! {
             #[inline]
             fn mul_sub(self, mul: Self, sub: Self) -> Self {
                 safe_arch::fused_mul_sub_m256d(self, mul, sub)
-            }
-
-            #[cfg(target_feature = "fma")]
-            #[inline]
-            fn mul_neg_add(self, min_mul: Self, add: Self) -> Self {
-                safe_arch::fused_mul_neg_add_m256d(self, min_mul, add)
             }
         }
 
@@ -197,12 +179,6 @@ cfg_if! {
             fn mul_sub(self, mul: Self, sub: Self) -> Self {
                 safe_arch::fused_mul_sub_m128(self, mul, sub)
             }
-
-            #[cfg(target_feature = "fma")]
-            #[inline]
-            fn mul_neg_add(self, min_mul: Self, add: Self) -> Self {
-                safe_arch::fused_mul_neg_add_m128(self, min_mul, add)
-            }
         }
 
         impl Scalar for f32 {
@@ -244,12 +220,6 @@ cfg_if! {
             #[inline]
             fn mul_sub(self, mul: Self, sub: Self) -> Self {
                 safe_arch::fused_mul_sub_m128d(self, mul, sub)
-            }
-
-            #[cfg(target_feature = "fma")]
-            #[inline]
-            fn mul_neg_add(self, min_mul: Self, add: Self) -> Self {
-                safe_arch::fused_mul_neg_add_m128d(self, min_mul, add)
             }
         }
 
