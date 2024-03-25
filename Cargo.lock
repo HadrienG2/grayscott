@@ -352,9 +352,9 @@ checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
 name = "colorous"
-version = "1.0.12"
+version = "1.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7eb0838c7c2f4548ff2218bfdcc6ce3d34ffabd0128bfb9eb44cf27de1ec38b3"
+checksum = "f51b75d5c2da6c9c4b0f3eabea722d6878f6c842cb02cf74fb317e94fd8cb042"
 
 [[package]]
 name = "compute"
