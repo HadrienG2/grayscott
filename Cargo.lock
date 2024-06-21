@@ -996,9 +996,9 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hwlocality"
-version = "1.0.0-alpha.4"
+version = "1.0.0-alpha.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4b559a30e4a7e336f389a79e58a9933c1aa07f91d09c55bb6ffcce046a709e0"
+checksum = "29e2cf498912fab0cb98cae17170e146235dc01b0b6150594d295578f103932e"
 dependencies = [
  "arrayvec",
  "bitflags 2.5.0",
@@ -1162,7 +1162,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c2a198fb6b0eada2a8df47933734e6d35d350665a33a3593d7164fa52c75c19"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.5",
 ]
 
 [[package]]
