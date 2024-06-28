@@ -80,36 +80,37 @@ impl SimulateCpu for Simulation {
             let u = win_u[stencil_offset];
             let v = win_v[stencil_offset];
 
+            // Compute SIMD versions of the stencil weights
+            let weights = weights.0.map(|row| row.map(Values::splat));
+
             // Compute diffusion gradient
-            let [full_u, full_v] = (win_u.rows().into_iter())
-                .zip(win_v.rows())
-                .zip(weights.0)
-                .flat_map(|((u_row, v_row), weights_row)| {
-                    (u_row.into_iter().copied())
-                        .zip(v_row.into_iter().copied())
-                        .zip(weights_row)
-                })
-                .fold(
-                    [Values::splat(0.); 2],
-                    |[acc_u, acc_v], ((stencil_u, stencil_v), weight)| {
-                        let weight = Values::splat(weight);
-                        [
-                            mul_add(weight, stencil_u, acc_u),
-                            mul_add(weight, stencil_v, acc_v),
-                        ]
-                    },
-                );
+            let mut full_u_1 = win_u[[0, 0]] * weights[0][0];
+            let mut full_v_1 = win_v[[0, 0]] * weights[0][0];
+            let mut full_u_2 = win_u[[0, 1]] * weights[0][1];
+            let mut full_v_2 = win_v[[0, 1]] * weights[0][1];
+            let mut full_u_3 = win_u[[0, 2]] * weights[0][2];
+            let mut full_v_3 = win_v[[0, 2]] * weights[0][2];
+            full_u_1 = win_u[[1, 0]].mul_add(weights[1][0], full_u_1);
+            full_v_1 = win_v[[1, 0]].mul_add(weights[1][0], full_v_1);
+            full_u_2 = win_u[[1, 1]].mul_add(weights[1][1], full_u_2);
+            full_v_2 = win_v[[1, 1]].mul_add(weights[1][1], full_v_2);
+            full_u_3 = win_u[[1, 2]].mul_add(weights[1][2], full_u_3);
+            full_v_3 = win_v[[1, 2]].mul_add(weights[1][2], full_v_3);
+            full_u_1 = win_u[[2, 0]].mul_add(weights[2][0], full_u_1);
+            full_v_1 = win_v[[2, 0]].mul_add(weights[2][0], full_v_1);
+            full_u_2 = win_u[[2, 1]].mul_add(weights[2][1], full_u_2);
+            full_v_2 = win_v[[2, 1]].mul_add(weights[2][1], full_v_2);
+            full_u_3 = win_u[[2, 2]].mul_add(weights[2][2], full_u_3);
+            full_v_3 = win_v[[2, 2]].mul_add(weights[2][2], full_v_3);
+            let full_u = full_u_1 + full_u_2 + full_u_3;
+            let full_v = full_v_1 + full_v_2 + full_v_3;
 
             // Deduce variation of U and V
             let uv_square = u * v * v;
-            let du = mul_add(diffusion_rate_u, full_u, feed_rate * (ones - u) - uv_square);
-            let dv = mul_add(
-                diffusion_rate_v,
-                full_v,
-                mul_add(min_feed_kill, v, uv_square),
-            );
-            *out_u = mul_add(du, time_step, u);
-            *out_v = mul_add(dv, time_step, v);
+            let du = diffusion_rate_u * full_u - uv_square + feed_rate * (ones - u);
+            let dv = diffusion_rate_v * full_v + uv_square + min_feed_kill * v;
+            *out_u = u + du * time_step;
+            *out_v = u + dv * time_step;
         }
     }
 }

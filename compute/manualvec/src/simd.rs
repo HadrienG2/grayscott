@@ -27,12 +27,6 @@ pub trait Vector: Copy + Sized {
     fn mul_add(self, mul: Self, add: Self) -> Self {
         self.mul(mul).add(add)
     }
-
-    /// Multiply-subtract
-    #[inline]
-    fn mul_sub(self, mul: Self, sub: Self) -> Self {
-        self.mul(mul).sub(sub)
-    }
 }
 
 /// Mapping from scalar types to SIMD types
@@ -86,12 +80,6 @@ cfg_if! {
             fn mul_add(self, mul: Self, add: Self) -> Self {
                 safe_arch::fused_mul_add_m256(self, mul, add)
             }
-
-            #[cfg(target_feature = "fma")]
-            #[inline]
-            fn mul_sub(self, mul: Self, sub: Self) -> Self {
-                safe_arch::fused_mul_sub_m256(self, mul, sub)
-            }
         }
 
         impl Scalar for f32 {
@@ -127,12 +115,6 @@ cfg_if! {
             #[inline]
             fn mul_add(self, mul: Self, add: Self) -> Self {
                 safe_arch::fused_mul_add_m256d(self, mul, add)
-            }
-
-            #[cfg(target_feature = "fma")]
-            #[inline]
-            fn mul_sub(self, mul: Self, sub: Self) -> Self {
-                safe_arch::fused_mul_sub_m256d(self, mul, sub)
             }
         }
 
@@ -173,12 +155,6 @@ cfg_if! {
             fn mul_add(self, mul: Self, add: Self) -> Self {
                 safe_arch::fused_mul_add_m128(self, mul, add)
             }
-
-            #[cfg(target_feature = "fma")]
-            #[inline]
-            fn mul_sub(self, mul: Self, sub: Self) -> Self {
-                safe_arch::fused_mul_sub_m128(self, mul, sub)
-            }
         }
 
         impl Scalar for f32 {
@@ -214,12 +190,6 @@ cfg_if! {
             #[inline]
             fn mul_add(self, mul: Self, add: Self) -> Self {
                 safe_arch::fused_mul_add_m128d(self, mul, add)
-            }
-
-            #[cfg(target_feature = "fma")]
-            #[inline]
-            fn mul_sub(self, mul: Self, sub: Self) -> Self {
-                safe_arch::fused_mul_sub_m128d(self, mul, sub)
             }
         }
 
