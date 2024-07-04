@@ -34,9 +34,6 @@ layout(constant_id = 15) const float time_step = 1.0;
 
 // === GPU-side code ===
 
-// Diffusion rate
-const vec2 diffusion_rate_uv = vec2(diffusion_rate_u, diffusion_rate_v);
-
 // What each shader invocation does
 void main() {
     // Stencil weights
@@ -59,14 +56,12 @@ void main() {
             full_uv += weights[x][y] * (stencil_uv - uv);
         }
     }
-    const vec2 diffusion = diffusion_rate_uv * full_uv;
+    const float diffusion_u = diffusion_rate_u * full_uv.x;
+    const float diffusion_v = diffusion_rate_v * full_uv.y;
 
     // Deduce rate of change in u and v
     const float u = uv.x;
-    const float diffusion_u = diffusion.x;
     const float v = uv.y;
-    const float diffusion_v = diffusion.y;
-    //
     const float uv_square = u * v * v;
     const float du = diffusion_u - uv_square + feed_rate * (1.0 - u);
     const float dv = diffusion_v + uv_square - (feed_rate + kill_rate) * v;
