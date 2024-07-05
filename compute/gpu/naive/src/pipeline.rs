@@ -232,8 +232,6 @@ pub fn record_step<CommAlloc: CommandBufferAllocator>(
 mod shader {
     vulkano_shaders::shader! {
         ty: "compute",
-        vulkan_version: "1.0",
-        spirv_version: "1.0",
         path: "src/main.comp",
     }
 }
