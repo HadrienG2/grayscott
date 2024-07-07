@@ -110,7 +110,7 @@ impl SimulateCpu for Simulation {
             let du = diffusion_rate_u * full_u - uv_square + feed_rate * (ones - u);
             let dv = diffusion_rate_v * full_v + uv_square + min_feed_kill * v;
             *out_u = u + du * time_step;
-            *out_v = u + dv * time_step;
+            *out_v = v + dv * time_step;
         }
     }
 }
