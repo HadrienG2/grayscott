@@ -23,7 +23,7 @@ layout(set = 1, binding = 0) uniform Parameters {
 // Diffusion stencil properties
 const ivec2 stencil_shape = ivec2(params.weights.length(),
                                   params.weights[0].length());
-const ivec2 stencil_offset = ivec2((stencil_shape - 1) / 2);
+const ivec2 stencil_offset = (stencil_shape - 1) / 2;
 
 // What each shader invocation does
 void main() {
@@ -42,18 +42,16 @@ void main() {
             full_uv += params.weights[x][y] * (stencil_uv - uv);
         }
     }
-    const vec2 diffusion_rate_uv = vec2(params.diffusion_rate_u, params.diffusion_rate_v);
-    const vec2 diffusion = diffusion_rate_uv * full_uv;
+    const float diffusion_u = params.diffusion_rate_u * full_uv.x;
+    const float diffusion_v = params.diffusion_rate_v * full_uv.y;
 
     // Deduce rate of change in u and v
     const float u = uv.x;
-    const float diffusion_u = diffusion.x;
     const float v = uv.y;
-    const float diffusion_v = diffusion.y;
-    //
     const float uv_square = u * v * v;
     const float du = diffusion_u - uv_square + params.feed_rate * (1.0 - u);
-    const float dv = diffusion_v + uv_square - (params.feed_rate + params.kill_rate) * v;
+    const float dv = diffusion_v + uv_square
+                                 - (params.feed_rate + params.kill_rate) * v;
 
     // Update u and v accordingly
     write_uv(center_idx, uv + vec2(du, dv) * params.time_step);

@@ -1,8 +1,8 @@
 # Performance with stencil (Rust version)
 
 This is a Rust version of the examples from the ["Performance with Stencil"
-course](https://lappweb.in2p3.fr/~paubert/PERFORMANCE_WITH_STENCIL/index.html),
-with a few new tricks of mine.
+course](https://cta-lapp.pages.in2p3.fr/COURS/PERFORMANCE_WITH_STENCIL/), with a
+few new tricks of mine.
 
 ## Prerequisites
 
