@@ -72,7 +72,7 @@ image = { version = "0.24", default-features = false, features = ["png"] }
 log = "0.4"
 
 # Basic multidimensional array abstraction
-ndarray = "0.15"
+ndarray = "0.16"
 
 # Data-parallelism library
 rayon = "1.10"
