@@ -22,7 +22,7 @@ env:
   CARGO_INCREMENTAL: 0
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
-  MINIMAL_RUST: 1.75.0  # Minimal Supported Rust Version
+  MINIMAL_RUST: 1.80.0  # Minimal Supported Rust Version
 
 jobs:
   # Workaround for github CI dropping env var expansion in matrix strategy
@@ -79,9 +79,9 @@ jobs:
   # about building and running correctly.
   lints:
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event.pull_request.head.repo.full_name != github.repository
-    
+
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
         features:
@@ -134,11 +134,11 @@ jobs:
     # Don't run CI twice when a PR is created from a branch internal to the repo
     # Don't run in scheduled jobs, that's what test-scheduled is for
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
- 
+
     runs-on: ubuntu-latest
 
     needs: matrix_vars
- 
+
     strategy:
       matrix:
         toolchain:
@@ -151,11 +151,11 @@ jobs:
 
     env:
       FEATURES_FLAG: '--features=${{ matrix.features }}'
- 
+
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
- 
+
       - name: Install native dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
@@ -166,7 +166,7 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ matrix.toolchain }}
- 
+
       - name: Run unit tests
         run: cargo test --workspace ${{ env.FEATURES_FLAG }}
 
@@ -180,11 +180,11 @@ jobs:
     # Don't run CI twice when a PR is created from a branch internal to the repo
     # Don't run in scheduled jobs, that's what test-scheduled is for
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
- 
+
     runs-on: ubuntu-latest
 
     needs: matrix_vars
- 
+
     strategy:
       matrix:
         toolchain:
@@ -207,11 +207,11 @@ jobs:
 
     env:
       FEATURES_FLAG: '--features=${{ matrix.features }}'
- 
+
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
- 
+
       - name: Install native dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
@@ -222,10 +222,10 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ matrix.toolchain }}
- 
+
       - name: Run a tiny simulation job
         run: cargo run ${{ env.FEATURES_FLAG }} --bin simulate -- -n 10
- 
+
       - name: Translate simulation output to images
         run: mkdir out && cargo run ${{ env.FEATURES_FLAG }} --bin data-to-pics -- -o out
 
@@ -239,11 +239,11 @@ jobs:
     # Don't run CI twice when a PR is created from a branch internal to the repo
     # Don't run in scheduled jobs, that's what test-scheduled is for
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
- 
+
     runs-on: ubuntu-latest
 
     needs: matrix_vars
- 
+
     strategy:
       matrix:
         toolchain:
@@ -256,11 +256,11 @@ jobs:
 
     env:
       FEATURES_FLAG: '--features=${{ matrix.features }}'
- 
+
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
- 
+
       - name: Install native dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
@@ -292,11 +292,11 @@ jobs:
   #
   test-scheduled:
     if: github.event_name == 'schedule'
- 
+
     runs-on: ubuntu-latest
 
     needs: matrix_vars
- 
+
     strategy:
       matrix:
         toolchain:
@@ -320,11 +320,11 @@ jobs:
 
     env:
       FEATURES_FLAG: '--features=${{ matrix.features }}'
- 
+
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
- 
+
       - name: Install native dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
@@ -335,13 +335,13 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ matrix.toolchain }}
- 
+
       - name: Run unit tests
         run: cargo test --workspace ${{ env.FEATURES_FLAG }}
- 
+
       - name: Run a tiny simulation job
         run: cargo run --bin simulate ${{ env.FEATURES_FLAG }} -- -n 10
- 
+
       - name: Translate simulation output to images
         run: mkdir out && cargo run --bin data-to-pics -- -o out
 
