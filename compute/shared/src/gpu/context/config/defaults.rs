@@ -163,9 +163,7 @@ pub fn queues(
 
             // If a surface is specified, then we must be able to present to
             // that surface too
-            surface.map_or(true, |surface| {
-                device.surface_support(*idx, surface).unwrap_or(false)
-            })
+            surface.is_none_or(|surface| device.surface_support(*idx, surface).unwrap_or(false))
         })
         .max_by(|(idx1, queue1), (idx2, queue2)| {
             // Queues that support graphics are most likely to be the main queue
