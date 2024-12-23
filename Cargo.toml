@@ -24,7 +24,7 @@ edition = "2021"
 
 [workspace.dependencies]
 # Used to safely manipulate data as bytes
-bytemuck = "1.20"
+bytemuck = "1.21"
 
 # Used for various feature flag wrangling purposes
 cfg-if = "1.0"
