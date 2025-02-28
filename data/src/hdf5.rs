@@ -4,10 +4,10 @@ use crate::{
     concentration::{AsScalars, Concentration, ScalarConcentration, Species},
     Precision,
 };
-use hdf5::{Dataset, File};
+use hdf5_metno::{Dataset, File};
 use std::path::Path;
 
-pub use hdf5::Result;
+pub use hdf5_metno::Result;
 
 /// Common configuration for reading and writing to HDF5 files
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

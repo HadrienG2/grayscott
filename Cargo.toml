@@ -39,7 +39,7 @@ clap = { version = "4.5", features = ["derive"] }
 colorous = "1.0"
 
 # Used to lay out data the way GPUs like
-crevice = "0.13"
+crevice = "0.18"
 
 # Used for microbenchmarking
 criterion = { version = "0.5", default-features = false }
@@ -48,16 +48,16 @@ criterion = { version = "0.5", default-features = false }
 crossbeam-channel = "0.5"
 
 # Standard OS directories (used for GPU pipeline cache storage)
-directories = "5.0"
+directories = "6.0"
 
 # Used for tests that emit logs
-env_logger = "0.10"
+env_logger = "0.11"
 
 # Used for error propagation and backtraces in final binaries
 eyre = "0.6"
 
 # Used when saving raw data to files
-hdf5 = { package = "hdf5-metno", version = "0.9.2" }
+hdf5-metno = "0.10"
 
 # Used for cache locality optimizations
 hwlocality = "1.0.0-alpha.6"
@@ -66,7 +66,7 @@ hwlocality = "1.0.0-alpha.6"
 indicatif = "0.17"
 
 # Used when exporting visualizations as images
-image = { version = "0.24", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 # Used to log diagnostic info from third-party libraries (e.g. Vulkan)
 log = "0.4"
@@ -78,7 +78,7 @@ ndarray = "0.16"
 rayon = "1.10"
 
 # Intrinsics-based SIMD backend
-safe_arch = "0.6"
+safe_arch = "0.7"
 
 # Used to safely handle self-referential data
 self_cell = "1.1"
@@ -87,10 +87,10 @@ self_cell = "1.1"
 slipstream = "0.2.1"
 
 # Syslog-based log output
-syslog = "6.1"
+syslog = "7.0"
 
 # Used to ease writing new error types
-thiserror = "1.0"
+thiserror = "2.0"
 
 # Interface to the Vulkan GPU library
 vulkano = "0.34"

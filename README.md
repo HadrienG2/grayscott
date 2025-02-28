@@ -9,7 +9,7 @@ few new tricks of mine.
 In addition to [a recent Rust toolchain](https://www.rust-lang.org/learn/get-started),
 you will need to install development packages for the following C/++ libraries:
 
-- [hdf5](https://github.com/aldanor/hdf5-rust#compatibility)
+- [hdf5](https://github.com/metno/hdf5-rust/blob/main/README.md#compatibility)
 - [hwloc](https://github.com/Ichbinjoe/hwloc2-rs#prerequisites)
 
 Additinally, GPU examples use the Vulkan API through the
