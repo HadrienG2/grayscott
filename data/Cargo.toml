@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [features]
+# hdf5 I/O support
+hdf5 = ["dep:hdf5-metno"]
+
 # GPU storage backend
 gpu = ["self_cell", "thiserror", "vulkano"]
 
@@ -15,7 +18,7 @@ gpu-debug-utils = ["gpu"]
 gpu-parameters = ["bytemuck", "crevice", "gpu"]
 
 # SIMD storage backends
-safe_arch = ["dep:safe_arch", "simd"]
+safe_arch = ["simd", "dep:safe_arch"]
 slipstream = ["simd", "dep:slipstream"]
 
 # Commonalities between SIMD backends (automatically enabled by above backends)
@@ -58,7 +61,7 @@ cfg-if.workspace = true
 ndarray.workspace = true
 
 # HDF5 storage
-hdf5 = { workspace = true, optional = true }
+hdf5-metno = { workspace = true, optional = true }
 
 # SIMD backends
 safe_arch = { workspace = true, optional = true }
