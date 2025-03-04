@@ -89,7 +89,7 @@ fn main() -> Result<()> {
 
     // Set up simulation domain and associated rendering state
     let mut species = context.simulation().make_species(domain_shape.ndarray())?;
-    let mut frames = Frames::new(&context, &pipeline)?;
+    let mut frames = Frames::new(&context, &pipeline, domain_shape)?;
 
     // Wait for GPU-side initialization tasks to finish
     upload_future.wait(None)?;

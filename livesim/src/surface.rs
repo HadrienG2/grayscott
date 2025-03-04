@@ -52,7 +52,10 @@ pub fn create_window(shape: Shape) -> Result<(EventLoop<()>, Arc<Window>)> {
 }
 
 /// Create a swapchain
-pub fn create_swapchain(context: &SimulationContext) -> Result<(Arc<Swapchain>, Vec<Arc<Image>>)> {
+pub fn create_swapchain(
+    context: &SimulationContext,
+    domain_shape: Shape,
+) -> Result<(Arc<Swapchain>, Vec<Arc<Image>>)> {
     let vulkan = context.vulkan();
     let physical_device = vulkan.device.physical_device();
     let surface = context.surface();
@@ -72,7 +75,7 @@ pub fn create_swapchain(context: &SimulationContext) -> Result<(Arc<Swapchain>, 
             .max(MIN_SWAPCHAIN_IMAGES),
         image_format,
         image_color_space,
-        image_extent: surface_capabilities.current_extent.unwrap(),
+        image_extent: [domain_shape.width(), domain_shape.height()],
         image_usage: pipeline::output_usage(),
         ..Default::default()
     };

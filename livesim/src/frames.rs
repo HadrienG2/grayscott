@@ -40,9 +40,13 @@ pub struct Frames {
 //
 impl Frames {
     /// Set up per-frame state
-    pub fn new(context: &SimulationContext, pipeline: &ComputePipeline) -> Result<Self> {
+    pub fn new(
+        context: &SimulationContext,
+        pipeline: &ComputePipeline,
+        domain_shape: Shape,
+    ) -> Result<Self> {
         // Set up a swapchain
-        let (swapchain, swapchain_images) = surface::create_swapchain(context)?;
+        let (swapchain, swapchain_images) = surface::create_swapchain(context, domain_shape)?;
 
         // Set up buffers to upload simulation results to the GPU
         // TODO: If the simulation backend is GPU-based, directly access simulation
