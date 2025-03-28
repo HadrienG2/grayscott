@@ -276,7 +276,7 @@ pub fn fast_grid_iter<'grid, 'input: 'grid, 'output: 'grid, Values>(
         }
 
         // Otherwise, check if we reached the end of iteration
-        if out_v_ptr == out_v_end {
+        if std::ptr::eq(out_v_ptr, out_v_end) {
             return None;
         }
 
