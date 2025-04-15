@@ -81,7 +81,7 @@ rayon = "1.10"
 safe_arch = "0.7"
 
 # Used to safely handle self-referential data
-self_cell = "1.1"
+self_cell = "1.2"
 
 # Autovectorization-based SIMD backend
 slipstream = "0.2.1"
