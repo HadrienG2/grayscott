@@ -86,7 +86,9 @@ impl Reader {
         let dataset_name = config.dataset_name();
         let file = File::open(config.file_name)?;
         let dataset = file.dataset(dataset_name)?;
-        let num_images = dataset.num_chunks().expect("Dataset should be chunked");
+        let shape = dataset.shape();
+        assert_eq!(shape.len(), 3, "Dataset should be three-dimensional");
+        let num_images = shape[0];
         Ok(Self {
             state: State {
                 file,
