@@ -70,7 +70,8 @@ fn main() -> Result<()> {
     let [rows, cols] = reader.image_shape();
 
     // Set up progress reporting
-    let progress = ui::init_progress_reporting("Generating image", reader.num_images());
+    let num_images = reader.num_images();
+    let progress = ui::init_progress_reporting("Generating image", num_images);
 
     // Set up the I/O threads
     std::thread::scope(|s| {
@@ -92,13 +93,15 @@ fn main() -> Result<()> {
             let output_dir = &args.output_dir;
             let progress = &progress;
 
+            // Put leading zeros in name to help brain-damaged Unix number sort
+            let width = num_images.ilog10() as usize + 1;
             for _ in 0..args.output_threads.into() {
                 let image_recv = image_recv.clone();
                 let image_recycle_send = image_recycle_send.clone();
                 s.spawn(move || {
                     for (idx, image) in image_recv {
                         image
-                            .save(output_dir.join(format!("{idx}.png")))
+                            .save(output_dir.join(format!("{idx:00$}.png", width)))
                             .expect("Failed to save image");
                         let _ = image_recycle_send.send(image);
                         progress.inc(1);
