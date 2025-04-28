@@ -133,8 +133,8 @@ impl DebuggedInstance {
                     }
                     let target = data
                         .message_id_name
-                        .map(|id_name| format!("Vulkan {:?} {id_name}", ty))
-                        .unwrap_or(format!("Vulkan {:?}", ty));
+                        .map(|id_name| format!("Vulkan {ty:?} {id_name}"))
+                        .unwrap_or(format!("Vulkan {ty:?}"));
                     fn labels<'iter>(
                         iter: impl Iterator<Item = DebugUtilsMessengerCallbackLabel<'iter>>,
                     ) -> Vec<&'iter str> {

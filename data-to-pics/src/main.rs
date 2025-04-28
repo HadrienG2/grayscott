@@ -101,7 +101,7 @@ fn main() -> Result<()> {
                 s.spawn(move || {
                     for (idx, image) in image_recv {
                         image
-                            .save(output_dir.join(format!("{idx:00$}.png", width)))
+                            .save(output_dir.join(format!("{idx:0width$}.png")))
                             .expect("Failed to save image");
                         let _ = image_recycle_send.send(image);
                         progress.inc(1);
