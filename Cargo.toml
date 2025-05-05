@@ -60,7 +60,7 @@ eyre = "0.6"
 hdf5-metno = "0.10"
 
 # Used for cache locality optimizations
-hwlocality = "1.0.0-alpha.6"
+hwlocality = "1.0.0-alpha.7"
 
 # Used for progress report in the binaries
 indicatif = "0.17"
