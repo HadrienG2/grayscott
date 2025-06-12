@@ -49,7 +49,7 @@ fn main() -> Result<()> {
 
     // Parse CLI arguments and handle clap-incompatible defaults
     let args = Args::parse();
-    let steps_per_image = args.shared.nbextrastep.unwrap_or(34);
+    let steps_per_image = args.shared.nbextrastep.unwrap_or(32);
     let file_name = ui::simulation_output_path(args.output);
 
     // Set up the simulation
