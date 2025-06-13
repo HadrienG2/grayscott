@@ -85,7 +85,7 @@ impl<Backend: SimulateCpu, BlockSize: DefaultBlockSize> SimulateCpu
 {
     type Values = Backend::Values;
 
-    fn extract_grid(species: &mut Species<Self::Concentration>) -> CpuGrid<Self::Values> {
+    fn extract_grid(species: &mut Species<Self::Concentration>) -> CpuGrid<'_, '_, Self::Values> {
         Backend::extract_grid(species)
     }
 

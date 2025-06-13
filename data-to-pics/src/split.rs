@@ -9,7 +9,7 @@ use image::{ImageBuffer, Rgb, RgbImage};
 pub type RgbImageView<'a> = ImageBuffer<Rgb<u8>, &'a mut [u8]>;
 
 // Produce a mutable view of an image
-pub fn image_view(image: &mut RgbImage) -> RgbImageView {
+pub fn image_view(image: &mut RgbImage) -> RgbImageView<'_> {
     let width = image.width();
     let height = image.height();
     let subpixels: &mut [u8] = image;
@@ -17,7 +17,7 @@ pub fn image_view(image: &mut RgbImage) -> RgbImageView {
 }
 
 // Vertically split an image view
-pub fn vsplit_image(image: RgbImageView, row: usize) -> [RgbImageView; 2] {
+pub fn vsplit_image<'a>(image: RgbImageView<'a>, row: usize) -> [RgbImageView<'a>; 2] {
     let width = image.width();
     let subpixels_per_row = image.sample_layout().height_stride;
     let subpixels = image.into_raw();

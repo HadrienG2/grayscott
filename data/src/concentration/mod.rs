@@ -356,7 +356,7 @@ impl Concentration for ScalarConcentration {
 }
 //
 impl AsScalars for ArrayView2<'_, Precision> {
-    fn as_scalars(&self) -> ArrayView2<Precision> {
+    fn as_scalars(&self) -> ArrayView2<'_, Precision> {
         self.reborrow()
     }
 }

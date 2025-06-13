@@ -118,7 +118,7 @@ impl Concentration for ImageConcentration {
 
     type ScalarView<'a> = ScalarView<'a>;
 
-    fn make_scalar_view(&mut self, context: &mut ImageContext) -> Result<ScalarView> {
+    fn make_scalar_view(&mut self, context: &mut ImageContext) -> Result<ScalarView<'_>> {
         self.make_scalar_view_after(self.now(), context)
     }
 
@@ -184,7 +184,7 @@ impl ImageConcentration {
         &mut self,
         after: impl GpuFuture + 'static,
         context: &mut ImageContext,
-    ) -> Result<ScalarView> {
+    ) -> Result<ScalarView<'_>> {
         context.download_after(after, self.gpu_image.clone(), self.cpu_buffer.clone())?;
         Ok(ScalarView::new(self.cpu_buffer.read()?, |buffer| {
             ArrayView2::from_shape(self.shape(), buffer).expect("The shape should be right")
@@ -339,7 +339,7 @@ self_cell::self_cell!(
 type Dependent<'owner> = ArrayView2<'owner, Precision>;
 //
 impl AsScalars for ScalarView<'_> {
-    fn as_scalars(&self) -> ArrayView2<Precision> {
+    fn as_scalars(&self) -> ArrayView2<'_, Precision> {
         self.with_dependent(|_owner, dependent| dependent.reborrow())
     }
 }
