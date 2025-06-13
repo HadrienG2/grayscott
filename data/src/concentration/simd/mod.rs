@@ -67,12 +67,12 @@ pub struct SIMDConcentration<const WIDTH: usize, Vector: SIMDValues<WIDTH>> {
 //
 impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vector> {
     /// Read-only view of the SIMD data storage
-    pub fn view(&self) -> ArrayView2<Vector> {
+    pub fn view(&self) -> ArrayView2<'_, Vector> {
         self.simd.view()
     }
 
     /// Mutable view of the central region, without stencil edges
-    pub fn simd_center_mut(&mut self) -> ArrayViewMut2<Vector> {
+    pub fn simd_center_mut(&mut self) -> ArrayViewMut2<'_, Vector> {
         let [center_rows, center_cols] = self.simd_center_range();
         self.simd.slice_mut(s![center_rows, center_cols])
     }
@@ -192,7 +192,9 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vec
     /// Split the scalar matrix into a number of submatrices, each
     /// corresponding to one lane of a SIMD vector (check layout description
     /// in the SIMDConcentration documentation above if you are confused)
-    fn split_scalar_matrix(scalars: ArrayViewMut2<Precision>) -> [ArrayViewMut2<Precision>; WIDTH] {
+    fn split_scalar_matrix<'a>(
+        scalars: ArrayViewMut2<'a, Precision>,
+    ) -> [ArrayViewMut2<'a, Precision>; WIDTH] {
         let num_simd_rows = scalars.nrows() / WIDTH;
         let mut remainder_opt = Some(scalars);
         Self::array(move |i| {

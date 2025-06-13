@@ -54,7 +54,7 @@ impl SimulateCreate for Simulation {
 impl SimulateCpu for Simulation {
     type Values = Values;
 
-    fn extract_grid(species: &mut Species) -> CpuGrid<Self::Values> {
+    fn extract_grid(species: &mut Species) -> CpuGrid<'_, '_, Self::Values> {
         let (in_u, in_v, out_u, out_v) = species.in_out();
         (
             [in_u.view(), in_v.view()],
