@@ -297,7 +297,7 @@ pub trait Concentration: Sized {
 //
 /// Data that can be reinterpreted as a 2D ndarray of scalar data
 pub trait AsScalars {
-    fn as_scalars(&self) -> ArrayView2<Precision>;
+    fn as_scalars(&self) -> ArrayView2<'_, Precision>;
 }
 
 /// Straightforward Concentration implementation based on an ndarray of floats
