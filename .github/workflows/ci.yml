@@ -104,7 +104,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install native dependencies
-        uses: Eeems-Org/apt-cache-action@v1
+        uses: gerlero/apt-install@v1
         with:
           packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
 
@@ -156,7 +156,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install native dependencies
-        uses: Eeems-Org/apt-cache-action@v1
+        uses: gerlero/apt-install@v1
         with:
           packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
 
@@ -211,7 +211,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install native dependencies
-        uses: Eeems-Org/apt-cache-action@v1
+        uses: gerlero/apt-install@v1
         with:
           packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
 
@@ -259,7 +259,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install native dependencies
-        uses: Eeems-Org/apt-cache-action@v1
+        uses: gerlero/apt-install@v1
         with:
           packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
 
@@ -322,7 +322,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install native dependencies
-        uses: Eeems-Org/apt-cache-action@v1
+        uses: gerlero/apt-install@v1
         with:
           packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
 
