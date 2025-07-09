@@ -104,7 +104,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install native dependencies
-        uses: Eeems-Org/apt-cache-action@latest
+        uses: Eeems-Org/apt-cache-action@v1
         with:
           packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
 
@@ -156,9 +156,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install native dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: Eeems-Org/apt-cache-action@v1
         with:
-          version: 1.0
           packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
 
       - name: Set up toolchain
@@ -212,9 +211,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install native dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: Eeems-Org/apt-cache-action@v1
         with:
-          version: 1.0
           packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
 
       - name: Set up toolchain
@@ -261,9 +259,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install native dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: Eeems-Org/apt-cache-action@v1
         with:
-          version: 1.0
           packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
 
       - name: Set up toolchain
@@ -325,9 +322,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install native dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: Eeems-Org/apt-cache-action@v1
         with:
-          version: 1.0
           packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers-dev libvulkan-dev vulkan-tools
 
       - name: Set up toolchain
