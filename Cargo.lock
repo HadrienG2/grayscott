@@ -955,9 +955,9 @@ dependencies = [
 
 [[package]]
 name = "hwlocality"
-version = "1.0.0-alpha.9"
+version = "1.0.0-alpha.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7099f078266e2389f7cc9d8602e3696912d019516acdb83ebc6a5ce4707899ca"
+checksum = "ffbb65d511f15200f120cadd7ab0b082504a4f95649c5a64a09a14014e55031a"
 dependencies = [
  "arrayvec",
  "bitflags 2.9.0",
@@ -972,9 +972,9 @@ dependencies = [
 
 [[package]]
 name = "hwlocality-sys"
-version = "0.5.3"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c52e423841ea4e8343f37207701a48dbd4247dee600f85d739fb63373913133"
+checksum = "c278ab5df8a6a1594f0fc44c7113b6634c9ff206484c983f3533922c08ad4cd5"
 dependencies = [
  "libc",
  "pkg-config",
@@ -1144,7 +1144,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -2428,7 +2428,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
