@@ -80,9 +80,8 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vec
     /// Shape of the simd data store, given a scalar shape
     fn simd_shape([rows, cols]: [usize; 2]) -> [usize; 2] {
         // TODO: Remove this restriction if I later publish this as a general crate
-        assert_eq!(
-            rows % WIDTH,
-            0,
+        assert!(
+            rows.is_multiple_of(WIDTH),
             "For now, the number of rows must be a multiple of the SIMD width"
         );
         let simd_shape = [rows / WIDTH, cols];

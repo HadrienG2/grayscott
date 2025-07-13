@@ -145,7 +145,7 @@ pub fn full_dispatch_size(
     let shape = domain_shape;
     let group = work_group_shape;
     let coord = |shape, group| {
-        if shape % group == 0 {
+        if shape.is_multiple_of(group) {
             Ok(shape / group)
         } else {
             Err(PartialWorkGroupError)
