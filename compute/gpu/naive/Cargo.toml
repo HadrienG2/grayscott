@@ -2,6 +2,7 @@
 name = "compute_gpu_naive"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 compute = { workspace = true, features = ["gpu"] }
