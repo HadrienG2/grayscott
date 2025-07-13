@@ -2,6 +2,7 @@
 name = "compute"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [features]
 # CPU compute backend commonalities
