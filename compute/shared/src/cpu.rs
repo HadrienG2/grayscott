@@ -58,7 +58,7 @@ pub trait SimulateCpu: SimulateBase + SimulateCreate {
     type Values;
 
     /// Extract a view of the full grid from the concentrations array
-    fn extract_grid(species: &mut Species<Self::Concentration>) -> CpuGrid<Self::Values>;
+    fn extract_grid(species: &mut Species<Self::Concentration>) -> CpuGrid<'_, '_, Self::Values>;
 
     /// Perform one simulation time step on the full grid or a subset thereof
     ///
