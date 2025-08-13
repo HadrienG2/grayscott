@@ -76,7 +76,7 @@ log = "0.4"
 ndarray = "0.16"
 
 # Data-parallelism library
-rayon = "1.10"
+rayon = "1.11"
 
 # Intrinsics-based SIMD backend
 safe_arch = "0.7"
