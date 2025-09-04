@@ -192,9 +192,9 @@ impl<const WIDTH: usize, Vector: SIMDValues<WIDTH>> SIMDConcentration<WIDTH, Vec
     /// Split the scalar matrix into a number of submatrices, each
     /// corresponding to one lane of a SIMD vector (check layout description
     /// in the SIMDConcentration documentation above if you are confused)
-    fn split_scalar_matrix<'a>(
-        scalars: ArrayViewMut2<'a, Precision>,
-    ) -> [ArrayViewMut2<'a, Precision>; WIDTH] {
+    fn split_scalar_matrix(
+        scalars: ArrayViewMut2<'_, Precision>,
+    ) -> [ArrayViewMut2<'_, Precision>; WIDTH] {
         let num_simd_rows = scalars.nrows() / WIDTH;
         let mut remainder_opt = Some(scalars);
         Self::array(move |i| {
