@@ -17,7 +17,7 @@ pub fn image_view(image: &mut RgbImage) -> RgbImageView<'_> {
 }
 
 // Vertically split an image view
-pub fn vsplit_image<'a>(image: RgbImageView<'a>, row: usize) -> [RgbImageView<'a>; 2] {
+pub fn vsplit_image(image: RgbImageView<'_>, row: usize) -> [RgbImageView<'_>; 2] {
     let width = image.width();
     let subpixels_per_row = image.sample_layout().height_stride;
     let subpixels = image.into_raw();
