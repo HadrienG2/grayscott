@@ -365,7 +365,7 @@ dependencies = [
  "env_logger",
  "log",
  "ndarray",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "vulkano",
  "winit",
 ]
@@ -389,7 +389,7 @@ dependencies = [
  "compute_autovec",
  "data",
  "hwlocality",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -399,7 +399,7 @@ dependencies = [
  "compute",
  "crevice",
  "data",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "vulkano",
  "vulkano-shaders",
 ]
@@ -446,7 +446,7 @@ dependencies = [
  "data",
  "hwlocality",
  "rayon",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -654,7 +654,7 @@ dependencies = [
  "safe_arch",
  "self_cell",
  "slipstream",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "vulkano",
 ]
 
@@ -985,7 +985,7 @@ dependencies = [
  "hwlocality-sys",
  "libc",
  "strum",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "windows-sys 0.61.0",
 ]
 
@@ -1749,7 +1749,7 @@ checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
 dependencies = [
  "getrandom 0.2.16",
  "libredox",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -2047,11 +2047,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.16"
+version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3467d614147380f2e4e374161426ff399c91084acd2363eaf549172b3d5e60c0"
+checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
 dependencies = [
- "thiserror-impl 2.0.16",
+ "thiserror-impl 2.0.17",
 ]
 
 [[package]]
@@ -2067,9 +2067,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.16"
+version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c5e1be1c48b9172ee610da68fd9cd2770e7a4056cb3fc98710ee6906f0c7960"
+checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
 dependencies = [
  "proc-macro2",
  "quote",
