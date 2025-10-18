@@ -98,7 +98,7 @@ vulkano = "0.35"
 vulkano-shaders = "0.35"
 
 # Used to create windows
-winit = "0.28"
+winit = "0.30"
 
 # Expose crates from this project to other crates in this project
 compute.path = "compute/shared"
