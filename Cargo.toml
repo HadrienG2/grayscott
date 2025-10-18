@@ -64,7 +64,7 @@ hdf5-metno = "0.10"
 hwlocality = "1.0.0-alpha.11"
 
 # Used for progress report in the binaries
-indicatif = "0.17"
+indicatif = "0.18"
 
 # Used when exporting visualizations as images
 image = { version = "0.25", default-features = false, features = ["png"] }
