@@ -95,7 +95,7 @@ thiserror = "2.0"
 
 # Interface to the Vulkan GPU library
 vulkano = "0.34"
-vulkano-shaders = "0.34"
+vulkano-shaders = "0.35"
 
 # Used to create windows
 winit = "0.28"
