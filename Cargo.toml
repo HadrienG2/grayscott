@@ -94,7 +94,7 @@ syslog = "7.0"
 thiserror = "2.0"
 
 # Interface to the Vulkan GPU library
-vulkano = "0.34"
+vulkano = "0.35"
 vulkano-shaders = "0.35"
 
 # Used to create windows
