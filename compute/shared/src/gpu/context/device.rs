@@ -6,9 +6,8 @@ use log::{debug, error, info, log, trace, warn};
 use std::{cmp::Ordering, ops::Deref, sync::Arc};
 use vulkano::{
     device::{
-        physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions,
-        DeviceOwnedVulkanObject, Features, Queue, QueueCreateInfo, QueueFamilyProperties,
-        QueueFlags,
+        physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures,
+        DeviceOwnedVulkanObject, Queue, QueueCreateInfo, QueueFamilyProperties, QueueFlags,
     },
     instance::{Instance, Version},
     swapchain::{Surface, SurfaceInfo},
@@ -32,7 +31,7 @@ use vulkano::{
 /// first matching device will be selected.
 pub fn select_physical(
     instance: &Arc<Instance>,
-    mut features_extensions: impl FnMut(&PhysicalDevice) -> (Features, DeviceExtensions),
+    mut features_extensions: impl FnMut(&PhysicalDevice) -> (DeviceFeatures, DeviceExtensions),
     mut other_requirements: impl FnMut(&PhysicalDevice) -> bool,
     mut preference: impl FnMut(&PhysicalDevice, &PhysicalDevice) -> Ordering,
     mut surface_and_reqs: &mut Option<(
@@ -103,7 +102,6 @@ fn log_description(device: &PhysicalDevice, surface: Option<&Surface>) {
             "  * Supports present modes {:?}",
             device
                 .surface_present_modes(surface, surface_info.clone())
-                .map(|iter| iter.collect::<Vec<_>>())
                 .unwrap_or_default()
         );
         trace!(
@@ -156,7 +154,7 @@ fn present_queues<'input>(
 #[allow(clippy::type_complexity)]
 pub fn create_logical(
     physical_device: Arc<PhysicalDevice>,
-    enabled_features: Features,
+    enabled_features: DeviceFeatures,
     enabled_extensions: DeviceExtensions,
     (queue_create_infos, queue_names): (Vec<QueueCreateInfo>, Vec<impl AsRef<str>>),
 ) -> ContextBuildResult<(Arc<Device>, Box<[Arc<Queue>]>)> {

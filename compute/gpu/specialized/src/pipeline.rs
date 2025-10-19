@@ -6,10 +6,8 @@ use compute_gpu_naive::pipeline as naive_pipeline;
 use data::{concentration::gpu::shape::Shape, parameters::Parameters};
 use std::{collections::HashMap, hash::BuildHasher, sync::Arc};
 use vulkano::{
-    command_buffer::{
-        allocator::CommandBufferAllocator, AutoCommandBufferBuilder, PrimaryAutoCommandBuffer,
-    },
-    descriptor_set::PersistentDescriptorSet,
+    command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
+    descriptor_set::DescriptorSet,
     device::physical::PhysicalDevice,
     pipeline::{
         compute::ComputePipelineCreateInfo, layout::PipelineDescriptorSetLayoutCreateInfo,
@@ -56,10 +54,10 @@ pub(crate) fn create(
 }
 
 /// Record a simulation step
-pub fn record_step<CommAlloc: CommandBufferAllocator>(
-    builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer<CommAlloc>, CommAlloc>,
+pub fn record_step(
+    builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
     pipeline: &ComputePipeline,
-    images: Arc<PersistentDescriptorSet>,
+    images: Arc<DescriptorSet>,
     dispatch_size: [u32; 3],
 ) -> Result<()> {
     naive_pipeline::record_step(builder, pipeline, images, dispatch_size)

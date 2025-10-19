@@ -9,12 +9,10 @@ use data::concentration::gpu::{
 use std::sync::Arc;
 use vulkano::{
     buffer::{BufferUsage, Subbuffer},
-    command_buffer::{
-        allocator::CommandBufferAllocator, AutoCommandBufferBuilder, PrimaryAutoCommandBuffer,
-    },
+    command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
     descriptor_set::{
         layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo},
-        PersistentDescriptorSet, WriteDescriptorSet,
+        DescriptorSet, WriteDescriptorSet,
     },
     device::physical::PhysicalDevice,
     format::FormatFeatures,
@@ -138,9 +136,9 @@ pub(crate) fn new_parameters_set(
     context: &VulkanContext,
     pipeline: &ComputePipeline,
     parameters: Subbuffer<GpuParameters>,
-) -> Result<Arc<PersistentDescriptorSet>> {
-    let descriptor_set = PersistentDescriptorSet::new(
-        &context.descriptor_set_allocator,
+) -> Result<Arc<DescriptorSet>> {
+    let descriptor_set = DescriptorSet::new(
+        context.descriptor_set_allocator.clone(),
         pipeline.layout().set_layouts()[PARAMS_SET as usize].clone(),
         [WriteDescriptorSet::buffer(PARAMS, parameters)],
         [],
@@ -160,10 +158,10 @@ pub fn output_usage() -> ImageUsage {
 }
 
 /// Bind the pipeline and its parameters
-pub(crate) fn bind_pipeline<CommAlloc: CommandBufferAllocator>(
-    builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer<CommAlloc>, CommAlloc>,
+pub(crate) fn bind_pipeline(
+    builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
     pipeline: Arc<ComputePipeline>,
-    parameters: Arc<PersistentDescriptorSet>,
+    parameters: Arc<DescriptorSet>,
 ) -> Result<()> {
     let layout = pipeline.layout().clone();
     builder
@@ -183,7 +181,7 @@ pub fn new_images_set(
     context: &VulkanContext,
     pipeline: &ComputePipeline,
     [in_u, in_v, out_u, out_v]: [Arc<Image>; 4],
-) -> Result<Arc<PersistentDescriptorSet>> {
+) -> Result<Arc<DescriptorSet>> {
     let layout = pipeline.layout().set_layouts()[usize::try_from(IMAGES_SET).unwrap()].clone();
     let binding = |binding, image: Arc<Image>, usage| -> Result<WriteDescriptorSet> {
         let view_info = ImageViewCreateInfo {
@@ -195,8 +193,8 @@ pub fn new_images_set(
             ImageView::new(image, view_info)?,
         ))
     };
-    let descriptor_set = PersistentDescriptorSet::new(
-        &context.descriptor_set_allocator,
+    let descriptor_set = DescriptorSet::new(
+        context.descriptor_set_allocator.clone(),
         layout,
         [
             binding(IN_U, in_u, input_usage())?,
@@ -211,20 +209,20 @@ pub fn new_images_set(
 }
 
 /// Record a simulation step
-pub fn record_step<CommAlloc: CommandBufferAllocator>(
-    builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer<CommAlloc>, CommAlloc>,
+pub fn record_step(
+    builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
     pipeline: &ComputePipeline,
-    images: Arc<PersistentDescriptorSet>,
+    images: Arc<DescriptorSet>,
     dispatch_size: [u32; 3],
 ) -> Result<()> {
-    builder
-        .bind_descriptor_sets(
-            PipelineBindPoint::Compute,
-            pipeline.layout().clone(),
-            IMAGES_SET,
-            images,
-        )?
-        .dispatch(dispatch_size)?;
+    builder.bind_descriptor_sets(
+        PipelineBindPoint::Compute,
+        pipeline.layout().clone(),
+        IMAGES_SET,
+        images,
+    )?;
+    // SAFETY: Compute shader has been manually checked for memory safety
+    unsafe { builder.dispatch(dispatch_size)? };
     Ok(())
 }
 

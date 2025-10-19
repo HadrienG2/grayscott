@@ -15,6 +15,7 @@ use vulkano::{
     },
     VulkanLibrary,
 };
+use winit::raw_window_handle::HandleError;
 #[cfg(feature = "livesim")]
 use winit::window::Window;
 
@@ -24,17 +25,17 @@ pub fn select_extensions(
     library: &VulkanLibrary,
     mut extensions: InstanceExtensions,
     #[cfg(feature = "livesim")] window: Option<&Window>,
-) -> InstanceExtensions {
+) -> Result<InstanceExtensions, HandleError> {
     if cfg!(feature = "gpu-debug-utils") {
         extensions.ext_debug_utils = true;
     }
     #[cfg(feature = "livesim")]
     {
         if let Some(window) = window {
-            extensions |= vulkano::swapchain::Surface::required_extensions(window);
+            extensions |= vulkano::swapchain::Surface::required_extensions(window)?;
         }
     }
-    extensions
+    Ok(extensions)
 }
 
 /// Vulkan instance with debug logging

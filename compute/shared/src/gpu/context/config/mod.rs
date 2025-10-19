@@ -18,7 +18,7 @@ use vulkano::instance::Instance;
 use vulkano::{
     command_buffer::allocator::{CommandBufferAllocator, StandardCommandBufferAllocator},
     descriptor_set::allocator::{DescriptorSetAllocator, StandardDescriptorSetAllocator},
-    device::{physical::PhysicalDevice, Device, DeviceExtensions, Features, QueueCreateInfo},
+    device::{physical::PhysicalDevice, Device, DeviceExtensions, DeviceFeatures, QueueCreateInfo},
     instance::InstanceExtensions,
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
     swapchain::Surface,
@@ -106,7 +106,8 @@ pub struct VulkanConfig<
     ///
     /// Associated robustness extensions are enabled as appropriate for the
     /// device's supported Vulkan version.
-    pub device_features_extensions: Box<dyn FnMut(&PhysicalDevice) -> (Features, DeviceExtensions)>,
+    pub device_features_extensions:
+        Box<dyn FnMut(&PhysicalDevice) -> (DeviceFeatures, DeviceExtensions)>,
 
     /// Impose additional device requirements
     ///
@@ -257,11 +258,11 @@ impl<
                 } else {
                     None
                 };
-                instance::select_extensions(&library, user_instance_extensions, window)
+                instance::select_extensions(&library, user_instance_extensions, window)?
             }
             #[cfg(not(feature = "livesim"))]
             {
-                instance::select_extensions(&library, user_instance_extensions)
+                instance::select_extensions(&library, user_instance_extensions)?
             }
         };
         let layers = (self.layers)(&library);
@@ -307,7 +308,7 @@ impl<
         // Set up memory allocators
         let memory_allocator = Arc::new((self.memory_allocator)(device.clone()));
         let command_allocator = Arc::new((self.command_allocator)(device.clone()));
-        let descriptor_set_allocator = (self.descriptor_set_allocator)(device.clone());
+        let descriptor_set_allocator = Arc::new((self.descriptor_set_allocator)(device.clone()));
 
         // Set up pipeline cache
         let dirs =

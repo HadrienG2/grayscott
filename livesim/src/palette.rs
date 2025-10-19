@@ -9,7 +9,7 @@ use std::sync::Arc;
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage},
     command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferToImageInfo},
-    descriptor_set::PersistentDescriptorSet,
+    descriptor_set::DescriptorSet,
     format::{Format, NumericFormat},
     image::{
         sampler::{Filter, SamplerCreateInfo},
@@ -43,7 +43,7 @@ pub fn create(
     context: &SimulationContext,
     pipeline: &ComputePipeline,
     resolution: u32,
-) -> Result<(impl GpuFuture, Arc<PersistentDescriptorSet>)> {
+) -> Result<(impl GpuFuture, Arc<DescriptorSet>)> {
     // Prepare to upload color palette
     assert!(
         resolution >= 2,
@@ -52,7 +52,7 @@ pub fn create(
     let vulkan = context.vulkan();
     let upload_queue = context.queue();
     let mut upload_builder = AutoCommandBufferBuilder::primary(
-        &vulkan.command_allocator,
+        vulkan.command_allocator.clone(),
         upload_queue.queue_family_index(),
         CommandBufferUsage::OneTimeSubmit,
     )?;

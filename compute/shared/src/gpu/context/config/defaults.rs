@@ -13,7 +13,8 @@ use vulkano::{
     },
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
-        Device, DeviceExtensions, Features, QueueCreateInfo, QueueFamilyProperties, QueueFlags,
+        Device, DeviceExtensions, DeviceFeatures, QueueCreateInfo, QueueFamilyProperties,
+        QueueFlags,
     },
     instance::{InstanceExtensions, Version},
     memory::allocator::StandardMemoryAllocator,
@@ -89,8 +90,8 @@ pub fn instance_extensions(library: &VulkanLibrary) -> InstanceExtensions {
 }
 
 /// Suggested device features and extensions
-pub fn device_features_extensions(device: &PhysicalDevice) -> (Features, DeviceExtensions) {
-    let mut features = Features::empty();
+pub fn device_features_extensions(device: &PhysicalDevice) -> (DeviceFeatures, DeviceExtensions) {
+    let mut features = DeviceFeatures::empty();
     let mut extensions = DeviceExtensions::empty();
     if cfg!(debug_assertions) {
         features.robust_buffer_access = true;

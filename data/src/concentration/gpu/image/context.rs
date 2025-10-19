@@ -10,7 +10,7 @@ use vulkano::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
         CopyBufferToImageInfo, CopyImageToBufferInfo, PrimaryAutoCommandBuffer,
     },
-    descriptor_set::PersistentDescriptorSet,
+    descriptor_set::DescriptorSet,
     device::{DeviceOwned, DeviceOwnedVulkanObject, Queue},
     image::{Image, ImageUsage},
     memory::allocator::StandardMemoryAllocator,
@@ -32,7 +32,7 @@ pub struct ImageContext {
     /// We do not handle the creation of that descriptor set as the specifics
     /// depend on how the shader accesses the image (sampled or not, etc), which
     /// is where our line for compute backend specific code is drawn.
-    pub descriptor_sets: HashMap<[Arc<Image>; 4], Arc<PersistentDescriptorSet>>,
+    pub descriptor_sets: HashMap<[Arc<Image>; 4], Arc<DescriptorSet>>,
 
     /// Buffer/image allocator
     memory_allocator: Arc<MemAlloc>,
@@ -152,7 +152,7 @@ impl ImageContext {
     pub(crate) fn upload_all(&mut self) -> Result<()> {
         if !self.pending_uploads.is_empty() {
             let mut builder = CommandBufferBuilder::primary(
-                &self.command_allocator,
+                self.command_allocator.clone(),
                 self.upload_queue.queue_family_index(),
                 CommandBufferUsage::OneTimeSubmit,
             )?;
@@ -199,7 +199,7 @@ impl ImageContext {
         };
 
         let mut builder = CommandBufferBuilder::primary(
-            &self.command_allocator,
+            self.command_allocator.clone(),
             self.download_queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         )?;
@@ -227,5 +227,4 @@ pub(crate) type MemAlloc = StandardMemoryAllocator;
 type CommAlloc = StandardCommandBufferAllocator;
 
 /// Command buffer builder
-type CommandBufferBuilder<CommAlloc> =
-    AutoCommandBufferBuilder<PrimaryAutoCommandBuffer, CommAlloc>;
+type CommandBufferBuilder = AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>;
