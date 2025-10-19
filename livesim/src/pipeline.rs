@@ -6,13 +6,8 @@ use data::concentration::gpu::shape::{self, PartialWorkGroupError, Shape};
 use std::{collections::HashMap, hash::BuildHasher, sync::Arc};
 use vulkano::{
     buffer::BufferUsage,
-    command_buffer::{
-        allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
-        PrimaryAutoCommandBuffer,
-    },
-    descriptor_set::{
-        layout::DescriptorSetLayoutCreateInfo, PersistentDescriptorSet, WriteDescriptorSet,
-    },
+    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer},
+    descriptor_set::{layout::DescriptorSetLayoutCreateInfo, DescriptorSet, WriteDescriptorSet},
     image::{
         sampler::Sampler,
         view::{ImageView, ImageViewCreateInfo},
@@ -75,13 +70,13 @@ pub fn new_palette_set(
     vulkan: &VulkanContext,
     pipeline: &ComputePipeline,
     palette_image: Arc<Image>,
-) -> Result<Arc<PersistentDescriptorSet>> {
+) -> Result<Arc<DescriptorSet>> {
     let palette_info = ImageViewCreateInfo {
         usage: palette_usage(),
         ..ImageViewCreateInfo::from_image(&palette_image)
     };
-    let palette = PersistentDescriptorSet::new(
-        &vulkan.descriptor_set_allocator,
+    let palette = DescriptorSet::new(
+        vulkan.descriptor_set_allocator.clone(),
         pipeline.layout().set_layouts()[PALETTE_SET as usize].clone(),
         [WriteDescriptorSet::image_view(
             PALETTE,
@@ -109,7 +104,7 @@ pub fn new_inout_sets(
     pipeline: &ComputePipeline,
     upload_buffers: &[Input],
     swapchain_images: Vec<Arc<Image>>,
-) -> Result<Vec<Arc<PersistentDescriptorSet>>> {
+) -> Result<Vec<Arc<DescriptorSet>>> {
     assert_eq!(upload_buffers.len(), swapchain_images.len());
     // FIXME: Name swapchain images once vulkano allows for it
     let set_layout = &pipeline.layout().set_layouts()[INOUT_SET as usize];
@@ -121,8 +116,8 @@ pub fn new_inout_sets(
                 usage: output_usage(),
                 ..ImageViewCreateInfo::from_image(&swapchain_image)
             };
-            let descriptor_set = PersistentDescriptorSet::new(
-                &vulkan.descriptor_set_allocator,
+            let descriptor_set = DescriptorSet::new(
+                vulkan.descriptor_set_allocator.clone(),
                 set_layout.clone(),
                 [
                     WriteDescriptorSet::buffer(DATA_INPUT, buffer.clone()),
@@ -143,15 +138,15 @@ pub fn new_inout_sets(
 pub fn record_render_commands(
     context: &SimulationContext,
     pipeline: Arc<ComputePipeline>,
-    inout_set: Arc<PersistentDescriptorSet>,
-    palette_set: Arc<PersistentDescriptorSet>,
+    inout_set: Arc<DescriptorSet>,
+    palette_set: Arc<DescriptorSet>,
     dispatch_size: [u32; 3],
-) -> Result<Arc<PrimaryAutoCommandBuffer<Arc<StandardCommandBufferAllocator>>>> {
+) -> Result<Arc<PrimaryAutoCommandBuffer>> {
     let vulkan = context.vulkan();
     let queue = context.queue();
 
     let mut builder = AutoCommandBufferBuilder::primary(
-        &vulkan.command_allocator,
+        vulkan.command_allocator.clone(),
         queue.queue_family_index(),
         CommandBufferUsage::OneTimeSubmit,
     )?;
@@ -165,8 +160,9 @@ pub fn record_render_commands(
             INOUT_SET,
             inout_set,
         )?
-        .bind_descriptor_sets(PipelineBindPoint::Compute, layout, PALETTE_SET, palette_set)?
-        .dispatch(dispatch_size)?;
+        .bind_descriptor_sets(PipelineBindPoint::Compute, layout, PALETTE_SET, palette_set)?;
+    // SAFETY: Compute pipeline was manually checked for safety
+    unsafe { builder.dispatch(dispatch_size)? };
 
     let commands = builder.build()?;
     vulkan.set_debug_utils_object_name(&commands, || "Render to screen".into())?;

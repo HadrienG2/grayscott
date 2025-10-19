@@ -108,7 +108,7 @@ impl SimulateGpu for Simulation {
     ) -> Result<CommandBufferExecFuture<After>> {
         // Prepare to record GPU commands
         let mut builder = AutoCommandBufferBuilder::primary(
-            &self.context.command_allocator,
+            self.context.command_allocator.clone(),
             self.queue().queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         )?;

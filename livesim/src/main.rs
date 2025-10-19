@@ -9,14 +9,16 @@ use self::{context::SimulationContext, frames::Frames};
 use clap::Parser;
 use compute::{DenormalsFlusher, Simulate, SimulateBase};
 use compute_selector::Simulation;
-use data::concentration::gpu::shape::Shape;
-use std::num::NonZeroU32;
+use data::concentration::{gpu::shape::Shape, Species};
+use std::{num::NonZeroU32, sync::Arc};
 use ui::SharedArgs;
-use vulkano::sync::GpuFuture;
+use vulkano::{descriptor_set::DescriptorSet, pipeline::ComputePipeline, sync::GpuFuture};
 use winit::{
+    application::ApplicationHandler,
     dpi::PhysicalSize,
-    event::{Event, WindowEvent},
-    event_loop::ControlFlow,
+    event::{StartCause, WindowEvent},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    window::WindowId,
 };
 
 /// Use eyre for error handling
@@ -74,88 +76,163 @@ fn main() -> Result<()> {
     //       backends.
     let steps_per_image = args.shared.nbextrastep.unwrap_or(1);
 
-    // Set up basic rendering infrastructure
-    let (event_loop, window) = surface::create_window(domain_shape)?;
-    let context = SimulationContext::new(&args.shared, &window)?;
-    let pipeline = pipeline::create(context.vulkan(), work_group_shape)?;
+    // Set up the event loop and app window
+    struct WindowState {
+        context: SimulationContext,
+        pipeline: Arc<ComputePipeline>,
+        palette_set: Arc<DescriptorSet>,
+        species: Species<<compute_selector::Simulation as SimulateBase>::Concentration>,
+        frames: Frames,
+    }
+    //
+    impl WindowState {
+        fn new(
+            args: &Args,
+            domain_shape: Shape,
+            work_group_shape: Shape,
+            event_loop: &ActiveEventLoop,
+        ) -> Result<Self> {
+            // Set up the window
+            let window = surface::create_window(event_loop, domain_shape)?;
+            window.set_visible(true);
 
-    // Create the color palette and prepare to upload it to the GPU
-    let (upload_future, palette_set) =
-        palette::create(&context, &pipeline, args.color_palette_resolution)?;
+            // Set up the basic rendering infrastructure
+            let context = SimulationContext::new(&args.shared, &window)?;
+            let pipeline = pipeline::create(context.vulkan(), work_group_shape)?;
 
-    // Since we have no other initialization work to submit to the GPU, start
-    // uploading the color palette right away
-    let upload_future = upload_future.then_signal_fence_and_flush()?;
+            // Create the color palette and prepare to upload it to the GPU
+            let (upload_future, palette_set) =
+                palette::create(&context, &pipeline, args.color_palette_resolution)?;
 
-    // Set up simulation domain and associated rendering state
-    let mut species = context.simulation().make_species(domain_shape.ndarray())?;
-    let mut frames = Frames::new(&context, &pipeline, domain_shape)?;
+            // Since we have no other initialization work to submit to the GPU, start
+            // uploading the color palette right away
+            let upload_future = upload_future.then_signal_fence_and_flush()?;
 
-    // Wait for GPU-side initialization tasks to finish
-    upload_future.wait(None)?;
-    std::mem::drop(upload_future);
+            // Set up simulation domain and associated rendering state
+            let species = context.simulation().make_species(domain_shape.ndarray())?;
+            let frames = Frames::new(&context, &pipeline, domain_shape)?;
 
-    // Start the event loop
-    window.set_visible(true);
-    event_loop.run(move |event, _, control_flow| {
-        // Continuously run even if no events have been incoming
-        control_flow.set_poll();
+            // Wait for GPU-side initialization tasks to finish
+            upload_future.wait(None)?;
+            std::mem::drop(upload_future);
+            Ok(Self {
+                context,
+                pipeline,
+                palette_set,
+                species,
+                frames,
+            })
+        }
+    }
+    //
+    struct App {
+        args: Args,
+        domain_shape: Shape,
+        work_group_shape: Shape,
+        dispatch_size: [u32; 3],
+        steps_per_image: usize,
+        window_state: Option<WindowState>,
+    }
+    //
+    impl ApplicationHandler for App {
+        fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: StartCause) {
+            if cause == StartCause::Init {
+                // Continuously run even if no events have been incoming
+                event_loop.set_control_flow(ControlFlow::Poll);
+            }
+        }
 
-        // Process incoming events
-        match event {
-            // Render when all events have been processed
-            // TODO: Add fast/async path for GPU backends
-            Event::MainEventsCleared => {
-                frames
-                    .process_frame(&context, &pipeline, |upload_buffer, inout_set| {
+        fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+            // Ignore app resumption after initial setup
+            if self.window_state.is_some() {
+                return;
+            }
+
+            // Set up the window and associated app state
+            self.window_state = Some(
+                WindowState::new(
+                    &self.args,
+                    self.domain_shape,
+                    self.work_group_shape,
+                    event_loop,
+                )
+                .expect("Failed to set up window and associated state"),
+            );
+        }
+
+        fn window_event(
+            &mut self,
+            event_loop: &ActiveEventLoop,
+            _window_id: WindowId,
+            event: WindowEvent,
+        ) {
+            match event {
+                // Exit when the window is closed
+                WindowEvent::CloseRequested => event_loop.exit(),
+
+                // The easiest way to support resize would probably be to copy
+                // simulation data to an image and interpolate using a sampler.
+                WindowEvent::Resized(PhysicalSize { width, height }) => {
+                    log::error!("Ignoring meaningless window resizing to {width}x{height} from buggy window manager");
+                    /* FIXME: Understand why it really happens
+                    assert_eq!(
+                        [height as usize, width as usize],
+                        domain_shape.ndarray(),
+                        "Window resize is not supported yet (and should have been disabled)"
+                    );*/
+                }
+
+                // Ignore other events
+                _ => {}
+            }
+        }
+
+        fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+            let state = self
+                .window_state
+                .as_mut()
+                .expect("Should not occur before resume()");
+            state
+                .frames
+                .process_frame(
+                    &state.context,
+                    &state.pipeline,
+                    |upload_buffer, inout_set| {
                         // Synchronously run the simulation
                         {
                             let _flush_denormals = DenormalsFlusher::new();
-                            context
+                            state
+                                .context
                                 .simulation()
-                                .perform_steps(&mut species, steps_per_image)?;
+                                .perform_steps(&mut state.species, self.steps_per_image)?;
                         }
 
                         // Make the simulation output available to the GPU
-                        input::fill_upload_buffer(upload_buffer, &mut species)?;
+                        input::fill_upload_buffer(upload_buffer, &mut state.species)?;
 
                         // Record rendering commands
                         pipeline::record_render_commands(
-                            &context,
-                            pipeline.clone(),
+                            &state.context,
+                            state.pipeline.clone(),
                             inout_set,
-                            palette_set.clone(),
-                            dispatch_size,
+                            state.palette_set.clone(),
+                            self.dispatch_size,
                         )
-                    })
-                    .expect("Failed to process simulation frame")
-            }
-
-            // Exit when the window is closed
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => {
-                *control_flow = ControlFlow::Exit;
-            }
-
-            // The easiest way to support resize would probably be to copy
-            // simulation data to an image and interpolate using a sampler.
-            Event::WindowEvent {
-                event: WindowEvent::Resized(PhysicalSize { width, height }),
-                ..
-            } => {
-                log::error!("Ignoring meaningless window resizing to {width}x{height} from buggy window manager");
-                /* FIXME: Understand why it really happens
-                assert_eq!(
-                    [height as usize, width as usize],
-                    domain_shape.ndarray(),
-                    "Window resize is not supported yet (and should have been disabled)"
-                );*/
-            }
-
-            // Ignore other events
-            _ => {}
+                    },
+                )
+                .expect("Failed to process simulation frame")
         }
-    })
+    }
+    //
+    let mut app = App {
+        args,
+        domain_shape,
+        work_group_shape,
+        dispatch_size,
+        steps_per_image,
+        window_state: None,
+    };
+    //
+    EventLoop::new()?.run_app(&mut app)?;
+    Ok(())
 }

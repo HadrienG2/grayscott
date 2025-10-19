@@ -21,9 +21,10 @@ use vulkano::{
     device::{Device, DeviceOwnedVulkanObject, Queue},
     instance::debug::DebugUtilsMessenger,
     memory::allocator::{MemoryAllocator, StandardMemoryAllocator},
-    swapchain::Surface,
+    swapchain::{FromWindowError, Surface},
     ExtensionProperties, LoadingError, Validated, ValidationError, VulkanError,
 };
+use winit::raw_window_handle::HandleError;
 
 /// Vulkan compute context
 ///
@@ -56,7 +57,7 @@ pub struct VulkanContext<
     pub command_allocator: Arc<CommAlloc>,
 
     /// Descriptor set allocator
-    pub descriptor_set_allocator: DescAlloc,
+    pub descriptor_set_allocator: Arc<DescAlloc>,
 
     /// Pipeline cache (used for e.g. compiled shader caching)
     pub pipeline_cache: PersistentPipelineCache,
@@ -131,6 +132,12 @@ pub enum ContextBuildError {
 
     #[error("failed to read or write on-disk pipeline cache")]
     PipelineCacheIo(#[from] std::io::Error),
+
+    #[error("failed to build swapchain from window")]
+    SwapchainFromWindow(#[from] FromWindowError),
+
+    #[error("failed to fetch display/window hadle")]
+    Handle(#[from] HandleError),
 }
 //
 impl From<VulkanError> for ContextBuildError {

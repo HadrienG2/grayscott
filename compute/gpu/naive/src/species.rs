@@ -8,8 +8,7 @@ use data::concentration::gpu::{
 };
 use std::{collections::hash_map::Entry, sync::Arc};
 use vulkano::{
-    descriptor_set::PersistentDescriptorSet, device::Queue, image::ImageUsage,
-    pipeline::ComputePipeline,
+    descriptor_set::DescriptorSet, device::Queue, image::ImageUsage, pipeline::ComputePipeline,
 };
 
 /// Chosen concentration type
@@ -71,7 +70,7 @@ pub fn images_descriptor_set(
     context: &VulkanContext,
     pipeline: &ComputePipeline,
     species: &mut Species,
-) -> Result<Arc<PersistentDescriptorSet>> {
+) -> Result<Arc<DescriptorSet>> {
     // Acquire access to the input and output images
     let (in_u, in_v, out_u, out_v) = species.in_out();
     let images = [in_u, in_v, out_u, out_v].map(|i| i.access_image().clone());

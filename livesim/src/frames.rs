@@ -9,11 +9,8 @@ use compute::gpu::context::VulkanContext;
 use data::concentration::gpu::shape::Shape;
 use std::sync::Arc;
 use vulkano::{
-    command_buffer::{
-        allocator::StandardCommandBufferAllocator, CommandBufferExecFuture,
-        PrimaryAutoCommandBuffer,
-    },
-    descriptor_set::PersistentDescriptorSet,
+    command_buffer::{CommandBufferExecFuture, PrimaryAutoCommandBuffer},
+    descriptor_set::DescriptorSet,
     pipeline::ComputePipeline,
     swapchain::{self, PresentFuture, Swapchain, SwapchainAcquireFuture, SwapchainPresentInfo},
     sync::{future::FenceSignalFuture, GpuFuture},
@@ -32,7 +29,7 @@ pub struct Frames {
     upload_buffers: Vec<Input>,
 
     /// Descriptor sets for input + output of each frame
-    inout_sets: Vec<Arc<PersistentDescriptorSet>>,
+    inout_sets: Vec<Arc<DescriptorSet>>,
 
     /// Truth that the swapchain should be recreated
     recreate_swapchain: bool,
@@ -79,10 +76,8 @@ impl Frames {
         pipeline: &ComputePipeline,
         record_commands: impl FnOnce(
             &mut Input,
-            Arc<PersistentDescriptorSet>,
-        ) -> Result<
-            Arc<PrimaryAutoCommandBuffer<Arc<StandardCommandBufferAllocator>>>,
-        >,
+            Arc<DescriptorSet>,
+        ) -> Result<Arc<PrimaryAutoCommandBuffer>>,
     ) -> Result<()> {
         // Recreate the swapchain and dependent state as needed
         let vulkan = context.vulkan();
@@ -134,10 +129,8 @@ impl Frames {
         acquire_future: SwapchainAcquireFuture,
         record_commands: impl FnOnce(
             &mut Input,
-            Arc<PersistentDescriptorSet>,
-        ) -> Result<
-            Arc<PrimaryAutoCommandBuffer<Arc<StandardCommandBufferAllocator>>>,
-        >,
+            Arc<DescriptorSet>,
+        ) -> Result<Arc<PrimaryAutoCommandBuffer>>,
     ) -> Result<()> {
         // Wait for the previous render to this surface to terminate so we
         // can safely write to the upload buffer

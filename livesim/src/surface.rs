@@ -6,7 +6,7 @@ use data::concentration::gpu::shape::Shape;
 use log::info;
 use std::sync::Arc;
 use vulkano::{
-    descriptor_set::PersistentDescriptorSet,
+    descriptor_set::DescriptorSet,
     device::physical::PhysicalDevice,
     image::Image,
     pipeline::ComputePipeline,
@@ -14,8 +14,8 @@ use vulkano::{
 };
 use winit::{
     dpi::PhysicalSize,
-    event_loop::EventLoop,
-    window::{Theme, Window, WindowBuilder},
+    event_loop::ActiveEventLoop,
+    window::{Theme, Window, WindowAttributes},
 };
 
 /// Surface-dependent device requirements
@@ -37,18 +37,16 @@ pub fn requirements(device: &PhysicalDevice, surface: &Surface) -> bool {
 }
 
 /// Set up a window and associated event loop
-pub fn create_window(shape: Shape) -> Result<(EventLoop<()>, Arc<Window>)> {
-    let event_loop = EventLoop::new();
-    let window = Arc::new(
-        WindowBuilder::new()
+pub fn create_window(event_loop: &ActiveEventLoop, shape: Shape) -> Result<Arc<Window>> {
+    let window = event_loop.create_window(
+        WindowAttributes::default()
             .with_inner_size(PhysicalSize::new(shape.width(), shape.height()))
             .with_resizable(false)
             .with_title("Gray-Scott reaction")
             .with_visible(false)
-            .with_theme(Some(Theme::Dark))
-            .build(&event_loop)?,
-    );
-    Ok((event_loop, window))
+            .with_theme(Some(Theme::Dark)),
+    )?;
+    Ok(Arc::new(window))
 }
 
 /// Create a swapchain
@@ -95,7 +93,7 @@ pub fn recreate_swapchain(
     pipeline: &ComputePipeline,
     upload_buffers: &[Input],
     swapchain: &Arc<Swapchain>,
-) -> Result<(Arc<Swapchain>, Vec<Arc<PersistentDescriptorSet>>)> {
+) -> Result<(Arc<Swapchain>, Vec<Arc<DescriptorSet>>)> {
     let (swapchain, images) = swapchain.recreate(swapchain.create_info())?;
     let inout_sets = pipeline::new_inout_sets(vulkan, pipeline, upload_buffers, images)?;
     Ok((swapchain, inout_sets))
