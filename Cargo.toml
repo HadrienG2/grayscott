@@ -21,7 +21,7 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.89"
 
 [workspace.dependencies]
 # Used to safely manipulate data as bytes
