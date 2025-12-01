@@ -79,7 +79,7 @@ ndarray = "0.17"
 rayon = "1.11"
 
 # Intrinsics-based SIMD backend
-safe_arch = "0.9"
+safe_arch = "1.0"
 
 # Used to safely handle self-referential data
 self_cell = "1.2"
