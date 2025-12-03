@@ -43,7 +43,7 @@ colorous = "1.0"
 crevice = "0.18"
 
 # Used for microbenchmarking
-criterion = { version = "0.7", default-features = false }
+criterion = { version = "0.8", default-features = false }
 
 # Used for scheduling work over multiple threads
 crossbeam-channel = "0.5"
