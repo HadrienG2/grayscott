@@ -596,9 +596,9 @@ dependencies = [
 
 [[package]]
 name = "crevice"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90133334859a096164c9ed6d899b0dc6dffbe0abca9662dea9c76d79c55cd356"
+checksum = "28780d72908948745af036ca7418d6d932f60afb48ed623291d2ccbfb8aefbff"
 dependencies = [
  "bytemuck",
  "crevice-derive",
@@ -3233,7 +3233,7 @@ checksum = "7d6f32a0ff4a9f6f01231eb2059cc85479330739333e0e58cadf03b6af2cca10"
 dependencies = [
  "cfg-if",
  "serde",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
