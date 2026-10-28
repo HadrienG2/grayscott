@@ -133,7 +133,7 @@ impl SIMDValues<8, f32> for m256 {
     fn shift_left(self, offset: usize) -> Self {
         // For even offsets, we can reuse the work done for m256d, as far as
         // I know no x86 implementation has f32 -> f64 bypass delays
-        if offset % 2 == 0 {
+        if offset.is_multiple_of(2) {
             return safe_arch::cast_to_m256_from_m256d(
                 safe_arch::cast_to_m256d_from_m256(self).shift_left(offset / 2),
             );
@@ -187,7 +187,7 @@ impl SIMDValues<8, f32> for m256 {
     fn shift_right(self, offset: usize) -> Self {
         // For even offsets, we can reuse the work done for m256d, as far as
         // I know no x86 implementation has f32 -> f64 bypass delays
-        if offset % 2 == 0 {
+        if offset.is_multiple_of(2) {
             return safe_arch::cast_to_m256_from_m256d(
                 safe_arch::cast_to_m256d_from_m256(self).shift_right(offset / 2),
             );
