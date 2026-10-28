@@ -25,6 +25,7 @@ env:
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
   MINIMAL_RUST: 1.89.0  # Minimal Supported Rust Version
+  APT_DEPENDENCIES: libhdf5-dev libhwloc-dev libshaderc-dev libudev-dev ninja-build vulkan-validationlayers libvulkan-dev vulkan-tools
 
 jobs:
   # Workaround for github CI dropping env var expansion in matrix strategy
@@ -108,7 +109,7 @@ jobs:
       - name: Install native dependencies
         uses: Eeems-Org/apt-cache-action@v1
         with:
-          packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers libvulkan-dev vulkan-tools
+          packages: ${{ env.APT_DEPENDENCIES }}
 
       - name: Set up stable toolchain
         if: github.event_name != 'schedule'
@@ -160,7 +161,7 @@ jobs:
       - name: Install native dependencies
         uses: Eeems-Org/apt-cache-action@v1
         with:
-          packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers libvulkan-dev vulkan-tools
+          packages: ${{ env.APT_DEPENDENCIES }}
 
       - name: Set up toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v2
@@ -215,7 +216,7 @@ jobs:
       - name: Install native dependencies
         uses: Eeems-Org/apt-cache-action@v1
         with:
-          packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers libvulkan-dev vulkan-tools
+          packages: ${{ env.APT_DEPENDENCIES }}
 
       - name: Set up toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v2
@@ -263,7 +264,7 @@ jobs:
       - name: Install native dependencies
         uses: Eeems-Org/apt-cache-action@v1
         with:
-          packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers libvulkan-dev vulkan-tools
+          packages: ${{ env.APT_DEPENDENCIES }}
 
       - name: Set up toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v2
@@ -327,7 +328,7 @@ jobs:
         uses: Eeems-Org/apt-cache-action@v1
         with:
           version: 1.0
-          packages: libhdf5-dev libhwloc-dev libudev-dev ninja-build vulkan-validationlayers libvulkan-dev vulkan-tools
+          packages: ${{ env.APT_DEPENDENCIES }}
 
       - name: Set up toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v2
